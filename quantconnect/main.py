@@ -4,13 +4,12 @@ The live rule on QuantConnect -- v8.
 ASCII only, under 32000 chars, no LEAN name at module scope except
 QCAlgorithm. See README.md; if it grows, cut comments.
 
-OUT OF SAMPLE: 2020-05..2023-05, years no earlier run has seen.
-
-Three questions, in order of what they can pay:
-  BY PERIOD / REGIME PROBE -- is the flip real and detectable?
-  EDGE BY ENTRY CONDITION  -- does the edge LIVE somewhere? Found
-    here, it is validated on 2023-26, not on itself.
-  EXIT SWEEP -- two grids topped out at their own edge, twice.
+CLOSED. Out of sample on 2020-05..2023-05 the edge per 182-day block
+went - + - + - - -, against + + + + + - - for 2023-05..2026-05: six
+sign flips in 13 blocks, block sd 7.5bp against 5.7bp of sampling
+noise. No regime -- a zero-edge rule whose half-year estimates wander
+by their own standard error. REGIME PROBE: 0.24 sigma. No entry
+bucket cleared 5bp at n>=100. See README before running this again.
 """
 from AlgorithmImports import *
 
@@ -43,15 +42,13 @@ STRIKE_SEARCH = 3
 # was measured at; REG_N is the detector's memory, in signals.
 EDGE_K, REG_N, PERIOD_DAYS = 24, 20, 182
 
-# Exits are a function of the price path after entry, so paths are
-# recorded and replayed at the end: one backtest, many exit rules,
-# on THE SAME TRADES. Recording outlives the exit.
+# Paths are recorded and replayed at the end: one backtest, many
+# exit rules, on THE SAME TRADES.
 SWEEP = True
 PATH_BARS = 78                 # a FULL session: 60 could not be beaten
 
-# The winner sat at the EDGE of STOP_GRID and HOLD_GRID in both
-# sweeps, so neither was tested past its own optimum. Extended the
-# way the data pointed: tighter stops, longer winners.
+# Extended past the old optimum in v8. Out of sample BOTH extensions
+# lost: stop 0.10/0.15 worse than 0.20, hold-to-bell the worst of all.
 STOP_GRID = [0.10, 0.15, 0.20, 0.30]
 SCALE_GRID = [None, 0.10, 0.25]             # None = no partial scale
 DEAD_GRID = [None, 4, 6, 8, 14]
@@ -604,8 +601,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 p[key] = v
                 self._row("  %s=%s" % (key, v), self._score(p))
 
-        # No full cross: a "best of 972" spanning a reversal is an
-        # average of two opposite regimes. See README.
+        # No full cross -- see README.
 
     def _col(self, rows, key="ret"):
         return [r[key] for r in rows if r.get(key) is not None]
@@ -637,7 +633,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
     def OnEndOfAlgorithm(self):
         self.Debug("")
         self.Debug("=" * 70)
-        self.Debug("PARITY -- read BEFORE any profit number")
+        self.Debug("PARITY -- read this first")
         days = max((self.EndDate - self.StartDate).days * 252.0 / 365.0, 1.0)
         tot = 0
         for name, b in self.books.items():
@@ -667,8 +663,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                        % (shadow["avg"] - real["avg"],
                           float(self.Portfolio.TotalFees)))
 
-        # Sorted by HOLDING TIME: in 2023-26 the average rose
-        # monotonically with it. That is why the caps moved.
+        # Sorted by HOLDING TIME. The 2023-26 monotone pattern did
+        # NOT hold out of sample.
         self.Debug("#  BY EXIT REASON")
         rs = {}
         for r in self.trades:
@@ -688,8 +684,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         top = sum(srt[-int(len(srt) * 0.1 or 1):])
         self.Debug("#  best/worst %+.1f%%/%+.1f%% breakeven pf %.2f"
                    % (srt[-1], srt[0], (100.0 - real["wr"]) / real["wr"]))
-        # In 2023-26 the top 10%% were worth more than the whole
-        # book: the average describes a handful of trades.
+        # The top 10%% are worth more than the whole book, twice
+        # over: the average describes a handful of trades.
         self.Debug("#  top 10%% of trades = %+.0f pts of %+.0f total"
                    % (top, sum(srt)))
 
@@ -716,10 +712,10 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         drift over the same horizon and call/put mix."""
         self.Debug("")
         self.Debug("=" * 70)
-        self.Debug("SIGNAL EDGE -- the underlying alone (bp, signed)")
+        self.Debug("SIGNAL EDGE -- the underlying alone (bp)")
         self.Debug("#  1bp of underlying ~ 1% of premium; the spread")
         self.Debug("#  costs ~1.4%, so under ~1.4bp it cannot pay.")
-        edges = []
+        edges, nsig = [], 0
         for k in (3, 6, 12, EDGE_K, 36):
             sig, mkt, mix = [], [], 0
             for b in self.books.values():
@@ -739,13 +735,20 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             base = sum(mkt) / len(mkt) * mix / float(len(sig))
             hit = sum(1 for x in sig if x > 0) / float(len(sig)) * 100.0
             edges.append(s - base)
+            nsig = max(nsig, len(sig))
             self.Debug("#  bars=%-3d n=%-4d sig=%+6.2f mkt=%+6.2f edge=%+6.2f hit=%.1f%%"
                        % (k, len(sig), s, base, s - base, hit))
-        # The verdict follows the numbers, not the reverse.
-        if edges and min(edges) > 0.0:
-            self.Debug("#  edge > 0 on every horizon: informs as written.")
-        elif edges and max(edges) < 0.0:
-            self.Debug("#  edge < 0 on every horizon: sign reversed.")
+        # SIGN IS NOT A FINDING. A 24-bar window is ~53bp, so one
+        # standard error over n signals is 53/sqrt(n); v8 called
+        # -0.07..-1.42bp "sign reversed" when all of it was noise.
+        se = 53.0 / max(nsig, 1) ** 0.5
+        big = [e for e in edges if abs(e) > se]
+        if not big:
+            self.Debug("#  all horizons inside 1 se (%.1fbp): NO EDGE." % se)
+        elif min(big) > 0.0:
+            self.Debug("#  edge > 0 past noise: informs as written.")
+        elif max(big) < 0.0:
+            self.Debug("#  edge < 0 past noise: sign reversed.")
         else:
             self.Debug("#  edge changes sign across horizons: nothing.")
         self._by_period()
@@ -754,8 +757,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
 
     def _by_entry(self):
         """Does the edge LIVE somewhere? Entry conditions against
-        the underlying afterwards, so no exit can flatter it. A
-        bucket that stands apart is a CANDIDATE, not a filter."""
+        the underlying afterwards, so no exit can flatter it."""
         self.Debug("#  EDGE BY ENTRY CONDITION at %d bars" % EDGE_K)
         dims = {}
         for b in self.books.values():
@@ -773,7 +775,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             self.Debug("#   by %s" % k)
             for v in sorted(dims.get(k, {})):
                 self._bucket(v, dims[k][v])
-        self.Debug("#  Needs ~5bp over the rest, and n>=100, to matter.")
+        self.Debug("#  Needs 5bp over the rest at n>=100. None did.")
 
     def _by_period(self):
         """WHEN the sign changed: one long average hides a reversal,
@@ -805,9 +807,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         return out
 
     def _by_regime(self):
-        """Was the flip visible BEFORE it was traded? If the buckets
-        do not separate, no detector from the rule's own history
-        can save it."""
+        """Was the flip visible BEFORE it was traded? They did not
+        separate: 1.12 sigma, then 0.24 out of sample."""
         self.Debug("#  REGIME PROBE -- split by the rule's trailing")
         self.Debug("#  %d-signal record, read backward only." % REG_N)
         on, off = [], []
@@ -820,7 +821,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 (on if reg[t] > 0 else off).append(e)
         self._bucket("was working", on)
         self._bucket("was failing", off)
-        self.Debug("#  A split is a hypothesis until other years agree.")
+        self.Debug("#  A split is a hypothesis until other years agree")
 
     def _finish(self):
         """Reads paths, not self.trades: a book-keeping fault

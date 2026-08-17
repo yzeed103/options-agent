@@ -659,6 +659,128 @@ realised number toward that ceiling; neither raises the ceiling. The
 entry probe is the only item here that could, and only if a bucket
 separates by more than noise on a window it was not chosen from.
 
+## The out-of-sample run — the file closes
+
+The table was written before the run. Row four came up.
+
+### BY PERIOD: it flickers
+
+    2020-02  n=45   -0.82
+    2020-08  n=100  +4.25
+    2021-02  n=110  -0.86
+    2021-08  n=84  +10.59
+    2022-02  n=79   -1.46
+    2022-08  n=94  -13.79
+    2023-02  n=69   -6.41
+
+Signs: **− + − + − − −**. Against **+ + + + + − −** for 2023-2026.
+
+Thirteen half-year blocks across six years give **six sign flips**. A
+single regime change gives one. Block-to-block standard deviation is
+**7.5bp against 5.7bp of pure sampling noise** — a ratio of 1.3, where
+real regime structure needs to be far above 1.
+
+The 2023-2026 step was not a regime. It was **five coin flips landing
+the same way**, and I read a mechanism into it. This run is what the
+same rule looks like when the coin lands differently.
+
+### REGIME PROBE: 0.24 sigma
+
+    was working  n=264  edge= -0.74
+    was failing  n=277  edge= -1.85
+
+Separation 1.11bp against a standard error of 4.53bp. In 2023-2026 it
+was 1.12 sigma, which was already not significant. Out of sample it is
+**0.24 sigma**, and both buckets are negative. The detector
+distinguishes nothing, exactly as the pre-registered rule required it
+to before the file could close.
+
+### EDGE BY ENTRY CONDITION: nothing clears the bar
+
+The bar was set in advance: **5bp over the rest at n ≥ 100.**
+
+| bucket | n | edge | vs rest | sigma |
+|---|---|---|---|---|
+| `09:xx` | 257 | +0.22 | +2.47 | 0.56 |
+| `10:xx` | 128 | +0.62 | +2.28 | 0.43 |
+| `pctB +0.75` | 124 | +3.13 | **+5.45** | 1.02 |
+| `pctB +1.00` | 137 | +1.33 | +3.25 | 0.63 |
+| `call` | 358 | −0.24 | +2.39 | 0.53 |
+
+One bucket clears 5bp, at **1.02 sigma** — across **17 buckets tested**,
+where the largest of 17 standard normal draws averages ~2.0 sigma by
+chance. It is below what noise produces for free. The two dramatic
+buckets, `11:xx` at −7.70 and `pctB −0.25` at −18.69, have n=82 and
+n=34 and fail the size bar outright.
+
+### Both of my grid hypotheses were wrong
+
+The v8 reasoning was that the grids had been pinned at their edges and
+that a positively-skewed book wants losers cut faster and winners
+uncapped. Out of sample:
+
+| knob | avg | |
+|---|---|---|
+| `stop=0.10` | −0.94 | worse |
+| `stop=0.15` | −1.09 | worse |
+| `stop=0.20` | **−0.77** | still best |
+| `hold=(36,60)` | **−0.77** | still best |
+| `hold=(36,78)` | −1.33 | worse |
+| `hold=(78,78)` | −1.35 | **worst of all** |
+
+Holding to the bell — the change the monotone exit table most strongly
+implied — is the single worst setting tested. Extending the grids was
+the right *method*; the pattern that motivated the direction did not
+survive contact with data it was not derived from. Neither did the
+"exits are monotone in holding time" reading.
+
+### A false statement in the v8 output, now fixed
+
+`_edge()` printed **"edge < 0 on every horizon: sign reversed"** for
+edges of −0.07 to −1.42bp. With n=581, one standard error is 2.20bp —
+**every horizon was inside it**. The verdict tested sign and called
+noise a finding, in a function whose entire purpose was to stop that.
+
+Fixed: the verdict now requires magnitude past one standard error, and
+prints `all horizons inside 1 se (2.2bp): NO EDGE` for this run.
+
+### What the six years actually say
+
+| window | edge @24 | net | at MID |
+|---|---|---|---|
+| 2020-05 → 2023-05 | −1.42 | +0.77% | +0.41%/trade |
+| 2023-05 → 2025-05 | +5.45 | +5.02% | — |
+| 2025-05 → 2026-05 | −6.88 | −3.13% | — |
+
+Mean block edge over all thirteen blocks: **+0.19bp**. That is the
+finding. The VWAP-cross rule has **no edge on SPY and QQQ**, and the
+per-era numbers are that zero seen through a standard error of ~5bp
+per half-year.
+
+Everything downstream follows. The 2020-2023 book is +0.770% over three
+years — CAR 0.256%, Sharpe −0.219, 8.1% drawdown — and **+4,498 of its
++35 total points come from the top 10% of trades**, meaning the other
+521 trades are −4,463. Even at mid prices, with zero spread and perfect
+fills, it pays +0.41%/trade with a negative second half.
+
+**This rule should not be traded.** Not with a filter, not with
+different exits, not in a detected regime. There is nothing to detect.
+
+### What was actually built
+
+The rule is worthless; the instrument is not. What exists now is a
+harness that measures an entry edge independently of every exit,
+replays many exit rules over identical trades in one backtest, splits
+any result by period, by a strictly backward-looking regime detector,
+and by entry condition — and that states its bar **before** the run so
+the reading cannot be chosen afterward. It caught its own author twice:
+once on grids read at their edge, once on a verdict that tested sign
+instead of magnitude.
+
+Point it at a different signal. The three lines that define this one
+are the `call` / `put` predicates in `_make_on5`; everything else is
+measurement and would carry over unchanged.
+
 ## Bugs fixed since v1
 
 1. **Session boundary.** The first 5m bar of each day compared
