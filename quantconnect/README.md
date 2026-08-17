@@ -267,6 +267,72 @@ roughly 1% of premium**. The measured spread is 1.15% per trade, so an
 edge below about 1.2bp cannot pay for the trade no matter what the exits
 do.
 
+## The v5 run — the entry is measured
+
+Identical trading to v4 by design (v5 changed only measurement), and the
+numbers confirm it: -3.128% net, 399 orders, 171 closed, `unmatched=0`.
+
+    #  bars=3   n=172  sig= -1.68 mkt= +0.01 edge= -1.69 hit=47.1%
+    #  bars=6   n=172  sig= -2.41 mkt= +0.02 edge= -2.43 hit=44.2%
+    #  bars=12  n=172  sig= -5.13 mkt= +0.04 edge= -5.17 hit=44.2%
+    #  bars=24  n=172  sig= -6.81 mkt= +0.07 edge= -6.88 hit=45.9%
+    #  bars=36  n=155  sig= -4.51 mkt= +0.06 edge= -4.56 hit=46.5%
+
+The market drift is +0.01 to +0.07bp — nil. The entire effect is the
+rule, and the rule is not merely edgeless: it is **negative on every
+horizon and monotone out to two hours**. Random selection wanders around
+zero; this does not.
+
+The mechanism is ordinary. The rule buys the VWAP *breakout* in the
+trend direction, and intraday VWAP crossings on index ETFs are
+well-known for failing and reverting. It is buying the moment before the
+snap-back.
+
+Size of it: at ~1bp per 1% of premium, -5bp at an hour is about -5% of
+premium per trade, against a 1.15% spread. That is why no exit rule
+helped — the exits were being asked to repair a position that was
+structurally wrong from the entry bar.
+
+Two caveats, both load-bearing:
+
+- **About 2 sigma.** Five-minute SPY bars run ~10bp, so a 12-bar window
+  is ~35bp and the standard error over 172 signals is ~2.7bp. -5.17bp is
+  roughly 1.9 sigma. The five horizons are nested windows, not five
+  independent confirmations. Suggestive, not settled.
+- **Found in-sample.** The sign was measured on 2025-05..2026-05.
+  Inverting the rule and re-running that same year proves nothing.
+
+### BY EXIT REASON, now that BUGFIX 8 lets it report
+
+    dead         n=83   avg=  +1.43%  wr= 60.2%  bars=13.3
+    forced_flat  n=7    avg=+101.01%  wr=100.0%  bars=41.3
+    hard_stop    n=49   avg= -31.87%  wr=  0.0%  bars=11.3
+    scale        n=7    avg= +12.58%  wr=100.0%  bars=5.7
+    structure    n=13   avg= +20.27%  wr=100.0%  bars=28.2
+    timer        n=12   avg=  +0.64%  wr= 25.0%  bars=44.2
+
+49 stop-outs at -31.87% is -1,562 points; every other door together is
++1,185. Net -377 over 171 trades = -2.20%, matching the headline
+exactly. The stop is where the loss is *realised*, not where it is
+caused — moving it to -20% only recovers 0.34%/trade, because the
+underlying really is moving the wrong way.
+
+`scale n=7` is a quirk worth knowing: `max(1, int(1 * 0.25)) == 1`, so a
+one-contract position is closed **entirely** by the "partial" scale at
++10%. It only bites the expensive contracts, which are the ones sized
+down to a single lot.
+
+## What INVERT is for
+
+`INVERT = True` fades the cross instead of following it — one line, the
+opposite side of the same signal. If the measured sign is real it is
+worth roughly +5bp, or +5% of premium, against a 1.15% spread.
+
+The discipline that makes it worth a backtest rather than a fantasy:
+run it on **2023-05..2025-05**, years the edge was never measured on.
+Only if it survives there is it a strategy rather than a description of
+one year of SPY and QQQ.
+
 ## Bugs fixed since v1
 
 1. **Session boundary.** The first 5m bar of each day compared

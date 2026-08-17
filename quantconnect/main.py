@@ -1,12 +1,13 @@
 """
-The live rule on QuantConnect -- v5.
+The live rule on QuantConnect -- v6.
 
 ASCII only, under the 32000-char save limit, no LEAN name at module
 scope except QCAlgorithm. See README.md; if it grows, cut comments.
 
-v4 settled the exits: -2.20%/trade realised, -1.05% at the mid, and 0
-of 972 exit combinations beat zero. Losing where execution is free is
-an ENTRY problem, so v5 measures the entry directly -- see _edge.
+Settled so far: -2.20%/trade realised, -1.05% at the mid, 0 of 972 exit
+combinations above zero, and an entry edge of -1.7bp at 3 bars falling
+to -6.9bp at 24 against a market drift of +0.07bp. Consistently wrong,
+not random -- see INVERT.
 """
 from AlgorithmImports import *
 
@@ -31,11 +32,10 @@ RISK_PCT, LOT_DIVISOR = 0.05, 4
 BB_PERIOD, BB_STD = 20, 2.0
 
 # LEAN's default models IB and billed $854 the broker never charges.
-# The BROKER's cut only, not the spread -- which no broker waives.
+# The BROKER's cut only, not the spread, which no broker waives.
 ZERO_COMMISSION = True
 
-# The only default that changes behaviour vs the -5.34% run: a contract
-# quoted 12% wide starts the trade 6% down.
+# A contract quoted 12% wide starts the trade 6% down.
 MAX_SPREAD_PCT = 0.08          # v1: no limit
 STRIKE_SEARCH = 3
 
@@ -43,9 +43,15 @@ STRIKE_SEARCH = 3
 BLOCK_LUNCH = False
 LUNCH_FROM, LUNCH_TO = (11, 30), (13, 30)
 
+# Fade the cross instead of following it: a rule that wrong carries
+# information with the sign reversed. TEST ON YEARS THE EDGE WAS NOT
+# MEASURED ON -- it was found in 2025-05..2026-05, so re-running that
+# same year inverted is circular and looks good either way.
+INVERT = False
+
 # Exits are a function of the price path after entry, so paths are
 # recorded and every combination replayed at the end: one backtest, all
-# of them, on THE SAME TRADES. Recording does NOT stop at the live exit.
+# of them, on THE SAME TRADES. Recording outlives the live exit.
 SWEEP = True
 PATH_BARS = 66                 # 5.5 hours, past the 60-bar winner cap
 
@@ -141,9 +147,9 @@ class Book:
 
 def replay(ref, path, trends, want, p):
     """
-    Re-run one recorded trade under one set of exit parameters. Checks
-    fire in _manage's order -- a different order is a different rule.
-    Returns percent of premium; running out of path is the forced flat.
+    Re-run one recorded trade under one set of exit parameters, in
+    _manage's order -- a different order is a different rule. Returns
+    percent of premium; running out of path is the forced flat.
     """
     if ref <= 0 or not path:
         return None
@@ -239,9 +245,9 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                              self.TimeRules.BeforeMarketClose(name, 5),
                              self._make_eod(name))
 
-        self.Debug("start=%s end=%s symbols=%s max_spread=%.0f%% commission=%s"
+        self.Debug("start=%s end=%s %s spread=%.0f%% comm=%s INVERT=%s"
                    % (RUN_FROM, RUN_TO, SYMBOLS, MAX_SPREAD_PCT * 100,
-                      "ZERO" if ZERO_COMMISSION else "brokerage default"))
+                      "ZERO" if ZERO_COMMISSION else "default", INVERT))
 
     def _zero_commission(self):
         """
@@ -338,6 +344,9 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                    and prev_c >= prev_v and -0.50 <= pb <= 0.50)
             if not (call or put):
                 return
+            # Mutually exclusive (trend +1 vs -1), so negating flips.
+            if INVERT:
+                call = not call
 
             b.signals += 1
             b.sigs.append((len(b.px5) - 1, 1 if call else -1))
@@ -491,8 +500,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             return
         n = int(abs(held)) if frac >= 1.0 else max(1, int(abs(held) * frac))
 
-        # Mark at the mid BEFORE ordering; the fill returns the bid,
-        # and the gap between them is the spread.
+        # Mark at the mid BEFORE ordering; the fill returns the bid.
         sec = self.Securities[b.contract]
         bid, ask = float(sec.BidPrice), float(sec.AskPrice)
         mid = (bid + ask) / 2.0 if (bid > 0 and ask > 0) else bid
@@ -500,9 +508,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             b.mid_proceeds += n * mid * 100.0
             b.sold += n
 
-        # BUGFIX 8 -- BUGFIX 7 again, in the exit: the fill happens
-        # inside MarketOrder, so _close_out read last_reason before it
-        # was set. 228 exits, six reasons, all logged "?" or "scale".
+        # BUGFIX 8 -- BUGFIX 7 again: the fill happens inside
+        # MarketOrder, so _close_out read last_reason before it was set.
         b.last_reason = reason
         if frac >= 1.0:
             b.closing = True           # BUGFIX 4
@@ -510,8 +517,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         self.MarketOrder(b.contract, -n)
 
     def _manage(self, b, bar):
-        # BUGFIX 4: v1 kept b.contract set until the fill returned, so a
-        # delayed fill let the next bar send a second sell order.
+        # BUGFIX 4: a delayed fill once let the next bar re-sell.
         if b.closing:
             return
         sec = self.Securities[b.contract]
@@ -780,8 +786,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         """
         Does the UNDERLYING move the signal's way? No spread, theta or
         expiry -- just SPY and QQQ after a signal versus after any bar.
-        An up-drifting market makes calls look right on its own, so the
-        rule must beat that drift over the same horizon and mix.
+        A drifting market makes calls look right on its own, so the rule
+        must beat that drift over the same horizon and mix.
         """
         self.Debug("")
         self.Debug("=" * 70)
@@ -808,8 +814,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             hit = sum(1 for x in sig if x > 0) / float(len(sig)) * 100.0
             self.Debug("#  bars=%-3d n=%-4d sig=%+6.2f mkt=%+6.2f edge=%+6.2f hit=%.1f%%"
                        % (k, len(sig), s, base, s - base, hit))
-        self.Debug("#  edge <= 0: the rule picks moments no better than")
-        self.Debug("#  chance, and no option structure fixes that.")
+        self.Debug("#  edge < 0 on every horizon is not noise: the rule")
+        self.Debug("#  is informative with the sign reversed. See INVERT.")
 
     def _finish(self):
         """
