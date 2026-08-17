@@ -4,18 +4,20 @@ The live rule on QuantConnect -- v6.
 ASCII only, under the 32000-char save limit, no LEAN name at module
 scope except QCAlgorithm. See README.md; if it grows, cut comments.
 
-Settled so far: -2.20%/trade realised, -1.05% at the mid, 0 of 972 exit
-combinations above zero, and an entry edge of -1.7bp at 3 bars falling
-to -6.9bp at 24 against a market drift of +0.07bp. Consistently wrong,
-not random -- see INVERT.
+SET FOR THE OUT-OF-SAMPLE INVERTED TEST: 2023-05..2025-05, INVERT on.
+Paste and run, no edits. Baseline was 2025-05..2026-05, INVERT off.
+
+On that baseline: -2.20%/trade realised, -1.05% at the mid, 0 of 972
+exit combinations above zero, and an entry edge of -1.7bp at 3 bars
+falling to -6.9bp at 24 on a drift of +0.07bp. Wrong, not random.
 """
 from AlgorithmImports import *
 
 from datetime import timedelta
 from itertools import product
 
-RUN_FROM = (2025, 5, 15)
-RUN_TO = (2026, 5, 15)
+RUN_FROM = (2023, 5, 15)       # baseline was (2025, 5, 15)
+RUN_TO = (2025, 5, 15)         # baseline was (2026, 5, 15)
 
 SYMBOLS = ["SPY", "QQQ"]
 
@@ -43,11 +45,11 @@ STRIKE_SEARCH = 3
 BLOCK_LUNCH = False
 LUNCH_FROM, LUNCH_TO = (11, 30), (13, 30)
 
-# Fade the cross instead of following it: a rule that wrong carries
-# information with the sign reversed. TEST ON YEARS THE EDGE WAS NOT
-# MEASURED ON -- it was found in 2025-05..2026-05, so re-running that
-# same year inverted is circular and looks good either way.
-INVERT = False
+# Fade the cross instead of following it. The sign was measured on
+# 2025-05..2026-05, so this only means anything on other years -- hence
+# the dates above. b.sigs stores the post-flip side, so SIGNAL EDGE
+# reports the inverted rule: positive edge = the flip works.
+INVERT = True                  # baseline was False
 
 # Exits are a function of the price path after entry, so paths are
 # recorded and every combination replayed at the end: one backtest, all
@@ -254,8 +256,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         Drop the broker's cut, keep what the brokerage model sets.
 
         Built at runtime, NOT as a module-level subclass: subclassing
-        a LEAN C# type runs at import, and an unexported name there
-        kills the module. A lambda would drop the seeder too.
+        a LEAN C# type runs at import, and an unexported name kills the
+        module. A lambda would drop the seeder too.
         """
         seeder = FuncSecuritySeeder(self.GetLastKnownPrices)
         base = None
@@ -351,8 +353,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             b.signals += 1
             b.sigs.append((len(b.px5) - 1, 1 if call else -1))
             if not self._enter(b, call):
-                # A signal that never became a position still
-                # belongs in the parity check.
+                # Counted even when no contract was taken.
                 b.blocked += 1
         return handler
 
@@ -461,8 +462,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             return False
 
         # BUGFIX 7 -- state first, registration second, ORDER LAST.
-        # LEAN fills inside the MarketOrder call, so a book built after
-        # it misses its own entry: 403 fills, zero trades. See README.
+        # LEAN fills inside MarketOrder, so a book built after it misses
+        # its own entry: 403 fills, zero trades. See README.
         b.contract = best.Symbol
         b.is_call = is_call
         b.ref_px = ask
@@ -652,7 +653,6 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         self._row("LIVE RULE (baseline)", self._score(base), "<= today")
         self._row("  same, at mid prices", self._score(base, "mx", "refm"))
 
-        # The scale exit alone; everything else held still.
         self.Debug("#  DOES THE +10% SCALE COST MONEY? (only knob moving)")
         for v in SCALE_GRID:
             p = dict(base)
@@ -670,7 +670,6 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 p[key] = v
                 self._row("  %s=%s" % (key, v), self._score(p))
 
-        # Best average flatters; best worst-half survives.
         combos = list(product(TP_GRID, STOP_GRID, SCALE_GRID, DEAD_GRID,
                               HOLD_GRID, TRAIL_GRID))
         self.Debug("#  FULL CROSS -- %d combinations over %d trades"
@@ -727,7 +726,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             tot += b.signals
             self.Debug("  %-5s bars5=%-7d signals=%-5d rate=%.2f%% blocked=%d wide=%d"
                        % (name, b.bars5, b.signals, rate, b.blocked, b.wide))
-        self.Debug("  signals/day = %.2f     local rule: about 0.9 for SPY+QQQ"
+        self.Debug("  signals/day = %.2f   local rule: about 0.9 SPY+QQQ"
                    % (tot / days))
 
         self.Debug("  fills seen=%d unmatched=%d closes=%d dte_skips=%d"
@@ -785,8 +784,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
     def _edge(self):
         """
         Does the UNDERLYING move the signal's way? No spread, theta or
-        expiry -- just SPY and QQQ after a signal versus after any bar.
-        A drifting market makes calls look right on its own, so the rule
+        expiry -- just SPY and QQQ after a signal versus any bar. A
+        drifting market makes calls look right on its own, so the rule
         must beat that drift over the same horizon and mix.
         """
         self.Debug("")
@@ -814,8 +813,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             hit = sum(1 for x in sig if x > 0) / float(len(sig)) * 100.0
             self.Debug("#  bars=%-3d n=%-4d sig=%+6.2f mkt=%+6.2f edge=%+6.2f hit=%.1f%%"
                        % (k, len(sig), s, base, s - base, hit))
-        self.Debug("#  edge < 0 on every horizon is not noise: the rule")
-        self.Debug("#  is informative with the sign reversed. See INVERT.")
+        self.Debug("#  edge < 0 on every horizon is not noise -- the rule")
+        self.Debug("#  informs with the sign reversed. See INVERT.")
 
     def _finish(self):
         """
