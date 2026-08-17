@@ -4,19 +4,21 @@ The live rule on QuantConnect -- v7.
 ASCII only, under 32000 chars, no LEAN name at module scope except
 QCAlgorithm. See README.md; if it grows, cut comments.
 
-The rule REVERSED between eras: +5.45bp @24 bars on 2023-05..2025-05
-(net +5.02%), -6.88bp on 2025-05..2026-05 (net -3.13%). v7 runs BOTH
-in one pass and asks the only question left: was the flip visible in
-ADVANCE? BY PERIOD locates it; REGIME PROBE tests a backward-looking
-detector. Neither places an order, so no exit knob can flatter them.
-The +10% scale is OFF: it costs money in both eras' sweeps.
+OUT OF SAMPLE. 2023-05..2026-05 gave a clean step -- five positive
+182-day blocks then two negative -- but REGIME PROBE separated its
+buckets by only 1.12 sigma, and both were measured on years already
+used. This window, 2020-05..2023-05, no run has seen.
+
+Read BY PERIOD and REGIME PROBE. Nothing else. The P&L is not the
+question: at MID prices the last run paid 4.92%/yr against cash at
+5.74%, so no execution fix reaches it. The scale stays OFF.
 """
 from AlgorithmImports import *
 
 from datetime import date, timedelta
 
-RUN_FROM = (2023, 5, 15)       # both eras, one run: the flip is inside
-RUN_TO = (2026, 5, 15)
+RUN_FROM = (2020, 5, 15)       # untouched years -- adjacent, no overlap
+RUN_TO = (2023, 5, 15)
 
 SYMBOLS = ["SPY", "QQQ"]
 

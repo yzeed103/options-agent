@@ -552,10 +552,28 @@ PROBE`. If the step structure and the bucket ordering both reappear on
 data neither run has seen, the regime hypothesis survives on its own
 merits. If they do not, the file closes.
 
-It is a two-line change:
+**Applied.** `main.py` now runs `2020-05-15 .. 2023-05-15` — adjacent
+to the previous window, no overlap, so nothing in it has been used to
+form any hypothesis above.
 
-    RUN_FROM = (2020, 5, 15)
-    RUN_TO = (2023, 5, 15)
+What each outcome means, written down **before** the run so the
+reading cannot be chosen afterwards:
+
+| BY PERIOD | REGIME PROBE | reading |
+|---|---|---|
+| step, one changepoint | buckets separate, same order | the hypothesis survives its first real test |
+| step | buckets do not separate | regimes are real but **not detectable in advance** — the rule is untradeable, not merely unprofitable |
+| flickers block to block | either | no stable direction; the 2023-26 step was an artifact and the file closes |
+| all one sign | either | no reversal in this era at all; the flip is not a recurring feature |
+
+The P&L of this run is **not** evidence either way. It will be read
+and reported, but the mid-price ceiling of 4.92%/yr against 5.74% cash
+already settles the capital question for the era we measured, and one
+more window does not overturn that by being profitable.
+
+Caveat: if signals come back at zero or the run errors on missing
+data, that is options coverage for 2020-2022 on the account's data
+tier, not a finding.
 
 ## Bugs fixed since v1
 
