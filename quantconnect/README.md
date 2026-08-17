@@ -203,6 +203,70 @@ at $0.27. These are same-day lottery tickets, not the 2-8 DTE rule.
 `_enter` now checks `k.Expiry` against `self.Time` directly and counts
 the rejects as `dte_skips`.
 
+## The third run (v4) — the exits are settled
+
+-3.128% net, 399 orders, 171 closed positions, 172 signals, `unmatched=0`,
+`dte_skips=31`. The book keeping works and the 0 DTE tickets are gone.
+
+The report finally ran, and it is decisive:
+
+    realised at bid/ask : n=171 avg=-2.20% wr=46.8% pf=0.79
+    same trades at MID  : n=171 avg=-1.05% wr=50.3% pf=0.90
+    spread drag         : 1.15% per trade
+
+**Negative at the mid**, where execution costs nothing. The sweep then
+put a number on how much of that exits could recover: **0 of 972
+combinations beat zero.** Not the best one, not the most robust one —
+none.
+
+Notable results inside the sweep:
+
+| knob | result | reading |
+|---|---|---|
+| `scale=off` | -3.07% vs -3.27% | the scale costs ~0.2%/trade |
+| `tp=0.3 / 0.5 / 0.8` | -4.51 / -4.08 / -4.27% | profit targets make it **worse** |
+| `trail=(0.2,0.15)` | -3.80% | trailing stops make it **worse** |
+| `hold=(24,48)` | -2.43% | shorter holds help, not enough |
+| `dead=14` | -2.84% | ditto |
+
+The targets and trailing stops deserve comment because they refute an
+obvious hypothesis. The MFE column shows trades routinely giving back
+large open gains, which argues for capping the upside. But best/worst
+is **+440.7% / -46.2%**: one October trade returned 440%, and every rule
+that caps the right tail loses more than it saves. The giveback is real;
+the cure is worse.
+
+Two more things the run exposed:
+
+- **The 56% win rate on the Overview is not the position win rate.**
+  QuantConnect counts each exit leg as a trade, and the +10% scale
+  produces one guaranteed winning leg per scaled position. Per closed
+  position the rate is **46.8%**.
+- **One trade carries the year.** 2025-10-10 SPY 251013P669, $2.30 ->
+  $14.62, +$5,068 including its scale leg, against a -$3,128 year.
+  Without it the year is about -8.2%.
+
+## v5 — measuring the entry instead
+
+Exits are answered, so `_edge()` asks the only question left: does the
+**underlying** move the signal's way? No spread, no theta, no strike, no
+expiry — just SPY and QQQ after a signal, in basis points, at horizons
+of 3/6/12/24/36 bars.
+
+The comparison is the whole point. A market that drifts up makes every
+call look right without the rule contributing anything, so each horizon
+also reports the unconditional drift over the same window and the same
+call/put mix, and the edge is the difference. Validated offline on four
+synthetic series: a uniform uptrend with all-call signals reports
+`hit=100%` and `edge=+0.00` — exactly the trap the baseline exists to
+catch — while signals planted before real jumps report `edge=+16.8bp`.
+
+Scale for reading it: an ATM 2-8 DTE option runs near 0.5 delta on a
+~$600 underlying at ~$3 of premium, so **1bp of underlying is worth
+roughly 1% of premium**. The measured spread is 1.15% per trade, so an
+edge below about 1.2bp cannot pay for the trade no matter what the exits
+do.
+
 ## Bugs fixed since v1
 
 1. **Session boundary.** The first 5m bar of each day compared
@@ -221,6 +285,14 @@ the rejects as `dte_skips`.
    never arrives when the session ends at 13:00, so the position was
    carried overnight about nine sessions a year. Replaced with a
    `BeforeMarketClose` schedule.
+6. **0 DTE contracts.** See above.
+7. **Invisible entries.** See above.
+8. **Exit reasons.** BUGFIX 7 again, one method over. `_sell` set
+   `b.last_reason` *after* `MarketOrder`, and the fill happens inside
+   that call, so `_close_out` read the previous value. 228 exits across
+   six reasons logged as `"?"` (114, never scaled) and `"scale"` (57,
+   had scaled) -- the table was reporting whether a position had scaled,
+   not which door it left by. Reason and counter now precede the order.
 
 ## Other changes
 

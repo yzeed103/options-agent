@@ -1,11 +1,12 @@
 """
-The live rule on QuantConnect -- v4.
+The live rule on QuantConnect -- v5.
 
-ASCII only, under the 32000-char save limit, and no LEAN name at module
+ASCII only, under the 32000-char save limit, no LEAN name at module
 scope except QCAlgorithm. See README.md; if it grows, cut comments.
 
-Runs so far: -5.34% with commission, -3.11% without. Both recorded ZERO
-trades through 400+ fills -- see BUGFIX 7. Read the log in order.
+v4 settled the exits: -2.20%/trade realised, -1.05% at the mid, and 0
+of 972 exit combinations beat zero. Losing where execution is free is
+an ENTRY problem, so v5 measures the entry directly -- see _edge.
 """
 from AlgorithmImports import *
 
@@ -43,9 +44,8 @@ BLOCK_LUNCH = False
 LUNCH_FROM, LUNCH_TO = (11, 30), (13, 30)
 
 # Exits are a function of the price path after entry, so paths are
-# recorded and every combination replayed over them at the end: one
-# backtest, all of them, on THE SAME TRADES. Recording does NOT stop at
-# the live exit. Entry knobs need a backtest each. See README.
+# recorded and every combination replayed at the end: one backtest, all
+# of them, on THE SAME TRADES. Recording does NOT stop at the live exit.
 SWEEP = True
 PATH_BARS = 66                 # 5.5 hours, past the 60-bar winner cap
 
@@ -59,10 +59,8 @@ TOP_N = 15
 
 
 class SessionVwap:
-    """
-    Cumulative VWAP from the bell, reset every session. Not LEAN's
-    built-in: a different one changes which signals fire.
-    """
+    """VWAP from the bell, reset each session. Not LEAN's built-in:
+    a different one changes which signals fire."""
 
     def __init__(self):
         self.day = None
@@ -130,6 +128,10 @@ class Book:
         self.entry_spread = 0.0
         self.last_reason = "?"
         self.tracks = []               # price paths being recorded
+        # signal-edge probe: the UNDERLYING, not the option
+        self.px5 = []
+        self.day5 = []
+        self.sigs = []                 # (bar index, +1 call / -1 put)
         # parity counters
         self.bars5 = 0
         self.signals = 0
@@ -140,9 +142,8 @@ class Book:
 def replay(ref, path, trends, want, p):
     """
     Re-run one recorded trade under one set of exit parameters. Checks
-    fire in _manage's order -- stop, target, scale, trail, dead, timer,
-    structure -- a different order is a different rule. Returns percent
-    of premium; running out of path is the forced flat.
+    fire in _manage's order -- a different order is a different rule.
+    Returns percent of premium; running out of path is the forced flat.
     """
     if ref <= 0 or not path:
         return None
@@ -205,7 +206,6 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         self.SetCash(100000)
         self.SetBenchmark("SPY")
 
-        # Before any Add*, so it reaches contracts added at entry.
         if ZERO_COMMISSION:
             self._zero_commission()
 
@@ -247,10 +247,9 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         """
         Drop the broker's cut, keep what the brokerage model sets.
 
-        Built at runtime, NOT as a module-level subclass: subclassing a
-        LEAN C# type runs at import, and an unexported name there kills
-        the module ("ensure one class inherits from QCAlgorithm"). A
-        bare lambda would drop the other models and the seeder too.
+        Built at runtime, NOT as a module-level subclass: subclassing
+        a LEAN C# type runs at import, and an unexported name there
+        kills the module. A lambda would drop the seeder too.
         """
         seeder = FuncSecuritySeeder(self.GetLastKnownPrices)
         base = None
@@ -298,6 +297,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             colour = b.ha5.update(bar)
             b.bb.Update(bar.EndTime, bar.Close)
             c = float(bar.Close)
+            b.px5.append(c)
+            b.day5.append(bar.EndTime.date().toordinal())
 
             # BUGFIX 1: yesterday's close vs a zeroed VWAP made the
             # 09:35 bar report a "cross" most mornings.
@@ -306,8 +307,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             prev_c, prev_v = b.prev_close, b.prev_vwap
             b.prev_close, b.prev_vwap = c, v
 
-            # Before _manage, so the trend here is the one it reads.
-            # Runs open or flat -- see the sweep note above.
+            # Before _manage: same trend value it reads. Open or flat.
             self._sample(b, bar)
 
             if b.contract is not None:
@@ -330,9 +330,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 return
             pb = (c - lo) / width
 
-            # The CROSSING bar is a condition, not decoration: without
-            # it the rule degenerates to "above/below VWAP", 2,440
-            # trades locally instead of hundreds.
+            # The CROSSING bar is a condition: without it the rule is
+            # just "above/below VWAP", 2,440 trades instead of hundreds.
             call = (b.trend == 1 and colour > 0 and c > v
                     and prev_c <= prev_v and 0.50 <= pb <= 1.50)
             put = (b.trend == -1 and colour < 0 and c < v
@@ -341,6 +340,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 return
 
             b.signals += 1
+            b.sigs.append((len(b.px5) - 1, 1 if call else -1))
             if not self._enter(b, call):
                 # A signal that never became a position still
                 # belongs in the parity check.
@@ -416,7 +416,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 continue
             # BUGFIX 6: AddOptionContract keeps a contract in the
             # chain after it leaves SetFilter's window -- 0 DTE lottery
-            # tickets, 46 at $0.27. The filter is a hint; verify here.
+            # tickets. The filter is a hint; verify here.
             dte = (k.Expiry.date() - today).days
             if dte < MIN_DTE or dte > MAX_DTE:
                 self.dte_skips += 1
@@ -452,9 +452,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             return False
 
         # BUGFIX 7 -- state first, registration second, ORDER LAST.
-        # LEAN can fill inside the MarketOrder call, so a book built
-        # afterwards misses its own entry. This is what made 403 fills
-        # record zero trades. Full account in README.
+        # LEAN fills inside the MarketOrder call, so a book built after
+        # it misses its own entry: 403 fills, zero trades. See README.
         b.contract = best.Symbol
         b.is_call = is_call
         b.ref_px = ask
@@ -501,11 +500,14 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             b.mid_proceeds += n * mid * 100.0
             b.sold += n
 
-        self.MarketOrder(b.contract, -n)
+        # BUGFIX 8 -- BUGFIX 7 again, in the exit: the fill happens
+        # inside MarketOrder, so _close_out read last_reason before it
+        # was set. 228 exits, six reasons, all logged "?" or "scale".
         b.last_reason = reason
         if frac >= 1.0:
             b.closing = True           # BUGFIX 4
         self.exits[reason] = self.exits.get(reason, 0) + 1   # BUGFIX 3
+        self.MarketOrder(b.contract, -n)
 
     def _manage(self, b, bar):
         # BUGFIX 4: v1 kept b.contract set until the fill returned, so a
@@ -545,8 +547,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 self._sell(b, "structure")
 
     def _close_out(self, b):
-        # After BUGFIX 7: if a buy fill is ever missed again, price
-        # the entry from the ask paid instead of dropping the trade.
+        # If a buy fill is ever missed, price the entry from the ask.
         cost = b.cost if b.cost > 0 else b.qty0 * b.ref_px * 100.0
         if cost <= 0:
             return
@@ -586,9 +587,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             b.closing = False
 
     def OnData(self, data):
-        # Last-resort guard: expiry or assignment can flatten a
-        # position without an exit order of ours. BUGFIX 2: v1 ignored
-        # pending orders here and orphaned entries before their fill.
+        # Expiry or assignment can flatten a position without an exit
+        # order of ours. BUGFIX 2: v1 ignored pending orders here.
         for b in self.books.values():
             if b.contract is None or b.cost <= 0:
                 continue
@@ -623,13 +623,11 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             "pf": (sum(wins) / gl) if gl > 0 else float("inf"),
             "h1": (sum(h1) / len(h1)) if h1 else 0.0,
             "h2": (sum(h2) / len(h2)) if h2 else 0.0,
-            # Trades are sized RISK_PCT/LOT_DIVISOR of equity.
-            "net": sum(rets) * RISK_PCT / LOT_DIVISOR,
+            "net": sum(rets) * RISK_PCT / LOT_DIVISOR,   # of equity
         }
 
     def _row(self, label, s, mark=""):
         if s is None:
-            self.Debug("#  %-26s (no data)" % label)
             return
         self.Debug("#  %-26s avg=%+6.2f%% pf=%.2f wr=%4.1f%% net=%+6.1f%% "
                    "h1=%+6.2f h2=%+6.2f %s"
@@ -643,25 +641,20 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
 
         self.Debug("")
         self.Debug("=" * 70)
-        self.Debug("EXIT SWEEP -- same trades, %d recorded paths"
-                   % len(self.done_tracks))
-        self.Debug("=" * 70)
+        self.Debug("EXIT SWEEP -- same trades, %d paths" % len(self.done_tracks))
         self.Debug("#  h1/h2 = halves of the year. One-sided = noise.")
-        self.Debug("#")
         self._row("LIVE RULE (baseline)", self._score(base), "<= today")
         self._row("  same, at mid prices", self._score(base, "mx", "refm"))
 
         # The scale exit alone; everything else held still.
-        self.Debug("#")
-        self.Debug("#  DOES THE +10% SCALE COST MONEY? (only this knob moves)")
+        self.Debug("#  DOES THE +10% SCALE COST MONEY? (only knob moving)")
         for v in SCALE_GRID:
             p = dict(base)
             p["scale"] = v
             self._row("  scale=%s" % ("off" if v is None else "+%.0f%%" % (v * 100)),
                       self._score(p))
 
-        self.Debug("#")
-        self.Debug("#  ONE KNOB AT A TIME (all others at the live values)")
+        self.Debug("#  ONE KNOB AT A TIME (others at live values)")
         ofat = [("tp", TP_GRID), ("stop", STOP_GRID), ("dead", DEAD_GRID),
                 ("hold", HOLD_GRID), ("trail", TRAIL_GRID),
                 ("struct", [True, False])]
@@ -674,7 +667,6 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         # Best average flatters; best worst-half survives.
         combos = list(product(TP_GRID, STOP_GRID, SCALE_GRID, DEAD_GRID,
                               HOLD_GRID, TRAIL_GRID))
-        self.Debug("#")
         self.Debug("#  FULL CROSS -- %d combinations over %d trades"
                    % (len(combos), len(self.done_tracks)))
         scored = []
@@ -695,24 +687,14 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             self._row("  " + lab, s, "OK" if min(s["h1"], s["h2"]) > 0 else "")
 
         robust = sorted(scored, key=lambda x: -min(x[1]["h1"], x[1]["h2"]))[0]
-        self.Debug("#")
         self.Debug("#  BEST BY WORST HALF -- the one to believe:")
         self._row("  %s" % (robust[0],), robust[1])
 
         pos = sum(1 for _p, s in scored if s["avg"] > 0)
-        self.Debug("#")
         self.Debug("#  %d of %d combinations beat zero, over %d trades."
                    % (pos, len(scored), len(self.done_tracks)))
-        self.Debug("#  At that ratio of settings to trades the top row is")
-        self.Debug("#  partly luck. Accept one only if BOTH halves are")
-        self.Debug("#  positive AND its one-knob neighbours are too.")
-        self.Debug("#")
-        self.Debug("#  ENTRY knobs change which trades exist and need")
-        self.Debug("#  separate backtests, in this order:")
-        self.Debug("#    1. MAX_SPREAD_PCT  0.05 / 0.08 / 0.12")
-        self.Debug("#    2. MIN_DTE,MAX_DTE  2-8 / 5-15 / 10-25")
-        self.Debug("#    3. BLOCK_LUNCH      True")
-        self.Debug("#    4. the %B band, widened and narrowed")
+        self.Debug("#  Accept one only if BOTH halves are positive AND its")
+        self.Debug("#  one-knob neighbours are too. A lone spike is luck.")
 
     def _stats(self, rows, key="ret"):
         vals = [r[key] for r in rows if r.get(key) is not None]
@@ -732,7 +714,6 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         self.Debug("")
         self.Debug("=" * 70)
         self.Debug("PARITY -- read this BEFORE any profit number")
-        self.Debug("=" * 70)
         days = max((self.EndDate - self.StartDate).days * 252.0 / 365.0, 1.0)
         tot = 0
         for name, b in self.books.items():
@@ -742,8 +723,6 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                        % (name, b.bars5, b.signals, rate, b.blocked, b.wide))
         self.Debug("  signals/day = %.2f     local rule: about 0.9 for SPY+QQQ"
                    % (tot / days))
-        self.Debug("  prior QC run  = 0.74/day, -5.34% net, 404 orders,")
-        self.Debug("                  $854 commission (-4.49% without)")
 
         self.Debug("  fills seen=%d unmatched=%d closes=%d dte_skips=%d"
                    % (self.oe_seen, self.oe_lost, self.closes, self.dte_skips))
@@ -759,9 +738,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         shadow = self._stats(self.trades, "mid")
 
         self.Debug("")
-        self.Debug("#" * 70)
-        self.Debug("#  WHERE THE MONEY GOES -- what v1 could not answer")
-        self.Debug("#" * 70)
+        self.Debug("#  WHERE THE MONEY GOES -- realised vs mid")
         self.Debug("#  realised at bid/ask : n=%d avg=%+.2f%% wr=%.1f%% pf=%.2f"
                    % (real["n"], real["avg"], real["wr"], real["pf"]))
         if shadow:
@@ -771,21 +748,15 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                        % (shadow["avg"] - real["avg"]))
             self.Debug("#")
             if shadow["avg"] > 0.0:
-                self.Debug("#  VERDICT: it works at the mid; the spread takes it.")
-                self.Debug("#  Fix EXECUTION -- limit orders, tighter spread cap,")
-                self.Debug("#  fewer round trips (scale pays the spread twice).")
+                self.Debug("#  VERDICT: works at the mid; the spread takes it.")
+                self.Debug("#  Fix EXECUTION -- limits, tighter cap, fewer trips.")
             else:
                 self.Debug("#  VERDICT: negative even at the mid, where execution")
-                self.Debug("#  is free. No fill improvement rescues this. The")
-                self.Debug("#  ENTRY needs an edge before any exit knob matters.")
-        else:
-            self.Debug("#  MID leg unavailable -- trades closed outside our orders.")
-        # Named either way so an old log is not read as the $854 run.
-        self.Debug("#  commission          : $%.2f over %d trades  (model=%s)"
-                   % (float(self.Portfolio.TotalFees), n,
-                      "ZERO" if ZERO_COMMISSION else "brokerage default"))
+                self.Debug("#  is free. See SIGNAL EDGE below.")
+        self.Debug("#  commission $%.2f (model=%s)"
+                   % (float(self.Portfolio.TotalFees),
+                      "ZERO" if ZERO_COMMISSION else "brokerage"))
 
-        self.Debug("#")
         self.Debug("#  BY EXIT REASON -- which door winners leave by")
         for reason in sorted(set(r["reason"] for r in self.trades)):
             rows = [r for r in self.trades if r["reason"] == reason]
@@ -800,23 +771,52 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                    % (sum(sp) / len(sp), max(sp)))
 
         srt = sorted(r["ret"] for r in self.trades)
-        med = (srt[n // 2] if n % 2 else (srt[n // 2 - 1] + srt[n // 2]) / 2.0)
-        self.Debug("#")
-        self.Debug("#  median        %+.2f%%" % med)
-        self.Debug("#  best / worst  %+.1f%% / %+.1f%%" % (srt[-1], srt[0]))
-        self.Debug("#  breakeven at win rate %.1f%% needs pf %.2f"
-                   % (real["wr"], (100.0 - real["wr"]) / real["wr"]))
-        self.Debug("#  end equity    %s" % self.Portfolio.TotalPortfolioValue)
-        self.Debug("#" * 70)
+        self.Debug("#  best / worst  %+.1f%% / %+.1f%%   breakeven pf %.2f"
+                   % (srt[-1], srt[0], (100.0 - real["wr"]) / real["wr"]))
 
         self._finish()
 
+    def _edge(self):
+        """
+        Does the UNDERLYING move the signal's way? No spread, theta or
+        expiry -- just SPY and QQQ after a signal versus after any bar.
+        An up-drifting market makes calls look right on its own, so the
+        rule must beat that drift over the same horizon and mix.
+        """
+        self.Debug("")
+        self.Debug("=" * 70)
+        self.Debug("SIGNAL EDGE -- the underlying alone (bp, signal direction)")
+        self.Debug("#  1bp of underlying ~ 1% of premium; the spread")
+        self.Debug("#  costs 1.15%, so under ~1.2bp it cannot pay.")
+        for k in (3, 6, 12, 24, 36):
+            sig, mkt, mix = [], [], 0
+            for b in self.books.values():
+                px, dy, n = b.px5, b.day5, len(b.px5)
+                for i, d in b.sigs:
+                    j = i + k
+                    if j < n and dy[j] == dy[i] and px[i] > 0:
+                        sig.append(d * (px[j] / px[i] - 1.0) * 10000.0)
+                        mix += d
+                for i in range(n - k):
+                    if dy[i + k] == dy[i] and px[i] > 0:
+                        mkt.append((px[i + k] / px[i] - 1.0) * 10000.0)
+            if not sig or not mkt:
+                continue
+            s = sum(sig) / len(sig)
+            # Same call/put mix, so drift is neither credited nor blamed.
+            base = sum(mkt) / len(mkt) * mix / float(len(sig))
+            hit = sum(1 for x in sig if x > 0) / float(len(sig)) * 100.0
+            self.Debug("#  bars=%-3d n=%-4d sig=%+6.2f mkt=%+6.2f edge=%+6.2f hit=%.1f%%"
+                       % (k, len(sig), s, base, s - base, hit))
+        self.Debug("#  edge <= 0: the rule picks moments no better than")
+        self.Debug("#  chance, and no option structure fixes that.")
+
     def _finish(self):
         """
-        Reads price paths, never self.trades, so it survives a
-        book-keeping fault -- and must: the run where that broke was the
-        run whose sweep an early return silently skipped.
+        Reads price paths, never self.trades, so a book-keeping fault
+        cannot silence it -- as an early return once did.
         """
+        self._edge()
         if not SWEEP:
             return
         # Paths still recording at the end are shorter but valid.
