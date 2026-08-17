@@ -59,6 +59,14 @@ So the report leads with **signal counts**, not profit:
 A rate far from that means the rules diverged and the P&L below is
 describing something else entirely.
 
+Two cautions on reading those counters. The per-bar rate is not
+comparable: `bars5` counts every 5-minute bar of the session, while the
+2.7% figure comes from a narrower local denominator. Compare the
+per-day number instead. And signals are only counted while flat —
+`_make_on5` hands off to `_manage` and returns before the gates when a
+position is open — so the true firing rate is understated by however
+often a second signal lands during a hold.
+
 ## The run that motivated the current version
 
 2025-05-15 -> 2026-05-15, SPY + QQQ:
@@ -129,6 +137,71 @@ path to replay. One backtest each, in this order:
 2. `MIN_DTE, MAX_DTE` -- 2-8 / 5-15 / 10-25
 3. `BLOCK_LUNCH` -- True
 4. the %B band, widened and narrowed
+
+## The second run (zero commission, v3)
+
+-3.11% net, 403 orders, win rate 56%, P/L ratio 0.66, $0 fees, drawdown
+7.5%, 173 signals (0.69/day). Better than -5.34%, and still reporting:
+
+    NO CLOSED TRADES. A rule that never fires is not a rule that loses.
+
+403 orders had filled. `self.trades` was empty. Going back to the first
+screenshot, v1 printed the same line — **every run so far has recorded
+zero trades**, and the P&L blocks, the exit table and the entire sweep
+have never once executed.
+
+### BUGFIX 7 — why 400 fills recorded nothing
+
+`_enter` placed the order before it registered the book:
+
+```python
+self.MarketOrder(best.Symbol, qty)     # LEAN can fill and raise
+                                       # OnOrderEvent inside this call
+b.contract = best.Symbol
+b.cost = 0.0                           # erases the buy if it was credited
+self.by_contract[best.Symbol] = b      # too late for the entry fill
+```
+
+At entry-fill time `by_contract` had no entry, so `OnOrderEvent`
+returned early; and had it matched, `b.cost = 0.0` two lines later would
+have wiped the credit anyway. Exit fills arrived after registration, so
+`b.proceeds` filled up normally against a `b.cost` of zero — and
+`_close_out` opens with `if cost <= 0: return`. Every trade fell through
+that guard silently.
+
+It never showed up as a crash because the flow still worked: exits fired,
+books reset, trading continued all year. Only the ledger was blind.
+
+Fixed by ordering the entry the only way that is safe with a synchronous
+fill: **state first, registration second, order last.** Three defences
+were added so this class of fault announces itself instead of hiding:
+
+- `_close_out` falls back to `qty0 * ref_px * 100` when `cost` is zero,
+  so a missed buy fill costs precision, not the whole trade.
+- the parity block prints `fills seen / unmatched / closes`. A non-zero
+  unmatched count means the book keeping is blind again.
+- `OnEndOfAlgorithm` no longer returns early when no trades are
+  recorded. The sweep reads price paths, not `self.trades`, and had no
+  business being skipped by an unrelated accounting failure — but it
+  was, which is how a whole run was spent for nothing.
+
+### BUGFIX 6 — 0 DTE lottery tickets
+
+`SetFilter(...Expiration(2, 8))` bounds the *universe*. `AddOptionContract`
+adds a contract outside it, and it stays in the chain afterwards, so
+already-traded strikes came back once they were expiring that day:
+
+| date | contract | price | qty |
+|---|---|---|---|
+| 2026-03-16 | QQQ 260316C606 | $0.27 | 46 |
+| 2025-12-18 | SPY 251218C679 | $0.67 | 19 |
+| 2025-07-17 | QQQ 250717C559 | $1.00 | 12 |
+| 2026-01-08 | SPY 260108C690 | $0.87 | 14 |
+
+The size follows from the price: `budget / (ask * 100)` buys 46 contracts
+at $0.27. These are same-day lottery tickets, not the 2-8 DTE rule.
+`_enter` now checks `k.Expiry` against `self.Time` directly and counts
+the rejects as `dte_skips`.
 
 ## Bugs fixed since v1
 
