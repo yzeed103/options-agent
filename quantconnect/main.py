@@ -4,20 +4,21 @@ The live rule on QuantConnect -- v6.
 ASCII only, under the 32000-char save limit, no LEAN name at module
 scope except QCAlgorithm. See README.md; if it grows, cut comments.
 
-SET FOR THE OUT-OF-SAMPLE INVERTED TEST: 2023-05..2025-05, INVERT on.
-Paste and run, no edits. Baseline was 2025-05..2026-05, INVERT off.
+SET TO CONFIRM A SIGN FLIP: 2023-05..2025-05, INVERT off. Paste and
+run, no edits.
 
-On that baseline: -2.20%/trade realised, -1.05% at the mid, 0 of 972
-exit combinations above zero, and an entry edge of -1.7bp at 3 bars
-falling to -6.9bp at 24 on a drift of +0.07bp.
+The entry edge at 24 bars measured -6.88bp on 2025-05..2026-05 and,
+inverted on 2023-05..2025-05, -5.46bp -- which puts the ORIGINAL rule
+at about +5.46bp on those years. Same rule, opposite sign, two eras.
+This run measures that directly instead of inferring it.
 """
 from AlgorithmImports import *
 
 from datetime import timedelta
 from itertools import product
 
-RUN_FROM = (2023, 5, 15)       # baseline was (2025, 5, 15)
-RUN_TO = (2025, 5, 15)         # baseline was (2026, 5, 15)
+RUN_FROM = (2023, 5, 15)       # the era the rule worked
+RUN_TO = (2025, 5, 15)         # 2025-05..2026-05 is where it reversed
 
 SYMBOLS = ["SPY", "QQQ"]
 
@@ -44,11 +45,12 @@ STRIKE_SEARCH = 3
 BLOCK_LUNCH = False
 LUNCH_FROM, LUNCH_TO = (11, 30), (13, 30)
 
-# Fade the cross instead of following it. The sign was measured on
-# 2025-05..2026-05, so this only means anything on other years -- hence
-# the dates above. b.sigs stores the post-flip side, so SIGNAL EDGE
-# reports the inverted rule: positive edge = the flip works.
-INVERT = True                  # baseline was False
+# Fade the cross. b.sigs stores the post-flip side, so SIGNAL EDGE
+# reports the direction actually traded. NOTE: with INVERT on, b.trend
+# is by construction opposite the position, so the structural exit
+# fires on the first profitable bar (279 of 430 exits at 2.6 bars).
+# Inverted P&L is not comparable; the edge block is.
+INVERT = False
 
 # Exits are a function of the price path after entry, so paths are
 # recorded and every combination replayed at the end: one backtest, all
@@ -67,7 +69,7 @@ TOP_N = 15
 
 class SessionVwap:
     """VWAP from the bell, reset each session. Not LEAN's built-in:
-    a different one changes which signals fire."""
+    another one changes which signals fire."""
 
     def __init__(self):
         self.day = None
@@ -817,8 +819,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
 
     def _finish(self):
         """
-        Reads price paths, never self.trades, so a book-keeping
-        fault cannot silence it, as an early return once did.
+        Reads price paths, not self.trades, so a book-keeping fault
+        cannot silence it, as an early return once did.
         """
         self._edge()
         if not SWEEP:
