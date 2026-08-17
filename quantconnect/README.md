@@ -333,6 +333,49 @@ run it on **2023-05..2025-05**, years the edge was never measured on.
 Only if it survives there is it a strategy rather than a description of
 one year of SPY and QQQ.
 
+## v6 — the sign flip, measured
+
+Two runs settled it.
+
+**Run A, INVERT on, 2023-05..2025-05.** The inverted rule's edge came
+back **negative** on every horizon, -0.23 to -5.46bp. Since INVERT
+negates the traded direction, that puts the *original* rule near
+**+5.46bp** in those years. Deduction, not measurement — the P&L of an
+inverted run is not comparable (with `b.trend` opposite the position by
+construction, the structural exit fires on the first profitable bar:
+279 of 430 exits at 2.6 bars). Only the edge number transfers.
+
+**Run B, INVERT off, 2023-05..2025-05.** The confirmation:
+
+    #  bars=3   edge= +0.18 hit=53.1%
+    #  bars=6   edge= +2.72 hit=55.5%
+    #  bars=12  edge= +1.19 hit=49.7%
+    #  bars=24  edge= +5.45 hit=53.0%
+    #  bars=36  edge= +5.25 hit=51.5%
+
+**+5.45bp measured against +5.46bp deduced.** Net +5.024% over 944
+orders, 393 closed, `unmatched=0`, 57% win rate, PF 0.87. Realised
++1.14%/trade, +2.47% at the mid, 1.33% spread drag. 156 of 972 exit
+combinations beat zero, against 0 of 972 in 2025-26.
+
+So the same rule, unchanged, is **+5.45bp in 2023-05..2025-05 and
+-6.88bp in 2025-05..2026-05**. The edge did not decay; it reversed.
+
+Three things follow.
+
+- The exit sweep's disagreements between eras were never noise about
+  exits — they were two different underlying processes. `scale=off` is
+  worth +0.87%/trade here and is the first knob to point the same way
+  in both sweeps besides `HARD_STOP`.
+- The best-by-worst-half combination has **both halves alive and
+  nearly equal** (+2.07 / +2.05), which is the robustness bar set
+  before the run, not after it.
+- None of it is tradeable. The user trades in the era where the sign is
+  **negative**. A rule that reverses is more dangerous than one that
+  merely fails, because a live run in the wrong era loses at the same
+  rate the backtest wins. The missing piece is a regime detector
+  validated on a period used for neither of the two runs above.
+
 ## Bugs fixed since v1
 
 1. **Session boundary.** The first 5m bar of each day compared

@@ -4,18 +4,13 @@ The live rule on QuantConnect -- v6.
 ASCII only, under 32000 chars, no LEAN name at module scope except
 QCAlgorithm. See README.md; if it grows, cut comments.
 
-SET TO CONFIRM A SIGN FLIP: 2023-05..2025-05, INVERT off.
-
-Entry edge at 24 bars: -6.88bp on 2025-05..2026-05, and -5.46bp
-inverted on 2023-05..2025-05 -- putting the ORIGINAL rule near +5.46bp
-there. Same rule, opposite sign, two eras. SIGNAL EDGE measures that
-directly and never touches an exit, so the changes below cannot
-flatter it.
-
-Two changes only. HARD_STOP 0.30 -> 0.20 is the ONE exit knob that
-improved in BOTH sweeps (+0.34 and +0.18/trade); every other knob
-reverses sign between them, which is what fitting noise looks like.
-BUGFIX 10 is a defect, not a preference.
+SIGN FLIP CONFIRMED -- same rule, opposite sign, two eras:
+  2023-05..2025-05  edge +5.45bp @24 bars, net +5.02%
+  2025-05..2026-05  edge -6.88bp @24 bars, net -3.13%
++5.45 measured matches +5.46 deduced from the inverted run, so the
+reversal is real, not fitted. SIGNAL EDGE never touches an exit, so
+no exit knob can flatter it. None of this is tradeable until a regime
+detector is validated on a period not used to build it.
 """
 from AlgorithmImports import *
 
@@ -51,9 +46,7 @@ BLOCK_LUNCH = False
 LUNCH_FROM, LUNCH_TO = (11, 30), (13, 30)
 
 # Fade the cross. SIGNAL EDGE reports the direction actually traded.
-# With INVERT on, b.trend is by construction opposite the position, so
-# the structural exit fires on the first profitable bar (279 of 430
-# exits at 2.6 bars): inverted P&L is not comparable, the edge is.
+# With INVERT on read the edge, not the P&L -- see README.
 INVERT = False
 
 # Exits are a function of the price path after entry, so paths are
@@ -257,13 +250,9 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                       "ZERO" if ZERO_COMMISSION else "default", INVERT))
 
     def _zero_commission(self):
-        """
-        Drop the broker's cut, keep what the brokerage model sets.
-
-        Built at runtime, NOT as a module-level subclass: subclassing
-        a LEAN C# type runs at import and an unexported name kills the
-        module. A lambda would drop the seeder too.
-        """
+        """Drop the broker's cut, keep what the brokerage model sets.
+        Built at runtime, NOT as a module-level subclass -- that runs
+        at import and kills the module. See README."""
         seeder = FuncSecuritySeeder(self.GetLastKnownPrices)
         base = None
         try:
@@ -339,8 +328,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 return
             pb = (c - lo) / width
 
-            # The CROSSING bar is a condition: without it the rule is
-            # "above/below VWAP", 2,440 trades not hundreds.
+            # The CROSSING bar is a condition: without it the rule
+            # is "above/below VWAP", 2,440 trades not hundreds.
             call = (b.trend == 1 and colour > 0 and c > v
                     and prev_c <= prev_v and 0.50 <= pb <= 1.50)
             put = (b.trend == -1 and colour < 0 and c < v
@@ -462,7 +451,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
 
         # BUGFIX 7 -- state first, registration second, ORDER LAST.
         # LEAN fills inside MarketOrder, so a book built after misses
-        # its own entry: 403 fills, zero trades.
+        # its own entry: 403 fills, no trades.
         b.contract = best.Symbol
         b.is_call = is_call
         b.ref_px = ask
@@ -540,8 +529,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             b.scaled = True
             self._sell(b, "scale", SCALE_FRAC)
             # BUGFIX 9: the fill lands inside MarketOrder and
-            # _close_out resets the book, so every check below would
-            # otherwise run on b.contract = None.
+            # _close_out resets the book, so the checks below
+            # would otherwise run on b.contract = None.
             if b.contract is None or b.closing:
                 return
         # Dead BEFORE the timer: a flat range never reaches it.
@@ -578,7 +567,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
 
     def OnOrderEvent(self, ev):
         """Returns come from FILL PRICES, not from what this file
-        expected them to be. That is why the run happens here."""
+        expected. That is why the run happens here."""
         if ev.Status != OrderStatus.Filled:
             return
         self.oe_seen += 1
@@ -798,6 +787,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         self.Debug("SIGNAL EDGE -- the underlying alone (bp, signal direction)")
         self.Debug("#  1bp of underlying ~ 1% of premium; the spread")
         self.Debug("#  costs ~1.1%, so under ~1.2bp it cannot pay.")
+        edges = []
         for k in (3, 6, 12, 24, 36):
             sig, mkt, mix = [], [], 0
             for b in self.books.values():
@@ -816,13 +806,21 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             # Same call/put mix, so drift is neither credited nor blamed.
             base = sum(mkt) / len(mkt) * mix / float(len(sig))
             hit = sum(1 for x in sig if x > 0) / float(len(sig)) * 100.0
+            edges.append(s - base)
             self.Debug("#  bars=%-3d n=%-4d sig=%+6.2f mkt=%+6.2f edge=%+6.2f hit=%.1f%%"
                        % (k, len(sig), s, base, s - base, hit))
-        self.Debug("#  edge < 0 on every horizon is not noise -- the")
-        self.Debug("#  rule informs with the sign reversed.")
+        # The verdict follows the numbers, not the other way round.
+        if edges and min(edges) > 0.0:
+            self.Debug("#  edge > 0 on every horizon: the rule informs")
+            self.Debug("#  with the sign it is written with.")
+        elif edges and max(edges) < 0.0:
+            self.Debug("#  edge < 0 on every horizon is not noise -- the")
+            self.Debug("#  rule informs with the sign reversed.")
+        else:
+            self.Debug("#  edge changes sign across horizons: nothing.")
 
     def _finish(self):
-        """Reads price paths, not self.trades, so a book-keeping fault
+        """Reads price paths, not self.trades: a book-keeping fault
         cannot silence it, as an early return once did."""
         self._edge()
         if not SWEEP:
