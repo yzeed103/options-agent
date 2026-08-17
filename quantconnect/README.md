@@ -575,6 +575,90 @@ Caveat: if signals come back at zero or the run errors on missing
 data, that is options coverage for 2020-2022 on the account's data
 tier, not a finding.
 
+## v8 — where profit could still be, honestly ranked
+
+### A methodological error, mine
+
+`STOP_GRID = [0.20, 0.30, 0.45]` returned its best at **0.20**.
+`HOLD_GRID = [(36,60), (24,48), (60,60)]` returned its best at
+**(60,60)**. Both winners sat at the **boundary of the grid**, in both
+the 2023-25 and 2023-26 sweeps. A grid whose optimum is at its own
+edge has not found an optimum — it has run out of room, and I read the
+edge as an answer twice.
+
+Extended in the direction the data pointed:
+
+    STOP_GRID = [0.10, 0.15, 0.20, 0.30]
+    DEAD_GRID = [None, 4, 6, 8, 14]
+    HOLD_GRID = [(36,60), (24,48), (60,60), (36,78), (24,78), (78,78)]
+    PATH_BARS = 78          # a full session; 66 could not hold 78
+
+`DEAD_GRID`'s optimum was interior (8, between None and 14), so it is
+extended only for symmetry, not because it was blocked.
+
+### Why the caps are the most likely place money is hiding
+
+Sorted by holding time, the 2023-26 exits are **monotone**:
+
+| exit | bars | n | avg |
+|---|---|---|---|
+| `hard_stop` | 7.5 | 223 | -23.52% |
+| `dead` | 12.2 | 243 | +0.17% |
+| `structure` | 27.4 | 43 | +16.71% |
+| `forced_flat` | 38.3 | 22 | +81.25% |
+| `timer` | 59.7 | 35 | +87.28% |
+
+The only two exits that pay are the **time-terminal** ones — `timer`
+fires at the 60-bar cap and `forced_flat` at the bell. A trade that
+survives long enough to hit a clock is worth ~+85%. And the clock it
+hits was the top of the grid. `PATH_BARS = 78` now records a full
+session so `(78,78)` — hold to the bell — is testable at all.
+
+This is a hypothesis with a mechanism, not a fitted number: a
+positively-skewed book wants losers cut fast and winners uncapped, and
+both grids were pinned exactly where that would show up.
+
+### EDGE BY ENTRY CONDITION — the new instrument
+
+Every knob touched so far is an **exit**. The exits have now been swept
+across two eras and settled: one knob survives. If more profit exists,
+it is in **which signals get taken**, and that has never been measured.
+
+The probe buckets the signal's own forward edge — underlying only, no
+spread, no exit — by `hour`, `%B` at entry, `side`, and `symbol`.
+Exit-independent by construction, so nothing downstream can flatter it.
+
+The ordering here is deliberate and worth stating: this runs on
+**2020-05..2023-05, a window nothing has been fitted to**. A bucket
+that stands out here can then be checked on 2023-05..2026-05 — data
+that already exists and that the filter was not derived from.
+Discovery on new data, validation on old. That is the one sequence
+that produces a filter worth believing rather than a filter worth
+publishing.
+
+A bucket needs roughly **5bp over the rest** to clear the spread, and
+**n ≥ 100** before it means anything.
+
+### Removed, because they are settled
+
+- **`tp` and `trail`** are gone from `replay` entirely. Profit targets
+  and trailing stops hurt in both eras.
+- **The spread-cap table** is gone. It killed its own hypothesis: the
+  37 trades quoted wider than 2% averaged +12.9% each, so refusing
+  wide quotes would cost money, not save it.
+- **`INVERT`** is gone. It existed to infer the 2023-25 edge from an
+  inverted run at +5.46bp; the direct measurement then returned
+  +5.45bp. A scaffold that has been replaced by the building.
+
+### What this cannot do
+
+Nothing above changes the ceiling already measured. At **mid prices —
+zero spread, perfect fills** — the 2023-26 book paid 4.92%/year against
+cash at 5.74%. Extending the grids and filtering entries can move the
+realised number toward that ceiling; neither raises the ceiling. The
+entry probe is the only item here that could, and only if a bucket
+separates by more than noise on a window it was not chosen from.
+
 ## Bugs fixed since v1
 
 1. **Session boundary.** The first 5m bar of each day compared
