@@ -9,7 +9,7 @@ Paste and run, no edits. Baseline was 2025-05..2026-05, INVERT off.
 
 On that baseline: -2.20%/trade realised, -1.05% at the mid, 0 of 972
 exit combinations above zero, and an entry edge of -1.7bp at 3 bars
-falling to -6.9bp at 24 on a drift of +0.07bp. Wrong, not random.
+falling to -6.9bp at 24 on a drift of +0.07bp.
 """
 from AlgorithmImports import *
 
@@ -33,8 +33,7 @@ DEAD_BARS, DEAD_MOVE = 8, 0.04
 RISK_PCT, LOT_DIVISOR = 0.05, 4
 BB_PERIOD, BB_STD = 20, 2.0
 
-# LEAN's default models IB and billed $854 the broker never charges.
-# The BROKER's cut only, not the spread, which no broker waives.
+# LEAN's default models IB and bills what the broker never charges.
 ZERO_COMMISSION = True
 
 # A contract quoted 12% wide starts the trade 6% down.
@@ -53,7 +52,7 @@ INVERT = True                  # baseline was False
 
 # Exits are a function of the price path after entry, so paths are
 # recorded and every combination replayed at the end: one backtest, all
-# of them, on THE SAME TRADES. Recording outlives the live exit.
+# of them, on THE SAME TRADES. Recording outlives the exit.
 SWEEP = True
 PATH_BARS = 66                 # 5.5 hours, past the 60-bar winner cap
 
@@ -106,7 +105,7 @@ class HeikinAshi:
 
 
 class Book:
-    """Per-symbol state: everything the entry and exit gates need."""
+    """Per-symbol state for the entry and exit gates."""
 
     def __init__(self, name):
         self.name = name
@@ -255,8 +254,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         """
         Drop the broker's cut, keep what the brokerage model sets.
 
-        Built at runtime, NOT as a module-level subclass: subclassing
-        a LEAN C# type runs at import, and an unexported name kills the
+        Built at runtime, NOT as a module-level subclass: subclassing a
+        LEAN C# type runs at import, and an unexported name kills the
         module. A lambda would drop the seeder too.
         """
         seeder = FuncSecuritySeeder(self.GetLastKnownPrices)
@@ -278,8 +277,6 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
 
         self.SetSecurityInitializer(init)
 
-    # ---- trend, 15 minute bar ----
-
     def _make_on15(self, name):
         def handler(_s, bar):
             b = self.books[name]
@@ -294,8 +291,6 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             else:
                 b.trend = 0
         return handler
-
-    # ---- entry and management, 5 minute bar ----
 
     def _make_on5(self, name):
         def handler(_s, bar):
@@ -338,8 +333,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 return
             pb = (c - lo) / width
 
-            # The CROSSING bar is a condition: without it the rule is
-            # just "above/below VWAP", 2,440 trades instead of hundreds.
+            # The CROSSING bar is a condition: without it the rule
+            # is "above/below VWAP", 2,440 trades not hundreds.
             call = (b.trend == 1 and colour > 0 and c > v
                     and prev_c <= prev_v and 0.50 <= pb <= 1.50)
             put = (b.trend == -1 and colour < 0 and c < v
@@ -395,8 +390,6 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 still.append(tk)
         b.tracks = still
 
-    # ---- contract selection ----
-
     def _chain_for(self, name):
         sl = self.CurrentSlice
         if sl is None or sl.OptionChains is None:
@@ -425,8 +418,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             if k.Right != want:
                 continue
             # BUGFIX 6: AddOptionContract keeps a contract in the
-            # chain after it leaves SetFilter's window -- 0 DTE lottery
-            # tickets. The filter is a hint; verify here.
+            # chain after it leaves SetFilter's window -- 0 DTE
+            # lottery tickets. The filter is a hint; verify here.
             dte = (k.Expiry.date() - today).days
             if dte < MIN_DTE or dte > MAX_DTE:
                 self.dte_skips += 1
@@ -493,9 +486,9 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         self.MarketOrder(best.Symbol, qty)
         return True
 
-    # ---- exits ----
-
     def _sell(self, b, reason, frac=1.0):
+        if b.contract is None:         # BUGFIX 9
+            return
         held = self.Portfolio[b.contract].Quantity
         if not held:
             return
@@ -535,11 +528,17 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         if chg <= -HARD_STOP:
             self._sell(b, "hard_stop")
             return
-        # Partial scale, once. Kept by request; the sweep prices it.
+        # Partial scale, once. The sweep prices it.
         if not b.scaled and chg >= SCALE_AT:
             b.scaled = True
             self._sell(b, "scale", SCALE_FRAC)
-        # Dead trade BEFORE the timer: a flat range never reaches 36.
+            # BUGFIX 9: max(1, int(1 * 0.25)) == 1, so the "partial"
+            # scale sells a one-lot position WHOLE. The fill lands
+            # inside MarketOrder and _close_out resets the book, so
+            # every check below would run on b.contract = None.
+            if b.contract is None or b.closing:
+                return
+        # Dead BEFORE the timer: a flat range never reaches 36.
         if b.bars >= DEAD_BARS and abs(chg) < DEAD_MOVE:
             self._sell(b, "dead")
             return
@@ -554,7 +553,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 self._sell(b, "structure")
 
     def _close_out(self, b):
-        # If a buy fill is ever missed, price the entry from the ask.
+        # If a buy fill is missed, price the entry from the ask.
         cost = b.cost if b.cost > 0 else b.qty0 * b.ref_px * 100.0
         if cost <= 0:
             return
@@ -594,7 +593,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             b.closing = False
 
     def OnData(self, data):
-        # Expiry or assignment can flatten a position without an exit
+        # Expiry or assignment can flatten a position with no exit
         # order of ours. BUGFIX 2: v1 ignored pending orders here.
         for b in self.books.values():
             if b.contract is None or b.cost <= 0:
@@ -649,7 +648,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         self.Debug("")
         self.Debug("=" * 70)
         self.Debug("EXIT SWEEP -- same trades, %d paths" % len(self.done_tracks))
-        self.Debug("#  h1/h2 = halves of the year. One-sided = noise.")
+        self.Debug("#  h1/h2 = halves of the run. One-sided = noise.")
         self._row("LIVE RULE (baseline)", self._score(base), "<= today")
         self._row("  same, at mid prices", self._score(base, "mx", "refm"))
 
@@ -660,7 +659,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             self._row("  scale=%s" % ("off" if v is None else "+%.0f%%" % (v * 100)),
                       self._score(p))
 
-        self.Debug("#  ONE KNOB AT A TIME (others at live values)")
+        self.Debug("#  ONE KNOB AT A TIME (rest at live values)")
         ofat = [("tp", TP_GRID), ("stop", STOP_GRID), ("dead", DEAD_GRID),
                 ("hold", HOLD_GRID), ("trail", TRAIL_GRID),
                 ("struct", [True, False])]
@@ -698,8 +697,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         pos = sum(1 for _p, s in scored if s["avg"] > 0)
         self.Debug("#  %d of %d combinations beat zero, over %d trades."
                    % (pos, len(scored), len(self.done_tracks)))
-        self.Debug("#  Accept one only if BOTH halves are positive AND its")
-        self.Debug("#  one-knob neighbours are too. A lone spike is luck.")
+        self.Debug("#  Accept one only if BOTH halves are positive and")
+        self.Debug("#  its one-knob neighbours are too.")
 
     def _stats(self, rows, key="ret"):
         vals = [r[key] for r in rows if r.get(key) is not None]
@@ -735,7 +734,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         n = len(self.trades)
         if n == 0:
             self.Debug("  NO TRADES RECORDED. If fills were seen above")
-            self.Debug("  that is a book-keeping fault, not a quiet rule.")
+            self.Debug("  that is book-keeping, not a quiet rule.")
             self._finish()
             return
 
@@ -749,7 +748,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         if shadow:
             self.Debug("#  same trades at MID  : n=%d avg=%+.2f%% wr=%.1f%% pf=%.2f"
                        % (shadow["n"], shadow["avg"], shadow["wr"], shadow["pf"]))
-            self.Debug("#  spread drag         : %.2f%% per trade"
+            self.Debug("#  spread drag         : %.2f%%/trade"
                        % (shadow["avg"] - real["avg"]))
             self.Debug("#")
             if shadow["avg"] > 0.0:
@@ -762,7 +761,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                    % (float(self.Portfolio.TotalFees),
                       "ZERO" if ZERO_COMMISSION else "brokerage"))
 
-        self.Debug("#  BY EXIT REASON -- which door winners leave by")
+        self.Debug("#  BY EXIT REASON -- which door winners use")
         for reason in sorted(set(r["reason"] for r in self.trades)):
             rows = [r for r in self.trades if r["reason"] == reason]
             s = self._stats(rows, "ret")
@@ -783,16 +782,16 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
 
     def _edge(self):
         """
-        Does the UNDERLYING move the signal's way? No spread, theta or
-        expiry -- just SPY and QQQ after a signal versus any bar. A
+        Does the UNDERLYING move the signal's way? No spread, theta
+        or expiry -- just SPY and QQQ after a signal versus any bar. A
         drifting market makes calls look right on its own, so the rule
         must beat that drift over the same horizon and mix.
         """
         self.Debug("")
         self.Debug("=" * 70)
         self.Debug("SIGNAL EDGE -- the underlying alone (bp, signal direction)")
-        self.Debug("#  1bp of underlying ~ 1% of premium; the spread")
-        self.Debug("#  costs 1.15%, so under ~1.2bp it cannot pay.")
+        self.Debug("#  1bp of underlying ~ 1% of premium; spread costs")
+        self.Debug("#  1.15%, so under ~1.2bp it cannot pay.")
         for k in (3, 6, 12, 24, 36):
             sig, mkt, mix = [], [], 0
             for b in self.books.values():
@@ -818,8 +817,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
 
     def _finish(self):
         """
-        Reads price paths, never self.trades, so a book-keeping fault
-        cannot silence it -- as an early return once did.
+        Reads price paths, never self.trades, so a book-keeping
+        fault cannot silence it, as an early return once did.
         """
         self._edge()
         if not SWEEP:
