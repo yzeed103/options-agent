@@ -16,11 +16,13 @@ ratio 0.68, fees $854. Decomposed:
     expectancy 0.52(+10.6) + 0.48(-16.3)           ->   -2.3% per trade
     185 trades x -0.028% of equity                 ->   -5.2%  (matches)
 
-Two facts follow. First, fees are $854 -- one sixth of the loss, not
-the story. Second, that leaves about -1.9% per trade split between the
-BID/ASK ROUND TRIP and the SIGNAL ITSELF, and the old file could not
-tell them apart. Every order was a MarketOrder: bought at the ask, sold
-at the bid, and reported only the net.
+That run was charged $854 in commission, which the live broker does not
+charge -- see ZERO_COMMISSION below. Removing it moves the same run to
+about -4.49% net, roughly -1.9% per trade. Worth having, and nowhere
+near enough: the remaining -1.9% is split between the BID/ASK ROUND
+TRIP and the SIGNAL ITSELF, and the old file could not tell them apart.
+Every order was a MarketOrder: bought at the ask, sold at the bid, and
+reported only the net.
 
 That distinction decides what to fix, and nothing else can decide it:
 
@@ -66,6 +68,16 @@ RISK_PCT, LOT_DIVISOR = 0.05, 4
 BB_PERIOD, BB_STD = 20, 2.0
 
 # ---- knobs added in v2 -------------------------------------------------
+# The live broker charges no commission, so LEAN's default -- which
+# models Interactive Brokers -- was billing costs that will never be
+# paid. Set False to put the modelled commission back and reproduce the
+# -5.34% run exactly.
+#
+# This zeroes the BROKER's cut only. It does not touch the bid/ask
+# spread, which is not a fee, is not refundable by any broker, and is
+# the larger cost by roughly five to one in the run above.
+ZERO_COMMISSION = True
+
 # The only default that changes behaviour versus the -5.34% run. A
 # contract quoted 12% wide starts the trade 6% down and has to make that
 # back before the rule is even wrong. Walks outward from the money to the
@@ -163,6 +175,26 @@ class Book:
         self.wide = 0                  # signal fired, every strike too wide
 
 
+class ZeroFeeInitializer(BrokerageModelSecurityInitializer):
+    """
+    Everything the brokerage model normally sets, minus the commission.
+
+    Subclassed rather than replaced with a bare lambda on purpose. A
+    lambda initializer silently drops the fill, slippage, settlement and
+    margin models along with the fee, and drops the price seeder too --
+    option contracts added mid-run would then sit at a price of zero
+    until their next bar. Chaining to super() keeps all of that and
+    overrides one model.
+    """
+
+    def __init__(self, brokerage_model, seeder):
+        super().__init__(brokerage_model, seeder)
+
+    def Initialize(self, security):
+        super().Initialize(security)
+        security.SetFeeModel(ConstantFeeModel(0.0))
+
+
 class LiveRuleOnRealQuotes(QCAlgorithm):
 
     def Initialize(self):
@@ -170,6 +202,13 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         self.SetEndDate(*RUN_TO)
         self.SetCash(100000)
         self.SetBenchmark("SPY")
+
+        # Set before any AddEquity / AddOption call so it applies to every
+        # security, including the contracts AddOptionContract creates
+        # later at entry time.
+        if ZERO_COMMISSION:
+            self.SetSecurityInitializer(ZeroFeeInitializer(
+                self.BrokerageModel, FuncSecuritySeeder(self.GetLastKnownPrices)))
 
         self.books = {}
         self.by_contract = {}          # option symbol -> book
@@ -195,8 +234,9 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             c15.DataConsolidated += self._make_on15(name)
             self.SubscriptionManager.AddConsolidator(eq.Symbol, c15)
 
-        self.Debug("start=%s end=%s symbols=%s max_spread=%.0f%%"
-                   % (RUN_FROM, RUN_TO, SYMBOLS, MAX_SPREAD_PCT * 100))
+        self.Debug("start=%s end=%s symbols=%s max_spread=%.0f%% commission=%s"
+                   % (RUN_FROM, RUN_TO, SYMBOLS, MAX_SPREAD_PCT * 100,
+                      "ZERO" if ZERO_COMMISSION else "brokerage default"))
 
     # ---- trend, from the 15 minute bar ----
 
@@ -518,7 +558,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         self.Debug("  signals/day = %.2f     local rule: about 0.9 for SPY+QQQ"
                    % (tot / days))
         self.Debug("  local signal rate = 2.7% of bars")
-        self.Debug("  prior QC run  = 0.74/day at -5.34% net, 404 orders")
+        self.Debug("  prior QC run  = 0.74/day at -5.34% net, 404 orders,")
+        self.Debug("                  with $854 commission charged (-4.49% without)")
 
         n = len(self.trades)
         if n == 0:
@@ -554,7 +595,11 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         else:
             self.Debug("#  MID leg unavailable -- trades closed outside our orders.")
         fees = float(self.Portfolio.TotalFees)
-        self.Debug("#  fees total          : $%.2f over %d trades" % (fees, n))
+        # Prints $0.00 while ZERO_COMMISSION is on. Stated either way so a
+        # log read months from now cannot be mistaken for the $854 run.
+        self.Debug("#  commission          : $%.2f over %d trades  (model=%s)"
+                   % (fees, n, "ZERO" if ZERO_COMMISSION else "brokerage default"))
+        self.Debug("#  the spread above is NOT a fee -- no broker waives it")
 
         self.Debug("#")
         self.Debug("#  BY EXIT REASON -- which door the winners leave by")
