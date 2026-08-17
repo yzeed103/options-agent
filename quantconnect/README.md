@@ -445,6 +445,118 @@ is worth knowing before touching execution.
   share `_fwd`, so there is one definition of "forward return in the
   signal direction" rather than three.
 
+## The v7 run — 2023-05..2026-05, and what it settles
+
+Net +4.001% over three years. **CAR 1.314%, annual sd 6.0%, Sharpe
+-0.737** — QC's own Sharpe implies a risk-free rate of 5.74%, so the
+strategy **underperformed cash by 4.4%/year**, with a 7.1% drawdown
+that took 262 days to recover. 1,132 orders, 566 closed, `unmatched=0`.
+
+### BY PERIOD — a step, not a flicker
+
+    2023-02-05  n=39   edge= +1.19  (+0.1 sigma)
+    2023-08-06  n=103  edge= +4.61  (+0.9)
+    2024-02-04  n=99   edge= +0.49  (+0.1)
+    2024-08-04  n=97   edge=+11.82  (+2.2)
+    2025-02-02  n=97   edge= +4.76  (+0.9)
+    2025-08-03  n=81   edge= -7.25  (-1.2)
+    2026-02-01  n=56   edge=-11.80  (-1.7)
+
+Five positive blocks, then two negative. It does **not** flicker, which
+was the fatal reading and is now ruled out. Two caveats keep this from
+being proof. A 24-bar SPY window is ~53bp, so the standard error on a
+97-signal block is ~5.4bp: **only one block clears 2 sigma**, and the
+shape carries the finding, not the levels. And a single changepoint in
+seven blocks has a crude p of roughly 0.05-0.09 — before allowing that
+the split was already known when the chart was drawn, which makes this
+the same data re-plotted rather than independent confirmation.
+
+What *is* new: the flip sits between the block starting 2025-02 and the
+one starting 2025-08, so it is **later than the 2025-05 split assumed
+earlier**, and the most recent block is the worst of the seven, on the
+lowest hit rate (35.7%).
+
+### REGIME PROBE — failed the pre-registered test
+
+    was working  n=295  edge= +3.95  hit=49.2%
+    was failing  n=237  edge= -1.21  hit=51.5%
+
+The buckets point the right way and separate by 5.16bp — against a
+standard error of 4.60bp. **1.12 sigma. That is not separation.**
+
+The stated rule before the run was that if the buckets do not separate,
+no detector built from the rule's own history can save it. They did not.
+
+The failure mode is visible and structural, not a tuning problem. 573
+signals over ~750 sessions across two books is ~0.38 signals/book/day,
+so a 20-signal memory is ~52 sessions — about **2.5 months**, plus the
+24-bar maturity lag. The detector is asked to catch a regime change
+roughly a quarter after it starts, inside a bad era that lasts about
+nine months. That is why `was failing` reads -1.21 while the period
+table reads -7 to -12 over the same span: **the detector is late, and
+it dilutes the bad era with the tail of the good one.** Shortening the
+memory would fix the lag and fit the noise; that trade is not worth
+making on data already used twice.
+
+### Only one exit knob survives both halves
+
+`h1`/`h2` split roughly on the flip in this run, so the both-halves
+test is now a cross-regime test.
+
+| knob | avg | h1 | h2 | verdict |
+|---|---|---|---|---|
+| `scale=None` vs `0.10` | +0.54 vs -0.13 | +0.65 | +0.69 | **two-sided — holds** |
+| `stop=0.20` vs `0.30` | +0.54 vs +0.22 | +0.75 | -0.11 | one-sided |
+| `struct=False` | +1.09 vs +0.54 | -0.05 | +1.16 | one-sided |
+| `hold=(60,60)` | +0.58 vs +0.54 | 0.00 | +0.08 | nil |
+| `dead=None` | +0.32 vs +0.54 | +0.32 | -0.75 | one-sided |
+
+**`scale=off` is the only change that improves both halves**, and it is
+already in. `struct=False` looks like the biggest number on the sheet
+and is exactly the trap the h1/h2 columns exist to catch — it is worth
++1.16 in the second half and -0.05 in the first. `HARD_STOP = 0.20`
+does not survive this run either; it stays because it still has the
+best average, not because it is confirmed.
+
+### Two hypotheses killed
+
+**Tightening the spread cap would hurt.** Entry spread averages 1.0%,
+and 529 of 566 trades were already inside 2%. The 37 trades quoted
+wider than 2% averaged **+12.9%** each — going from `<=2%` to `<=8%`
+moves the book from -0.23% to +0.63% per trade. Wide quotes mark the
+volatile moments the winners come from. The `MAX_SPREAD_PCT = 0.08` cap
+stays where it is.
+
+**The P&L is carried by 10% of trades.** `timer` (n=35, +87.28%) and
+`forced_flat` (n=22, +81.25%) are worth +4,842 points; the other 509
+trades are worth **-4,485**. Best trade +535.7%. Any conclusion drawn
+from the average is a conclusion about a handful of trades.
+
+### The number that decides it
+
+Spread drag is 1.37%/trade against a realised +0.63%, so execution
+takes two thirds of the gross. But fixing execution entirely does not
+save it: **at mid prices — zero spread, perfect fills — the sweep pays
++15.5% over three years, which is 4.92%/year against cash at 5.74%.**
+
+The strategy does not clear the risk-free rate in its *best possible*
+execution, over a window that includes its good era. QC also estimates
+strategy capacity at **$14,000**.
+
+### The only honest next step
+
+Everything above was measured on years already used. One test remains
+that nothing has touched: **run 2020-05..2023-05** — COVID recovery,
+2021, the 2022 bear market — and read only `BY PERIOD` and `REGIME
+PROBE`. If the step structure and the bucket ordering both reappear on
+data neither run has seen, the regime hypothesis survives on its own
+merits. If they do not, the file closes.
+
+It is a two-line change:
+
+    RUN_FROM = (2020, 5, 15)
+    RUN_TO = (2023, 5, 15)
+
 ## Bugs fixed since v1
 
 1. **Session boundary.** The first 5m bar of each day compared
