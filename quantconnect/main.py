@@ -49,6 +49,7 @@ The rule, the gates, and the parity discipline are unchanged from v1.
 from AlgorithmImports import *
 
 from datetime import timedelta
+from itertools import product
 
 RUN_FROM = (2025, 5, 15)
 RUN_TO = (2026, 5, 15)
@@ -90,6 +91,32 @@ STRIKE_SEARCH = 3              # how many strikes out to walk before giving up
 # the midday hours are where the money goes.
 BLOCK_LUNCH = False
 LUNCH_FROM, LUNCH_TO = (11, 30), (13, 30)
+
+# ---- exit-parameter sweep, v3 ------------------------------------------
+# Every exit rule is a function of one thing: the contract's price path
+# after entry. So the path is recorded once per trade and every exit
+# combination below is replayed over it when the run ends. One backtest
+# prices hundreds of combinations, and prices them on THE SAME TRADES --
+# no combination gets to look good by trading a different set.
+#
+# What makes this work is that recording does not stop when the live
+# rule exits. The path keeps being sampled to PATH_BARS regardless, so
+# "what if it had held longer" is answerable instead of unobservable.
+#
+# Entry knobs (the %B band, DTE, the time window, MAX_SPREAD_PCT) cannot
+# be swept this way -- they change which trades exist, and a trade that
+# was never opened has no path. Those need one backtest each. The report
+# ends with the order to spend them in.
+SWEEP = True
+PATH_BARS = 66                 # 5.5 hours, past the 60-bar winner cap
+
+TP_GRID = [None, 0.30, 0.50, 0.80]          # None = no profit target (live)
+STOP_GRID = [0.20, 0.30, 0.45]
+SCALE_GRID = [None, 0.10, 0.25]             # None = no partial scale
+DEAD_GRID = [None, 8, 14]                   # None = never exit for going quiet
+HOLD_GRID = [(36, 60), (24, 48), (60, 60)]  # (loser cap, winner cap)
+TRAIL_GRID = [None, (0.20, 0.15), (0.35, 0.20)]   # (arm at, give back)
+TOP_N = 15
 # ------------------------------------------------------------------------
 
 
@@ -168,11 +195,78 @@ class Book:
         self.mid_proceeds = 0.0
         self.entry_spread = 0.0
         self.last_reason = "?"
+        self.tracks = []               # price paths being recorded, v3
         # parity counters
         self.bars5 = 0
         self.signals = 0
         self.blocked = 0               # signal fired, no contract taken
         self.wide = 0                  # signal fired, every strike too wide
+
+
+def replay(ref, path, trends, want, p):
+    """
+    Re-run one recorded trade under one set of exit parameters.
+
+    `ref` is what was paid, `path` is the contract's price at each 5
+    minute bar after that, and the checks below fire in the same order
+    `_manage` uses -- stop, target, scale, dead, timer, structure --
+    because a different order is a different rule, and the whole point
+    is to compare exit rules rather than to invent one.
+
+    Returns the trade's return in percent of premium. Running out of
+    path is the forced-flat exit: recording stops at 15:55 anyway.
+    """
+    if ref <= 0 or not path:
+        return None
+    left = 1.0                 # fraction of the position still held
+    got = 0.0                  # proceeds, in units of one contract
+    scaled = False
+    peak = 0.0
+    dead_bars, dead_move = p["dead"], DEAD_MOVE
+    loser_cap, winner_cap = p["hold"]
+    trail = p["trail"]
+
+    for i, px in enumerate(path):
+        if px <= 0:
+            continue
+        bars = i + 1
+        chg = (px - ref) / ref
+        if chg > peak:
+            peak = chg
+
+        if chg <= -p["stop"]:
+            got += left * px
+            left = 0.0
+            break
+        if p["tp"] is not None and chg >= p["tp"]:
+            got += left * px
+            left = 0.0
+            break
+        if p["scale"] is not None and not scaled and chg >= p["scale"]:
+            scaled = True
+            got += left * SCALE_FRAC * px
+            left -= left * SCALE_FRAC
+        if trail is not None and peak >= trail[0] and chg <= peak - trail[1]:
+            got += left * px
+            left = 0.0
+            break
+        if dead_bars is not None and bars >= dead_bars and abs(chg) < dead_move:
+            got += left * px
+            left = 0.0
+            break
+        cap = winner_cap if chg > 0 else loser_cap
+        if bars >= cap:
+            got += left * px
+            left = 0.0
+            break
+        if p["struct"] and chg > 0 and trends[i] == -want:
+            got += left * px
+            left = 0.0
+            break
+
+    if left > 0.0:
+        got += left * path[-1]
+    return (got - ref) / ref * 100.0
 
 
 class ZeroFeeInitializer(BrokerageModelSecurityInitializer):
@@ -214,6 +308,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         self.by_contract = {}          # option symbol -> book
         self.trades = []               # one dict per closed trade
         self.exits = {}
+        self.done_tracks = []          # finished price paths, v3 sweep
 
         for name in SYMBOLS:
             eq = self.AddEquity(name, Resolution.Minute)
@@ -233,6 +328,15 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             c15 = TradeBarConsolidator(timedelta(minutes=15))
             c15.DataConsolidated += self._make_on15(name)
             self.SubscriptionManager.AddConsolidator(eq.Symbol, c15)
+
+            # BUGFIX 5: the 15:55 check inside _manage assumes the bell is
+            # at 16:00. On a half day the session ends at 13:00, that bar
+            # never arrives, and the position was carried overnight -- the
+            # one thing the rule says it never does. About nine sessions a
+            # year. BeforeMarketClose knows the real closing time.
+            self.Schedule.On(self.DateRules.EveryDay(name),
+                             self.TimeRules.BeforeMarketClose(name, 5),
+                             self._make_eod(name))
 
         self.Debug("start=%s end=%s symbols=%s max_spread=%.0f%% commission=%s"
                    % (RUN_FROM, RUN_TO, SYMBOLS, MAX_SPREAD_PCT * 100,
@@ -276,6 +380,13 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             prev_c, prev_v = b.prev_close, b.prev_vwap
             b.prev_close, b.prev_vwap = c, v
 
+            # Sampled before _manage, so the trend value here is the one
+            # _manage is about to read. Runs whether or not a position is
+            # open: a path that stopped at the live exit could not answer
+            # "what if it had held longer", which is the main thing the
+            # sweep is for.
+            self._sample(b, bar)
+
             if b.contract is not None:
                 self._manage(b, bar)
                 return
@@ -315,6 +426,51 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 # the rule looks quieter than it is.
                 b.blocked += 1
         return handler
+
+    # ---- end of session ----
+
+    def _make_eod(self, name):
+        def handler():
+            b = self.books[name]
+            if b.contract is not None and not b.closing:
+                self._sell(b, "forced_flat")
+            # A path must not run across a session boundary either: the
+            # next day's prices answer a question nobody asked.
+            for tk in b.tracks:
+                if tk["px"]:
+                    self.done_tracks.append(tk)
+            b.tracks = []
+        return handler
+
+    # ---- path recording for the sweep ----
+
+    def _sample(self, b, bar):
+        if not SWEEP or not b.tracks:
+            return
+        hm = (bar.EndTime.hour, bar.EndTime.minute)
+        still = []
+        for tk in b.tracks:
+            try:
+                sec = self.Securities[tk["sym"]]
+                bid, ask = float(sec.BidPrice), float(sec.AskPrice)
+            except Exception:                                # noqa: BLE001
+                bid, ask = 0.0, 0.0
+            if bid > 0:
+                tk["px"].append(bid)
+                tk["mx"].append((bid + ask) / 2.0 if ask > 0 else bid)
+                tk["tr"].append(b.trend)
+            # Recording ends where the rule could not have held anyway:
+            # the winner cap, or the forced-flat bell.
+            if len(tk["px"]) >= PATH_BARS or hm >= FORCE_FLAT:
+                self.done_tracks.append(tk)
+                if not self.Portfolio[tk["sym"]].Invested:
+                    try:
+                        self.RemoveSecurity(tk["sym"])
+                    except Exception:                        # noqa: BLE001
+                        pass
+            else:
+                still.append(tk)
+        b.tracks = still
 
     # ---- contract selection ----
 
@@ -396,6 +552,15 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         b.entry_spread = best_spread
         b.last_reason = "?"
         self.by_contract[best.Symbol] = b
+
+        if SWEEP:
+            b.tracks.append({
+                "sym": best.Symbol,
+                "ref": ask,            # what was actually paid
+                "refm": mid_in,        # the same entry marked at the mid
+                "want": 1 if is_call else -1,
+                "px": [], "mx": [], "tr": [],
+            })
         return True
 
     # ---- exits ----
@@ -529,6 +694,125 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
 
     # ---- report ----
 
+    def _score(self, params, key="px", refk="ref"):
+        """One exit combination, replayed over every recorded trade."""
+        rets = []
+        for tk in self.done_tracks:
+            r = replay(tk[refk], tk[key], tk["tr"], tk["want"], params)
+            if r is not None:
+                rets.append(r)
+        if not rets:
+            return None
+        n = len(rets)
+        half = n // 2
+        wins = [x for x in rets if x > 0]
+        gl = -sum(x for x in rets if x <= 0)
+        h1 = rets[:half]
+        h2 = rets[half:]
+        return {
+            "n": n,
+            "avg": sum(rets) / n,
+            "wr": len(wins) / n * 100.0,
+            "pf": (sum(wins) / gl) if gl > 0 else float("inf"),
+            "h1": (sum(h1) / len(h1)) if h1 else 0.0,
+            "h2": (sum(h2) / len(h2)) if h2 else 0.0,
+            # Every trade is sized RISK_PCT/LOT_DIVISOR of equity, so the
+            # sum of returns scales straight into an equity estimate.
+            "net": sum(rets) * RISK_PCT / LOT_DIVISOR,
+        }
+
+    def _row(self, label, s, mark=""):
+        if s is None:
+            self.Debug("#  %-26s (no data)" % label)
+            return
+        self.Debug("#  %-26s avg=%+6.2f%% pf=%.2f wr=%4.1f%% net=%+6.1f%% "
+                   "h1=%+6.2f h2=%+6.2f %s"
+                   % (label, s["avg"], s["pf"], s["wr"], s["net"],
+                      s["h1"], s["h2"], mark))
+
+    def _sweep(self):
+        base = {"tp": None, "stop": HARD_STOP, "scale": SCALE_AT,
+                "dead": DEAD_BARS, "hold": (MAX_HOLD_BARS, WINNER_HOLD_BARS),
+                "trail": None, "struct": True}
+
+        self.Debug("")
+        self.Debug("=" * 70)
+        self.Debug("EXIT SWEEP -- same trades, %d recorded paths" % len(self.done_tracks))
+        self.Debug("=" * 70)
+        self.Debug("#  h1/h2 = first and second half of the year, in order.")
+        self.Debug("#  A combination that only works in one half is noise.")
+        self.Debug("#")
+        self._row("LIVE RULE (baseline)", self._score(base), "<= today")
+        self._row("  same, at mid prices", self._score(base, "mx", "refm"))
+
+        # The question asked directly: the scale exit, alone, nothing else
+        # moved. Everything to its right in this table is held constant.
+        self.Debug("#")
+        self.Debug("#  DOES THE +10% SCALE COST MONEY? (only this knob moves)")
+        for v in SCALE_GRID:
+            p = dict(base)
+            p["scale"] = v
+            self._row("  scale=%s" % ("off" if v is None else "+%.0f%%" % (v * 100)),
+                      self._score(p))
+
+        self.Debug("#")
+        self.Debug("#  ONE KNOB AT A TIME (all others at the live values)")
+        ofat = [("tp", TP_GRID), ("stop", STOP_GRID), ("dead", DEAD_GRID),
+                ("hold", HOLD_GRID), ("trail", TRAIL_GRID),
+                ("struct", [True, False])]
+        for key, grid in ofat:
+            for v in grid:
+                p = dict(base)
+                p[key] = v
+                self._row("  %s=%s" % (key, v), self._score(p))
+
+        # Full cross. Ranked twice on purpose: the best average is the
+        # number that flatters, the best worst-half is the number that
+        # survives. Read the second one.
+        combos = list(product(TP_GRID, STOP_GRID, SCALE_GRID, DEAD_GRID,
+                              HOLD_GRID, TRAIL_GRID))
+        self.Debug("#")
+        self.Debug("#  FULL CROSS -- %d combinations over %d trades"
+                   % (len(combos), len(self.done_tracks)))
+        scored = []
+        for tp, stop, scale, dead, hold, trail in combos:
+            p = {"tp": tp, "stop": stop, "scale": scale, "dead": dead,
+                 "hold": hold, "trail": trail, "struct": True}
+            s = self._score(p)
+            if s:
+                scored.append((p, s))
+        if not scored:
+            return
+        scored.sort(key=lambda x: -x[1]["avg"])
+        self.Debug("#  top %d by average return:" % TOP_N)
+        for p, s in scored[:TOP_N]:
+            lab = "tp=%s st=%.2f sc=%s dd=%s hd=%s tr=%s" % (
+                p["tp"], p["stop"], p["scale"], p["dead"],
+                p["hold"][0], p["trail"][0] if p["trail"] else None)
+            self._row("  " + lab, s, "OK" if min(s["h1"], s["h2"]) > 0 else "")
+
+        robust = sorted(scored, key=lambda x: -min(x[1]["h1"], x[1]["h2"]))[0]
+        self.Debug("#")
+        self.Debug("#  BEST BY WORST HALF -- the one to believe:")
+        self._row("  %s" % (robust[0],), robust[1])
+
+        pos = sum(1 for _p, s in scored if s["avg"] > 0)
+        self.Debug("#")
+        self.Debug("#  %d of %d combinations beat zero. With %d trades and"
+                   % (pos, len(scored), len(self.done_tracks)))
+        self.Debug("#  %d of them searched, the best is partly luck by"
+                   % len(scored))
+        self.Debug("#  construction. Accept a setting only if BOTH halves")
+        self.Debug("#  are positive AND its neighbours in the one-knob")
+        self.Debug("#  table are positive too. A lone spike is a fluke.")
+        self.Debug("#")
+        self.Debug("#  ENTRY knobs cannot be swept here -- they change which")
+        self.Debug("#  trades exist. Spend separate backtests in this order:")
+        self.Debug("#    1. MAX_SPREAD_PCT  0.05 / 0.08 / 0.12")
+        self.Debug("#    2. MIN_DTE,MAX_DTE  2-8 / 5-15 / 10-25")
+        self.Debug("#    3. BLOCK_LUNCH      True")
+        self.Debug("#    4. the %B band, widened and narrowed")
+
     def _stats(self, rows, key="ret"):
         vals = [r[key] for r in rows if r.get(key) is not None]
         if not vals:
@@ -624,3 +908,14 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                    % (real["wr"], (100.0 - real["wr"]) / real["wr"]))
         self.Debug("#  end equity    %s" % self.Portfolio.TotalPortfolioValue)
         self.Debug("#" * 70)
+
+        if SWEEP:
+            # Paths still being recorded when the run ended are shorter
+            # than the rest but still valid: they end where the data ends.
+            for b in self.books.values():
+                for tk in b.tracks:
+                    if tk["px"]:
+                        self.done_tracks.append(tk)
+                b.tracks = []
+            if self.done_tracks:
+                self._sweep()
