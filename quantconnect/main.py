@@ -1,24 +1,22 @@
 """
-The live rule on QuantConnect -- v6.
+The live rule on QuantConnect -- v7.
 
 ASCII only, under 32000 chars, no LEAN name at module scope except
 QCAlgorithm. See README.md; if it grows, cut comments.
 
-SIGN FLIP CONFIRMED -- same rule, opposite sign, two eras:
-  2023-05..2025-05  edge +5.45bp @24 bars, net +5.02%
-  2025-05..2026-05  edge -6.88bp @24 bars, net -3.13%
-+5.45 measured matches +5.46 deduced from the inverted run, so the
-reversal is real, not fitted. SIGNAL EDGE never touches an exit, so
-no exit knob can flatter it. None of this is tradeable until a regime
-detector is validated on a period not used to build it.
+The rule REVERSED between eras: +5.45bp @24 bars on 2023-05..2025-05
+(net +5.02%), -6.88bp on 2025-05..2026-05 (net -3.13%). v7 runs BOTH
+in one pass and asks the only question left: was the flip visible in
+ADVANCE? BY PERIOD locates it; REGIME PROBE tests a backward-looking
+detector. Neither places an order, so no exit knob can flatter them.
+The +10% scale is OFF: it costs money in both eras' sweeps.
 """
 from AlgorithmImports import *
 
-from datetime import timedelta
-from itertools import product
+from datetime import date, timedelta
 
-RUN_FROM = (2023, 5, 15)       # the era the rule worked
-RUN_TO = (2025, 5, 15)         # 2025-05..2026-05 is where it reversed
+RUN_FROM = (2023, 5, 15)       # both eras, one run: the flip is inside
+RUN_TO = (2026, 5, 15)
 
 SYMBOLS = ["SPY", "QQQ"]
 
@@ -26,7 +24,7 @@ MIN_DTE, MAX_DTE = 2, 8
 NO_ENTRY_AFTER = (14, 0)
 FORCE_FLAT = (15, 55)
 
-SCALE_AT, SCALE_FRAC = 0.10, 0.25
+SCALE_AT, SCALE_FRAC = None, 0.25    # None = no partial scale
 HARD_STOP = 0.20               # was 0.30
 MAX_HOLD_BARS, WINNER_HOLD_BARS = 36, 60
 DEAD_BARS, DEAD_MOVE = 8, 0.04
@@ -37,36 +35,34 @@ BB_PERIOD, BB_STD = 20, 2.0
 # LEAN's default bills what the broker never charges.
 ZERO_COMMISSION = True
 
-# A contract quoted 12% wide starts the trade 6% down.
-MAX_SPREAD_PCT = 0.08
+MAX_SPREAD_PCT = 0.08          # 12% wide starts the trade 6% down
 STRIKE_SEARCH = 3
 
-# Off: changes which trades exist, breaking comparability.
-BLOCK_LUNCH = False
-LUNCH_FROM, LUNCH_TO = (11, 30), (13, 30)
+# Measurement only, never an order. EDGE_K is the horizon the flip
+# was measured at; REG_N is the detector's memory, in signals.
+EDGE_K, REG_N, PERIOD_DAYS = 24, 20, 182
+SPREAD_CAPS = [0.02, 0.03, 0.04, 0.05, 0.06, 0.08]
 
 # Fade the cross. SIGNAL EDGE reports the direction actually traded.
 # With INVERT on read the edge, not the P&L -- see README.
 INVERT = False
 
 # Exits are a function of the price path after entry, so paths are
-# recorded and every combination replayed at the end: one backtest,
-# all of them, on THE SAME TRADES. Recording outlives the exit.
+# recorded and replayed at the end: one backtest, many exit rules,
+# on THE SAME TRADES. Recording outlives the exit.
 SWEEP = True
 PATH_BARS = 66                 # 5.5h, past the 60-bar winner cap
 
-TP_GRID = [None, 0.30, 0.50, 0.80]          # None = no target
 STOP_GRID = [0.20, 0.30, 0.45]
 SCALE_GRID = [None, 0.10, 0.25]             # None = no partial scale
 DEAD_GRID = [None, 8, 14]
 HOLD_GRID = [(36, 60), (24, 48), (60, 60)]  # (loser cap, winner cap)
-TRAIL_GRID = [None, (0.20, 0.15), (0.35, 0.20)]   # (arm at, give back)
-TOP_N = 15
+# tp and trail are gone: both hurt in BOTH eras. Settled.
 
 
 class SessionVwap:
-    """VWAP from the bell, reset each session. Not LEAN's built-in:
-    another changes which signals fire."""
+    """VWAP from the bell, reset each session. Not LEAN's: another
+    VWAP changes which signals fire."""
 
     def __init__(self):
         self.day = None
@@ -134,7 +130,7 @@ class Book:
         self.entry_spread = 0.0
         self.last_reason = "?"
         self.tracks = []               # price paths being recorded
-        # signal-edge probe: the UNDERLYING, not the option
+        # edge probe: the UNDERLYING, not the option
         self.px5 = []
         self.day5 = []
         self.sigs = []                 # (bar index, +1 call / -1 put)
@@ -146,11 +142,8 @@ class Book:
 
 
 def replay(ref, path, trends, want, p):
-    """
-    Re-run one recorded trade under one set of exit parameters, in
-    _manage's order -- a different order is a different rule. Returns
-    percent of premium; running out of path is the forced flat.
-    """
+    """One trade, one set of exit parameters, in _manage's order --
+    a different order is a different rule. Percent of premium."""
     if ref <= 0 or not path:
         return None
     left = 1.0                 # fraction of the position still held
@@ -239,8 +232,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             c15.DataConsolidated += self._make_on15(name)
             self.SubscriptionManager.AddConsolidator(eq.Symbol, c15)
 
-            # BUGFIX 5: the 15:55 test assumes a 16:00 bell; half
-            # days held overnight, ~9 times a year.
+            # BUGFIX 5: a 15:55 test assumes a 16:00 bell.
             self.Schedule.On(self.DateRules.EveryDay(name),
                              self.TimeRules.BeforeMarketClose(name, 5),
                              self._make_eod(name))
@@ -250,9 +242,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                       "ZERO" if ZERO_COMMISSION else "default", INVERT))
 
     def _zero_commission(self):
-        """Drop the broker's cut, keep what the brokerage model sets.
-        Built at runtime, NOT as a module-level subclass -- that runs
-        at import and kills the module. See README."""
+        """Drop the broker's cut. Built at runtime, NOT as a module
+        subclass -- that runs at import and kills it. See README."""
         seeder = FuncSecuritySeeder(self.GetLastKnownPrices)
         base = None
         try:
@@ -298,8 +289,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             b.px5.append(c)
             b.day5.append(bar.EndTime.date().toordinal())
 
-            # BUGFIX 1: yesterday's close vs a zeroed VWAP faked a
-            # "cross" on the 09:35 bar most mornings.
+            # BUGFIX 1: no cross across the session boundary.
             if new_day:
                 b.prev_close, b.prev_vwap = None, None
             prev_c, prev_v = b.prev_close, b.prev_vwap
@@ -318,8 +308,6 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             hm = (t.hour, t.minute)
             if hm >= NO_ENTRY_AFTER or hm < (9, 35):
                 return
-            if BLOCK_LUNCH and LUNCH_FROM <= hm < LUNCH_TO:
-                return
 
             up = float(b.bb.UpperBand.Current.Value)
             lo = float(b.bb.LowerBand.Current.Value)
@@ -328,8 +316,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 return
             pb = (c - lo) / width
 
-            # The CROSSING bar is a condition: without it the rule
-            # is "above/below VWAP", 2,440 trades not hundreds.
+            # The CROSSING bar is a condition: without it this
+            # reads "above/below VWAP" and fires 10x as often.
             call = (b.trend == 1 and colour > 0 and c > v
                     and prev_c <= prev_v and 0.50 <= pb <= 1.50)
             put = (b.trend == -1 and colour < 0 and c < v
@@ -412,9 +400,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         for k in chain:
             if k.Right != want:
                 continue
-            # BUGFIX 6: AddOptionContract keeps a contract in the
-            # chain after it leaves SetFilter's window -- 0 DTE
-            # lottery tickets. The filter is a hint; verify.
+            # BUGFIX 6: the chain outlives SetFilter's window,
+            # so 0 DTE leaks in. Verify, do not trust.
             dte = (k.Expiry.date() - today).days
             if dte < MIN_DTE or dte > MAX_DTE:
                 self.dte_skips += 1
@@ -449,9 +436,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         if qty < 1:
             return False
 
-        # BUGFIX 7 -- state first, registration second, ORDER LAST.
-        # LEAN fills inside MarketOrder, so a book built after misses
-        # its own entry: 403 fills, no trades.
+        # BUGFIX 7 -- state, registration, ORDER LAST. LEAN fills
+        # INSIDE MarketOrder: a book built after misses its own fill.
         b.contract = best.Symbol
         b.is_call = is_call
         b.ref_px = ask
@@ -497,8 +483,7 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             b.mid_proceeds += n * mid * 100.0
             b.sold += n
 
-        # BUGFIX 8 -- BUGFIX 7 again: _close_out read last_reason
-        # before it was set, inside MarketOrder.
+        # BUGFIX 8 -- BUGFIX 7 again: set before the order.
         b.last_reason = reason
         if frac >= 1.0:
             b.closing = True           # BUGFIX 4
@@ -523,15 +508,13 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
         if chg <= -HARD_STOP:
             self._sell(b, "hard_stop")
             return
-        # BUGFIX 10: max(1, int(1 * 0.25)) == 1 sold a one-lot
-        # position WHOLE at +10% -- a take-profit wearing scale's name.
-        if not b.scaled and chg >= SCALE_AT and b.qty0 >= 2:
+        # qty0 >= 2 is BUGFIX 10: int(1 * 0.25) closed a one-lot
+        # position WHOLE, a take-profit in disguise.
+        if (SCALE_AT is not None and not b.scaled
+                and chg >= SCALE_AT and b.qty0 >= 2):
             b.scaled = True
             self._sell(b, "scale", SCALE_FRAC)
-            # BUGFIX 9: the fill lands inside MarketOrder and
-            # _close_out resets the book, so the checks below
-            # would otherwise run on b.contract = None.
-            if b.contract is None or b.closing:
+            if b.contract is None or b.closing:   # BUGFIX 9
                 return
         # Dead BEFORE the timer: a flat range never reaches it.
         if b.bars >= DEAD_BARS and abs(chg) < DEAD_MOVE:
@@ -588,8 +571,8 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             b.closing = False
 
     def OnData(self, data):
-        # Expiry or assignment can flatten a position with no exit of
-        # ours. BUGFIX 2: v1 ignored pending orders here.
+        # Expiry or assignment can flatten with no exit of ours.
+        # BUGFIX 2: v1 ignored pending orders here.
         for b in self.books.values():
             if b.contract is None or b.cost <= 0:
                 continue
@@ -604,28 +587,10 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
 
     def _score(self, params, key="px", refk="ref"):
         """One combination, replayed over every trade."""
-        rets = []
-        for tk in self.done_tracks:
-            r = replay(tk[refk], tk[key], tk["tr"], tk["want"], params)
-            if r is not None:
-                rets.append(r)
-        if not rets:
-            return None
-        n = len(rets)
-        half = n // 2
-        wins = [x for x in rets if x > 0]
-        gl = -sum(x for x in rets if x <= 0)
-        h1 = rets[:half]
-        h2 = rets[half:]
-        return {
-            "n": n,
-            "avg": sum(rets) / n,
-            "wr": len(wins) / n * 100.0,
-            "pf": (sum(wins) / gl) if gl > 0 else float("inf"),
-            "h1": (sum(h1) / len(h1)) if h1 else 0.0,
-            "h2": (sum(h2) / len(h2)) if h2 else 0.0,
-            "net": sum(rets) * RISK_PCT / LOT_DIVISOR,   # of equity
-        }
+        return self._stats([r for r in
+                            (replay(tk[refk], tk[key], tk["tr"], tk["want"],
+                                    params) for tk in self.done_tracks)
+                            if r is not None])
 
     def _row(self, label, s, mark=""):
         if s is None:
@@ -642,21 +607,15 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
 
         self.Debug("")
         self.Debug("=" * 70)
-        self.Debug("EXIT SWEEP -- same trades, %d paths" % len(self.done_tracks))
-        self.Debug("#  h1/h2 = halves of the run. One-sided = noise.")
+        self.Debug("EXIT SWEEP -- %d paths" % len(self.done_tracks))
+        self.Debug("#  h1/h2 = halves of the run, so roughly the two")
+        self.Debug("#  eras. One-sided = regime, not knob.")
         self._row("LIVE RULE (baseline)", self._score(base), "<= today")
         self._row("  same, at mid prices", self._score(base, "mx", "refm"))
 
-        self.Debug("#  DOES THE +10% SCALE COST MONEY? (only it moves)")
-        for v in SCALE_GRID:
-            p = dict(base)
-            p["scale"] = v
-            self._row("  scale=%s" % ("off" if v is None else "+%.0f%%" % (v * 100)),
-                      self._score(p))
-
         self.Debug("#  ONE KNOB AT A TIME (rest live)")
-        ofat = [("tp", TP_GRID), ("stop", STOP_GRID), ("dead", DEAD_GRID),
-                ("hold", HOLD_GRID), ("trail", TRAIL_GRID),
+        ofat = [("scale", SCALE_GRID), ("stop", STOP_GRID),
+                ("dead", DEAD_GRID), ("hold", HOLD_GRID),
                 ("struct", [True, False])]
         for key, grid in ofat:
             for v in grid:
@@ -664,55 +623,42 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                 p[key] = v
                 self._row("  %s=%s" % (key, v), self._score(p))
 
-        combos = list(product(TP_GRID, STOP_GRID, SCALE_GRID, DEAD_GRID,
-                              HOLD_GRID, TRAIL_GRID))
-        self.Debug("#  FULL CROSS -- %d combinations over %d trades"
-                   % (len(combos), len(self.done_tracks)))
-        scored = []
-        for tp, stop, scale, dead, hold, trail in combos:
-            p = {"tp": tp, "stop": stop, "scale": scale, "dead": dead,
-                 "hold": hold, "trail": trail, "struct": True}
-            s = self._score(p)
-            if s:
-                scored.append((p, s))
-        if not scored:
-            return
-        scored.sort(key=lambda x: -x[1]["avg"])
-        self.Debug("#  top %d by average return:" % TOP_N)
-        for p, s in scored[:TOP_N]:
-            lab = "tp=%s st=%.2f sc=%s dd=%s hd=%s tr=%s" % (
-                p["tp"], p["stop"], p["scale"], p["dead"],
-                p["hold"][0], p["trail"][0] if p["trail"] else None)
-            self._row("  " + lab, s, "OK" if min(s["h1"], s["h2"]) > 0 else "")
+        # The 972-combination cross is GONE: each era named a
+        # different winner, and across a run that CONTAINS the
+        # reversal a "best" combination averages two opposite
+        # regimes. One knob at a time still informs. See README.
 
-        robust = sorted(scored, key=lambda x: -min(x[1]["h1"], x[1]["h2"]))[0]
-        self.Debug("#  BEST BY WORST HALF -- the one to believe:")
-        self._row("  %s" % (robust[0],), robust[1])
+    def _col(self, rows, key="ret"):
+        return [r[key] for r in rows if r.get(key) is not None]
 
-        pos = sum(1 for _p, s in scored if s["avg"] > 0)
-        self.Debug("#  %d of %d combinations beat zero, over %d trades."
-                   % (pos, len(scored), len(self.done_tracks)))
-        self.Debug("#  Accept one only if BOTH halves are positive")
-        self.Debug("#  and its one-knob neighbours are too.")
-
-    def _stats(self, rows, key="ret"):
-        vals = [r[key] for r in rows if r.get(key) is not None]
+    def _stats(self, vals):
+        """n / average / win rate / profit factor / halves / equity."""
         if not vals:
             return None
+        n = len(vals)
+        half = n // 2
         wins = [x for x in vals if x > 0]
-        losses = [x for x in vals if x <= 0]
-        gl = -sum(losses)
+        gl = -sum(x for x in vals if x <= 0)
+        h1, h2 = vals[:half], vals[half:]
         return {
-            "n": len(vals),
-            "avg": sum(vals) / len(vals),
-            "wr": len(wins) / len(vals) * 100.0,
+            "n": n,
+            "avg": sum(vals) / n,
+            "wr": len(wins) / n * 100.0,
             "pf": (sum(wins) / gl) if gl > 0 else float("inf"),
+            "h1": (sum(h1) / len(h1)) if h1 else 0.0,
+            "h2": (sum(h2) / len(h2)) if h2 else 0.0,
+            "net": sum(vals) * RISK_PCT / LOT_DIVISOR,   # of equity
         }
+
+    def _srow(self, label, s, tail=""):
+        if s:
+            self.Debug("#    %-18s n=%-4d avg=%+7.2f%% wr=%5.1f%% pf=%.2f%s"
+                       % (label, s["n"], s["avg"], s["wr"], s["pf"], tail))
 
     def OnEndOfAlgorithm(self):
         self.Debug("")
         self.Debug("=" * 70)
-        self.Debug("PARITY -- read this BEFORE any profit number")
+        self.Debug("PARITY -- read BEFORE any profit number")
         days = max((self.EndDate - self.StartDate).days * 252.0 / 365.0, 1.0)
         tot = 0
         for name, b in self.books.items():
@@ -720,82 +666,90 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
             tot += b.signals
             self.Debug("  %-5s bars5=%-7d signals=%-5d rate=%.2f%% blocked=%d wide=%d"
                        % (name, b.bars5, b.signals, rate, b.blocked, b.wide))
-        self.Debug("  signals/day = %.2f   local: about 0.9 SPY+QQQ"
-                   % (tot / days))
+        self.Debug("  signals/day = %.2f (local: ~0.9)" % (tot / days))
 
         self.Debug("  fills seen=%d unmatched=%d closes=%d dte_skips=%d"
                    % (self.oe_seen, self.oe_lost, self.closes, self.dte_skips))
 
         n = len(self.trades)
         if n == 0:
-            self.Debug("  NO TRADES RECORDED. If fills were seen")
-            self.Debug("  above, that is book-keeping, not a quiet rule.")
+            self.Debug("  NO TRADES RECORDED. With fills seen above")
+            self.Debug("  that is book-keeping, not a quiet rule.")
             self._finish()
             return
 
-        real = self._stats(self.trades, "ret")
-        shadow = self._stats(self.trades, "mid")
+        real = self._stats(self._col(self.trades))
+        shadow = self._stats(self._col(self.trades, "mid"))
 
         self.Debug("")
-        self.Debug("#  WHERE THE MONEY GOES -- realised vs mid")
-        self.Debug("#  realised bid/ask : n=%d avg=%+.2f%% wr=%.1f%% pf=%.2f"
-                   % (real["n"], real["avg"], real["wr"], real["pf"]))
+        self.Debug("#  WHERE THE MONEY GOES")
+        self._srow("realised bid/ask", real)
         if shadow:
-            self.Debug("#  same trades at MID: n=%d avg=%+.2f%% wr=%.1f%% pf=%.2f"
-                       % (shadow["n"], shadow["avg"], shadow["wr"], shadow["pf"]))
-            self.Debug("#  spread drag       : %.2f%%/trade"
+            self._srow("same trades at MID", shadow)
+            self.Debug("#  spread drag: %.2f%%/trade"
                        % (shadow["avg"] - real["avg"]))
-            self.Debug("#")
-            if shadow["avg"] > 0.0:
-                self.Debug("#  VERDICT: works at the mid; the spread takes it.")
-                self.Debug("#  Fix EXECUTION -- limits, tighter cap, fewer trips.")
-            else:
-                self.Debug("#  VERDICT: negative even at the mid, where execution")
-                self.Debug("#  is free. See SIGNAL EDGE below.")
         self.Debug("#  commission $%.2f (model=%s)"
                    % (float(self.Portfolio.TotalFees),
                       "ZERO" if ZERO_COMMISSION else "brokerage"))
 
-        self.Debug("#  BY EXIT REASON -- which door winners use")
+        self.Debug("#  BY EXIT REASON")
         for reason in sorted(set(r["reason"] for r in self.trades)):
             rows = [r for r in self.trades if r["reason"] == reason]
-            s = self._stats(rows, "ret")
             bars = sum(r["bars"] for r in rows) / float(len(rows))
-            self.Debug("#    %-12s n=%-4d avg=%+7.2f%%  wr=%5.1f%%  bars=%.1f"
-                       % (reason, s["n"], s["avg"], s["wr"], bars))
+            self._srow(reason, self._stats(self._col(rows)),
+                       "  bars=%.1f" % bars)
         self.Debug("#  exit orders sent: %s" % (self.exits or "none"))
 
         sp = [r["spread"] for r in self.trades]
-        self.Debug("#  entry spread : avg %.1f%%  worst %.1f%%"
+        self.Debug("#  entry spread avg %.1f%% worst %.1f%%"
                    % (sum(sp) / len(sp), max(sp)))
+        # NOT a re-simulation -- a tighter cap buys a further strike,
+        # it does not skip the trade. Narrower question: were the
+        # tightly-quoted trades the better ones?
+        for cap in SPREAD_CAPS:
+            self._srow("spread <=%.0f%%" % (cap * 100),
+                       self._stats(self._col([r for r in self.trades
+                                              if r["spread"] <= cap * 100.0])))
 
         srt = sorted(r["ret"] for r in self.trades)
-        self.Debug("#  best/worst %+.1f%% / %+.1f%%  breakeven pf %.2f"
+        self.Debug("#  best/worst %+.1f%%/%+.1f%% breakeven pf %.2f"
                    % (srt[-1], srt[0], (100.0 - real["wr"]) / real["wr"]))
 
         self._finish()
 
+    def _fwd(self, b, i, d, k):
+        """Underlying return k bars past bar i, signed by the signal
+        direction, in bp. None if the window leaves the session."""
+        px, dy, n = b.px5, b.day5, len(b.px5)
+        j = i + k
+        if j >= n or dy[j] != dy[i] or px[i] <= 0:
+            return None
+        return d * (px[j] / px[i] - 1.0) * 10000.0
+
+    def _bucket(self, label, v):
+        if v:
+            self.Debug("#    %-12s n=%-4d edge=%+6.2f hit=%.1f%%"
+                       % (label, len(v), sum(v) / len(v),
+                          sum(1 for x in v if x > 0) / len(v) * 100.0))
+
     def _edge(self):
-        """
-        Does the UNDERLYING move the signal's way? No spread, theta
-        or expiry -- just SPY and QQQ after a signal versus any bar. A
-        drifting market makes calls look right alone, so the rule must
-        beat that drift over the same horizon and mix.
-        """
+        """Does the UNDERLYING move the signal's way? No spread or
+        theta -- SPY and QQQ after a signal versus any bar, net of
+        drift over the same horizon and call/put mix."""
         self.Debug("")
         self.Debug("=" * 70)
-        self.Debug("SIGNAL EDGE -- the underlying alone (bp, signal direction)")
+        self.Debug("SIGNAL EDGE -- the underlying alone (bp, signed)")
         self.Debug("#  1bp of underlying ~ 1% of premium; the spread")
-        self.Debug("#  costs ~1.1%, so under ~1.2bp it cannot pay.")
+        self.Debug("#  costs ~1.2%, so under ~1.2bp it cannot pay.")
         edges = []
-        for k in (3, 6, 12, 24, 36):
+        for k in (3, 6, 12, EDGE_K, 36):
             sig, mkt, mix = [], [], 0
             for b in self.books.values():
                 px, dy, n = b.px5, b.day5, len(b.px5)
                 for i, d in b.sigs:
-                    j = i + k
-                    if j < n and dy[j] == dy[i] and px[i] > 0:
-                        sig.append(d * (px[j] / px[i] - 1.0) * 10000.0)
+                    e = self._fwd(b, i, d, k)
+                    if e is not None:
+                        sig.append(e)
                         mix += d
                 for i in range(n - k):
                     if dy[i + k] == dy[i] and px[i] > 0:
@@ -811,13 +765,63 @@ class LiveRuleOnRealQuotes(QCAlgorithm):
                        % (k, len(sig), s, base, s - base, hit))
         # The verdict follows the numbers, not the other way round.
         if edges and min(edges) > 0.0:
-            self.Debug("#  edge > 0 on every horizon: the rule informs")
+            self.Debug("#  edge > 0 on every horizon: it informs")
             self.Debug("#  with the sign it is written with.")
         elif edges and max(edges) < 0.0:
-            self.Debug("#  edge < 0 on every horizon is not noise -- the")
-            self.Debug("#  rule informs with the sign reversed.")
+            self.Debug("#  edge < 0 on every horizon: the rule informs")
+            self.Debug("#  with the sign reversed.")
         else:
             self.Debug("#  edge changes sign across horizons: nothing.")
+        self._by_period()
+        self._by_regime()
+
+    def _by_period(self):
+        """WHEN the sign changed: one average over three years hides
+        a reversal, blocks cannot. Gross of ~0.1bp drift."""
+        self.Debug("#  BY PERIOD -- %d-day blocks at %d bars"
+                   % (PERIOD_DAYS, EDGE_K))
+        blocks = {}
+        for b in self.books.values():
+            for i, d in b.sigs:
+                e = self._fwd(b, i, d, EDGE_K)
+                if e is not None:
+                    blocks.setdefault(b.day5[i] // PERIOD_DAYS, []).append(e)
+        for k in sorted(blocks):
+            self._bucket(str(date.fromordinal(k * PERIOD_DAYS)), blocks[k])
+
+    def _regime(self, b, k, m):
+        """At each signal, the mean edge of the previous m signals
+        whose k-bar window had CLOSED by that bar. No bar AFTER the
+        signal is read -- its own close is known -- so it runs live."""
+        hist, cur, out = [], 0, []
+        for i, _d in b.sigs:
+            while cur < len(b.sigs) and b.sigs[cur][0] + k <= i:
+                j, dj = b.sigs[cur]
+                cur += 1
+                e = self._fwd(b, j, dj, k)
+                if e is not None:
+                    hist.append(e)
+            out.append(sum(hist[-m:]) / float(m) if len(hist) >= m else None)
+        return out
+
+    def _by_regime(self):
+        """Was the flip visible BEFORE it was traded? If the buckets
+        do not separate, no detector built from the rule's own
+        history can save it."""
+        self.Debug("#  REGIME PROBE -- split by the rule's trailing")
+        self.Debug("#  %d-signal record, read backward only." % REG_N)
+        on, off = [], []
+        for b in self.books.values():
+            reg = self._regime(b, EDGE_K, REG_N)
+            for t, (i, d) in enumerate(b.sigs):
+                e = self._fwd(b, i, d, EDGE_K)
+                if reg[t] is None or e is None:
+                    continue
+                (on if reg[t] > 0 else off).append(e)
+        self._bucket("was working", on)
+        self._bucket("was failing", off)
+        self.Debug("#  IN-SAMPLE: a split is a hypothesis, not a")
+        self.Debug("#  filter, until untouched years agree.")
 
     def _finish(self):
         """Reads price paths, not self.trades: a book-keeping fault

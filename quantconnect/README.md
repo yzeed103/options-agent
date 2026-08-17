@@ -376,6 +376,75 @@ Three things follow.
   rate the backtest wins. The missing piece is a regime detector
   validated on a period used for neither of the two runs above.
 
+## v7 — asking whether the flip was visible in advance
+
+v6 established *that* the rule reverses. Averaging the two eras
+together would only produce a number near zero that describes neither,
+so v7 runs **2023-05..2026-05 in one pass** and adds three probes that
+read prices and never place an order. None of them can be flattered by
+an exit knob.
+
+### BY PERIOD
+
+Signals bucketed into 182-day blocks, edge at 24 bars. A single
+three-year average hides a reversal; blocks cannot. This answers *when*
+the sign changed and whether it changed **once** — a clean step is a
+regime; a sign that flickers block to block is a rule with no stable
+direction at all, and that reading is fatal in a way one flip is not.
+
+### REGIME PROBE
+
+The question that decides whether any of this is tradeable: **was the
+flip visible before it was traded?**
+
+At each signal, take the mean edge of the previous 20 signals *whose
+24-bar window had already closed by that bar*, and split the signals
+into two buckets by the sign of that number. It is the rule's own
+recent record, and nothing else — no new indicator to fit.
+
+The no-lookahead boundary is exactly `j + k <= i`, and it is
+unit-tested three ways: the output matches a brute-force
+recomputation; multiplying every bar strictly after a signal leaves
+that signal's regime value unchanged; and a window closing *at* the
+signal bar counts while one closing a bar later does not. The signal
+bar's own close is read, which is legitimate — the entry rule reads it
+too.
+
+If the two buckets do not separate, then no detector built from the
+rule's own history can save it, and the file is closed. If they do
+separate, that is a **hypothesis, not a filter** — it was measured on
+the same years it was found in. The bar for trading it is a third
+period neither run has touched.
+
+### TRADES THAT GOT A TIGHT QUOTE
+
+Realised return of trades bucketed by entry spread. Deliberately *not*
+labelled as a tighter `MAX_SPREAD_PCT`: lowering the cap makes `_enter`
+buy a **further strike**, it does not skip the trade, so this is not a
+re-simulation of that change. It answers the narrower question it can
+answer honestly — were the tightly-quoted trades the better ones? With
+1.33%/trade going to the spread against a +2.47% mid-price edge, that
+is worth knowing before touching execution.
+
+### Changes to the rule and the report
+
+- **The +10% scale is off** (`SCALE_AT = None`). It is the only exit
+  knob that costs money in *both* eras' sweeps — +0.87%/trade in
+  2023-25 — and switching it off matched the best-by-worst-half
+  combination on its own, which is what a real effect looks like next
+  to fitted ones.
+- **The 972-combination full cross is gone.** Each era named a
+  different winner, which is what fitting noise looks like; over a run
+  that *contains* the reversal, a "best" combination is an average of
+  two opposite regimes and means nothing. One-knob-at-a-time survives,
+  and its `h1`/`h2` columns now split roughly on the flip itself.
+- **`tp` and `trail` are gone from the sweep.** Profit targets and
+  trailing stops hurt in both eras. Settled; `replay` still supports
+  them for the baseline.
+- `_stats` absorbed `_score`; `_edge`, `_by_period` and `_by_regime`
+  share `_fwd`, so there is one definition of "forward return in the
+  signal direction" rather than three.
+
 ## Bugs fixed since v1
 
 1. **Session boundary.** The first 5m bar of each day compared
