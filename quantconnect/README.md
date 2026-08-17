@@ -12,6 +12,25 @@ Two constraints on that file, both learned the hard way:
   characters"). This is why the long-form notes live here instead of in
   the module docstring. If the file grows past the limit again, cut
   comments, never code.
+- **No LEAN name at module scope except `QCAlgorithm`.** Anything
+  evaluated at import time -- a base class, a module-level constant
+  built from a LEAN type -- runs before the algorithm exists. If that
+  name is not exported by the running LEAN build, the entire module
+  fails to import and the cloud reports:
+
+  > Unable to import python module ./cache/algorithm/project/main.pyc.
+  > Please ensure that one class inherits from QCAlgorithm.
+
+  That message is misleading. The class does inherit from `QCAlgorithm`;
+  the module simply never finished importing, so the loader found no
+  classes at all. It names no line and no symbol, so the only way to
+  find the cause is to check every name resolved at import time.
+
+  This bit once already: `class ZeroFeeInitializer(
+  BrokerageModelSecurityInitializer)` at module scope. It is now built
+  inside `_zero_commission()` at runtime, where a missing type degrades
+  to a fallback instead of killing the run. Keep it that way -- every
+  other LEAN name in the file is referenced inside a method.
 
 ## Why run it on QuantConnect at all
 
