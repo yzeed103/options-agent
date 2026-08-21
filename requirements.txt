@@ -1,4 +1,5 @@
 flask
 anthropic
 yfinance
+pandas
 gunicorn

@@ -21,6 +21,11 @@ except ImportError:
     install("yfinance"); import yfinance as yf
 
 try:
+    import pandas as pd
+except ImportError:
+    install("pandas"); import pandas as pd
+
+try:
     import anthropic
 except ImportError:
     install("anthropic"); import anthropic
@@ -32,8 +37,33 @@ except ImportError:
 
 app = Flask(__name__)
 
-DATA_FILE  = "contracts.json"
-ALERT_FILE = "alerts_log.txt"
+DATA_FILE     = "contracts.json"
+ALERT_FILE    = "alerts_log.txt"
+SETTINGS_FILE = "settings.json"
+
+# ═══════════════════════════════════════════════════════════
+# إعدادات مؤشر ADX (قابلة للتعديل من صفحة السوق أو /api/settings)
+# ═══════════════════════════════════════════════════════════
+DEFAULT_SETTINGS = {
+    # طول فترة المؤشر (الافتراضي عند Wilder = 14)
+    "adx_period": 14,
+    # عدد الشموع المستخدمة في الحساب
+    "adx_lookback_days": 180,
+    # الوزن: يضرب قيمة ADX. أكبر من 1 = تثقيل المؤشر
+    # فيخضّر أبكر مع التحركات الاتجاهية
+    "adx_weight": 1.0,
+    # عتبة "اتجاه قوي" (أخضر) بعد تطبيق الوزن
+    "adx_strong": 25.0,
+    # عتبة "اتجاه قوي جداً" (أخضر فاتح)
+    "adx_very_strong": 40.0,
+    # عتبة "بداية اتجاه" (أصفر)، تحتها = سوق عرضي (رمادي)
+    "adx_weak": 20.0,
+    # أقل فرق مطلوب بين +DI و -DI لاعتبار الحركة اتجاهية فعلاً
+    "adx_min_di_gap": 2.0,
+    # false = أخضر لأي اتجاه قوي (صاعد أو هابط)
+    # true  = أخضر للصاعد القوي وأحمر للهابط القوي
+    "adx_color_by_direction": False,
+}
 
 # ═══════════════════════════════════════════════════════════
 # إدارة البيانات
@@ -47,6 +77,41 @@ def load_contracts():
 def save_contracts(contracts):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(contracts, f, ensure_ascii=False, indent=2)
+
+def load_settings():
+    settings = dict(DEFAULT_SETTINGS)
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            settings.update({k: v for k, v in saved.items() if k in DEFAULT_SETTINGS})
+        except Exception:
+            pass
+    return settings
+
+def save_settings(new_values):
+    settings = load_settings()
+    for key, val in (new_values or {}).items():
+        if key not in DEFAULT_SETTINGS:
+            continue
+        default = DEFAULT_SETTINGS[key]
+        try:
+            if isinstance(default, bool):
+                settings[key] = val if isinstance(val, bool) else str(val).lower() in ("1", "true", "yes", "on")
+            elif isinstance(default, int):
+                settings[key] = int(float(val))
+            elif isinstance(default, float):
+                settings[key] = float(val)
+            else:
+                settings[key] = val
+        except (TypeError, ValueError):
+            continue
+    settings["adx_period"]        = max(2,   min(100, settings["adx_period"]))
+    settings["adx_lookback_days"] = max(30,  min(730, settings["adx_lookback_days"]))
+    settings["adx_weight"]        = max(0.1, min(5.0, settings["adx_weight"]))
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(settings, f, ensure_ascii=False, indent=2)
+    return settings
 
 # ═══════════════════════════════════════════════════════════
 # Yahoo Finance
@@ -78,6 +143,115 @@ def get_options_chain(symbol, expiry=None):
     except Exception as e:
         return {"error": str(e)}
 
+# ═══════════════════════════════════════════════════════════
+# مؤشر ADX + DI (طريقة Wilder)
+# ═══════════════════════════════════════════════════════════
+def _wilder(series, period):
+    """تنعيم Wilder: مكافئ لـ EMA بمعامل alpha = 1/period."""
+    return series.ewm(alpha=1.0 / period, adjust=False).mean()
+
+def compute_adx(hist, period=14):
+    """يحسب ADX و +DI و -DI من شموع OHLC. يرجّع None لو البيانات ناقصة."""
+    if hist is None or len(hist) < period * 2 + 1:
+        return None
+
+    high, low, close = hist["High"], hist["Low"], hist["Close"]
+    prev_close, prev_high, prev_low = close.shift(1), high.shift(1), low.shift(1)
+
+    # المدى الحقيقي
+    tr = pd.concat([high - low,
+                    (high - prev_close).abs(),
+                    (low  - prev_close).abs()], axis=1).max(axis=1)
+
+    # الحركة الاتجاهية
+    up_move   = high - prev_high
+    down_move = prev_low - low
+    plus_dm   = ((up_move > down_move) & (up_move > 0)).astype(float) * up_move.clip(lower=0)
+    minus_dm  = ((down_move > up_move) & (down_move > 0)).astype(float) * down_move.clip(lower=0)
+
+    atr           = _wilder(tr, period)
+    safe_atr      = atr.replace(0, float("nan"))
+    plus_di       = 100 * _wilder(plus_dm, period) / safe_atr
+    minus_di      = 100 * _wilder(minus_dm, period) / safe_atr
+    di_sum        = (plus_di + minus_di).replace(0, float("nan"))
+    dx            = 100 * (plus_di - minus_di).abs() / di_sum
+    adx           = _wilder(dx.fillna(0), period)
+
+    last_adx, last_plus, last_minus = adx.iloc[-1], plus_di.iloc[-1], minus_di.iloc[-1]
+    if any(v != v for v in (last_adx, last_plus, last_minus)):   # فحص NaN
+        return None
+
+    prev_adx = adx.iloc[-2] if len(adx) > 1 else last_adx
+    return {
+        "adx":      round(float(last_adx), 2),
+        "plus_di":  round(float(last_plus), 2),
+        "minus_di": round(float(last_minus), 2),
+        "prev_adx": round(float(prev_adx), 2),
+        "rising":   bool(last_adx > prev_adx),
+        "period":   period,
+    }
+
+def classify_adx(raw, settings=None):
+    """يطبّق الوزن على ADX ويحدد الحالة واللون.
+
+    رفع adx_weight فوق 1 يثقّل المؤشر: القيمة الموزونة توصل عتبة
+    "اتجاه قوي" أبكر، فيصير أخضر مع التحركات الاتجاهية القوية.
+    """
+    settings = settings or load_settings()
+    weight    = float(settings["adx_weight"])
+    weighted  = min(100.0, raw["adx"] * weight)
+    di_gap    = raw["plus_di"] - raw["minus_di"]
+    bullish   = di_gap > 0
+    directional = abs(di_gap) >= float(settings["adx_min_di_gap"])
+
+    if weighted >= float(settings["adx_very_strong"]) and directional:
+        state, label, color = "very_strong", "اتجاه قوي جداً", "green"
+    elif weighted >= float(settings["adx_strong"]) and directional:
+        state, label, color = "strong", "اتجاه قوي", "green"
+    elif weighted >= float(settings["adx_weak"]):
+        state, label, color = "building", "بداية اتجاه", "yellow"
+    else:
+        state, label, color = "range", "سوق عرضي", "gray"
+
+    # أخضر للصاعد وأحمر للهابط لو المستخدم فعّل التلوين حسب الاتجاه
+    if color == "green" and settings.get("adx_color_by_direction") and not bullish:
+        color = "red"
+
+    direction = "صاعد" if bullish else "هابط"
+    return {
+        "adx":          raw["adx"],
+        "adx_weighted": round(weighted, 2),
+        "weight":       weight,
+        "plus_di":      raw["plus_di"],
+        "minus_di":     raw["minus_di"],
+        "di_gap":       round(di_gap, 2),
+        "period":       raw["period"],
+        "rising":       raw["rising"],
+        "state":        state,
+        "label":        label,
+        "color":        color,
+        "direction":    direction if directional else "بدون اتجاه واضح",
+        "is_strong":    state in ("strong", "very_strong"),
+        "summary":      f"{label} {direction}" if directional and state != "range" else label,
+        "thresholds": {
+            "weak":        float(settings["adx_weak"]),
+            "strong":      float(settings["adx_strong"]),
+            "very_strong": float(settings["adx_very_strong"]),
+        },
+    }
+
+def get_adx(symbol, settings=None):
+    """يجلب الشموع من Yahoo ويرجّع قراءة ADX جاهزة للعرض."""
+    settings = settings or load_settings()
+    try:
+        hist = yf.Ticker(symbol).history(period=f"{int(settings['adx_lookback_days'])}d")
+        raw  = compute_adx(hist, int(settings["adx_period"]))
+        if not raw:
+            return {"error": "بيانات غير كافية لحساب ADX"}
+        return classify_adx(raw, settings)
+    except Exception as e:
+        return {"error": str(e)}
+
 def get_market_summary(symbol):
     try:
         ticker = yf.Ticker(symbol)
@@ -96,6 +270,7 @@ def get_market_summary(symbol):
             "pe_ratio":   info.get("trailingPE"),
             "beta":       info.get("beta"),
             "sector":     info.get("sector"),
+            "adx":        get_adx(symbol),
         }
     except Exception as e:
         return {"error": str(e)}
@@ -198,6 +373,41 @@ def api_price(symbol):
 @app.route("/api/market/<symbol>")
 def api_market(symbol):
     return jsonify(get_market_summary(symbol.upper()))
+
+@app.route("/api/adx/<symbol>")
+def api_adx(symbol):
+    """قراءة ADX. يقبل تجاوز مؤقت للإعدادات عبر الرابط:
+    /api/adx/AAPL?adx_weight=1.4&adx_strong=22"""
+    settings = load_settings()
+    for key in DEFAULT_SETTINGS:
+        if key in request.args:
+            settings = {**settings, **{key: request.args[key]}}
+    # تطبيع القيم القادمة من الرابط بنفس قواعد الحفظ
+    normalized = dict(DEFAULT_SETTINGS)
+    for key, val in settings.items():
+        default = DEFAULT_SETTINGS[key]
+        try:
+            if isinstance(default, bool):
+                normalized[key] = val if isinstance(val, bool) else str(val).lower() in ("1", "true", "yes", "on")
+            elif isinstance(default, int):
+                normalized[key] = int(float(val))
+            else:
+                normalized[key] = float(val)
+        except (TypeError, ValueError):
+            normalized[key] = default
+    return jsonify(get_adx(symbol.upper(), normalized))
+
+@app.route("/api/settings", methods=["GET"])
+def api_get_settings():
+    return jsonify(load_settings())
+
+@app.route("/api/settings", methods=["POST"])
+def api_save_settings():
+    return jsonify(save_settings(request.json or {}))
+
+@app.route("/api/settings/reset", methods=["POST"])
+def api_reset_settings():
+    return jsonify(save_settings(DEFAULT_SETTINGS))
 
 @app.route("/api/options/<symbol>")
 def api_options(symbol):
@@ -537,6 +747,47 @@ HTML = """<!DOCTYPE html>
   .market-item { font-size: 13px; }
   .market-item span { color: var(--muted); display: block; font-size: 11px; }
 
+  /* ADX indicator */
+  .adx-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-right: 4px solid var(--muted);
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 14px;
+  }
+  .adx-card.adx-green  { border-right-color: var(--green);  background: rgba(16,185,129,0.07); }
+  .adx-card.adx-red    { border-right-color: var(--red);    background: rgba(239,68,68,0.07); }
+  .adx-card.adx-yellow { border-right-color: var(--yellow); background: rgba(245,158,11,0.06); }
+  .adx-card.adx-gray   { border-right-color: var(--muted); }
+  .adx-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .adx-value { font-size: 28px; font-weight: 700; }
+  .adx-green  .adx-value { color: var(--green); }
+  .adx-red    .adx-value { color: var(--red); }
+  .adx-yellow .adx-value { color: var(--yellow); }
+  .adx-gray   .adx-value { color: var(--muted); }
+  .adx-label { font-size: 13px; font-weight: 600; }
+  .adx-raw { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .adx-bar {
+    position: relative;
+    height: 8px;
+    background: var(--bg);
+    border-radius: 6px;
+    margin: 14px 0 6px;
+    overflow: hidden;
+  }
+  .adx-bar-fill { height: 100%; border-radius: 6px; transition: width .3s ease; }
+  .adx-green  .adx-bar-fill { background: var(--green); }
+  .adx-red    .adx-bar-fill { background: var(--red); }
+  .adx-yellow .adx-bar-fill { background: var(--yellow); }
+  .adx-gray   .adx-bar-fill { background: var(--muted); }
+  .adx-tick {
+    position: absolute; top: -3px; width: 2px; height: 14px;
+    background: var(--border);
+  }
+  .adx-di { display: flex; gap: 18px; font-size: 12px; margin-top: 10px; flex-wrap: wrap; }
+  .adx-di b { font-weight: 600; }
+
   /* Options table */
   .options-tabs {
     display: flex; gap: 8px; margin-bottom: 14px;
@@ -716,6 +967,52 @@ HTML = """<!DOCTYPE html>
       </div>
       <div id="marketResult"></div>
     </div>
+
+    <div class="panel">
+      <div class="panel-title">⚙️ إعدادات مؤشر ADX</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>الفترة (Period)</label>
+          <input id="setPeriod" type="number" min="2" max="100" step="1" />
+        </div>
+        <div class="form-group">
+          <label>وزن المؤشر (تثقيل)</label>
+          <input id="setWeight" type="number" min="0.1" max="5" step="0.1" />
+        </div>
+        <div class="form-group">
+          <label>عتبة الاتجاه القوي (أخضر)</label>
+          <input id="setStrong" type="number" min="1" max="100" step="1" />
+        </div>
+        <div class="form-group">
+          <label>عتبة الاتجاه القوي جداً</label>
+          <input id="setVeryStrong" type="number" min="1" max="100" step="1" />
+        </div>
+        <div class="form-group">
+          <label>عتبة بداية الاتجاه (أصفر)</label>
+          <input id="setWeak" type="number" min="1" max="100" step="1" />
+        </div>
+        <div class="form-group">
+          <label>أقل فرق بين ‎+DI و ‎-DI</label>
+          <input id="setGap" type="number" min="0" max="50" step="0.5" />
+        </div>
+        <div class="form-group">
+          <label>التلوين</label>
+          <select id="setColorMode">
+            <option value="false">أخضر لأي اتجاه قوي</option>
+            <option value="true">أخضر للصاعد / أحمر للهابط</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="saveAdxSettings()">حفظ الإعدادات</button>
+        <button class="btn" style="background:var(--surface2);color:var(--text)" onclick="resetAdxSettings()">استرجاع الافتراضي</button>
+        <span id="settingsMsg" style="align-self:center;font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:12px;line-height:1.7">
+        الوزن يضرب قيمة ADX قبل مقارنتها بالعتبات. وزن أكبر من 1 يثقّل المؤشر
+        فيخضّر أبكر مع التحركات الاتجاهية القوية، ووزن أقل من 1 يشدّده.
+      </div>
+    </div>
   </div>
 
   <!-- ───── الخيارات ───── -->
@@ -874,7 +1171,99 @@ async function fetchMarket() {
         <div class="market-item"><span>Beta</span>${data.beta ? data.beta.toFixed(2) : 'N/A'}</div>
         <div class="market-item"><span>Market Cap</span>${data.market_cap ? '$' + (data.market_cap/1e9).toFixed(1) + 'B' : 'N/A'}</div>
       </div>
+    </div>
+    ${renderAdx(data.adx)}`;
+}
+
+// ── مؤشر ADX ──
+function renderAdx(adx) {
+  if (!adx) return '';
+  if (adx.error) {
+    return `<div class="adx-card adx-gray">
+      <div class="adx-label">مؤشر ADX</div>
+      <div class="adx-raw">❌ ${adx.error}</div>
     </div>`;
+  }
+  const arrow  = adx.direction === 'صاعد' ? '▲' : (adx.direction === 'هابط' ? '▼' : '◆');
+  const trend  = adx.rising ? 'يتصاعد' : 'يتراجع';
+  const fill   = Math.min(100, adx.adx_weighted);
+  const ticks  = [adx.thresholds.weak, adx.thresholds.strong, adx.thresholds.very_strong]
+    .map(t => `<div class="adx-tick" style="right:${Math.min(100, t)}%"></div>`).join('');
+  return `
+    <div class="adx-card adx-${adx.color}">
+      <div class="adx-head">
+        <div>
+          <div class="adx-value">${adx.adx_weighted.toFixed(1)}</div>
+          <div class="adx-raw">ADX(${adx.period}) الخام ${adx.adx.toFixed(1)} × وزن ${adx.weight} — ${trend}</div>
+        </div>
+        <div style="text-align:left">
+          <div class="adx-label">${arrow} ${adx.label}</div>
+          <div class="adx-raw">${adx.direction}</div>
+        </div>
+      </div>
+      <div class="adx-bar">
+        <div class="adx-bar-fill" style="width:${fill}%"></div>
+        ${ticks}
+      </div>
+      <div class="adx-di">
+        <div><b style="color:var(--green)">+DI</b> ${adx.plus_di.toFixed(1)}</div>
+        <div><b style="color:var(--red)">−DI</b> ${adx.minus_di.toFixed(1)}</div>
+        <div style="color:var(--muted)">الفرق ${Math.abs(adx.di_gap).toFixed(1)}</div>
+        <div style="color:var(--muted)">عتبة الأخضر ${adx.thresholds.strong}</div>
+      </div>
+    </div>`;
+}
+
+// ── إعدادات ADX ──
+const ADX_FIELDS = {
+  setPeriod:     'adx_period',
+  setWeight:     'adx_weight',
+  setStrong:     'adx_strong',
+  setVeryStrong: 'adx_very_strong',
+  setWeak:       'adx_weak',
+  setGap:        'adx_min_di_gap',
+};
+
+async function loadAdxSettings() {
+  try {
+    const s = await (await fetch('/api/settings')).json();
+    for (const [id, key] of Object.entries(ADX_FIELDS)) {
+      document.getElementById(id).value = s[key];
+    }
+    document.getElementById('setColorMode').value = s.adx_color_by_direction ? 'true' : 'false';
+  } catch (e) { /* الصفحة تشتغل حتى لو فشل التحميل */ }
+}
+
+async function saveAdxSettings() {
+  const payload = {};
+  for (const [id, key] of Object.entries(ADX_FIELDS)) {
+    payload[key] = document.getElementById(id).value;
+  }
+  payload.adx_color_by_direction = document.getElementById('setColorMode').value === 'true';
+  const res = await fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const saved = await res.json();
+  for (const [id, key] of Object.entries(ADX_FIELDS)) {
+    document.getElementById(id).value = saved[key];
+  }
+  showSettingsMsg('✅ تم الحفظ');
+  if (document.getElementById('marketSymbol').value.trim()) fetchMarket();
+}
+
+async function resetAdxSettings() {
+  await fetch('/api/settings/reset', { method: 'POST' });
+  await loadAdxSettings();
+  showSettingsMsg('↺ رجعت الافتراضية');
+  if (document.getElementById('marketSymbol').value.trim()) fetchMarket();
+}
+
+function showSettingsMsg(text) {
+  const el = document.getElementById('settingsMsg');
+  el.textContent = text;
+  setTimeout(() => { el.textContent = ''; }, 2500);
 }
 
 // ── الخيارات ──
@@ -958,6 +1347,7 @@ function scrollChat() {
 
 // تحميل أولي
 loadPortfolio();
+loadAdxSettings();
 </script>
 </body>
 </html>"""
