@@ -12,9 +12,8 @@
 //    ⑬ إبراز بصري: خط أثقل وخلفية عند الترند القوي
 //    ⑭ إصلاح: العتبة التكيّفية كانت na قبل اكتمال نافذة القياس فلا يخضّر أبداً
 // ════════════════════════════════════════════════════════════════════
-indicator("VWAP + MA Ribbon + ADX v3", shorttitle = "VWAP·MA·ADX3",
-     overlay = false, format = format.price, precision = 2,
-     timeframe = "", timeframe_gaps = true)
+indicator("VWAP + MA Ribbon + ADX v3", shorttitle = "VWAP MA ADX3",
+     overlay = false, format = format.price, precision = 2)
 
 G_VWAP = "① VWAP — على الشموع"
 G_BAND = "② نطاقات VWAP"
@@ -347,7 +346,7 @@ if barstate.islast and degenCnt > 0
 
 // ⑭ تنبيه أن العتبة ما زالت الثابتة لأن نافذة القياس لم تكتمل
 if barstate.islast and warmingPct
-    label.new(bar_index, nz(sig, 0), "ℹ نافذة القياس (" + str.tostring(pctLen) + ") لم تكتمل — العتبة الثابتة مستخدمة مؤقتاً",
+    label.new(bar_index, nz(sig, 0), "نافذة القياس (" + str.tostring(pctLen) + ") لم تكتمل — العتبة الثابتة مستخدمة مؤقتاً",
          style = label.style_label_left, color = color.new(color.blue, 25),
          textcolor = color.white, size = size.small)
 
