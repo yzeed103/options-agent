@@ -1,0 +1,393 @@
+//@version=6
+// ════════════════════════════════════════════════════════════════════
+//  VWAP + شريط المتوسطات + ADX v3 — مؤشر واحد مدمج
+//
+//  الدمج: قاعدة السكربت overlay = false ليبقى ADX في لوحته السفلية،
+//  و VWAP ونطاقاته وشريط المتوسطات تُرسم على الشموع عبر force_overlay.
+//
+//  إصلاحات ADX ①..⑨ من v2، والإضافات ⑩..⑭ من v3:
+//    ⑩ وزن تثقيل ADX (يُطبَّق كقاسم على العتبة، لا كضارب على ADX)
+//    ⑪ إبقاء الأخضر عند القوة القصوى ولو تسطّح الميل
+//    ⑫ هيستيريسيس يمنع وميض اللون حول العتبة
+//    ⑬ إبراز بصري: خط أثقل وخلفية عند الترند القوي
+//    ⑭ إصلاح: العتبة التكيّفية كانت na قبل اكتمال نافذة القياس فلا يخضّر أبداً
+// ════════════════════════════════════════════════════════════════════
+indicator("VWAP + MA Ribbon + ADX v3", shorttitle = "VWAP·MA·ADX3",
+     overlay = false, format = format.price, precision = 2,
+     timeframe = "", timeframe_gaps = true)
+
+G_VWAP = "① VWAP — على الشموع"
+G_BAND = "② نطاقات VWAP"
+G_MA   = "③ شريط المتوسطات"
+G_ADX  = "④ ADX — الأساس"
+G_FIX  = "⑤ ADX — الإصلاحات"
+G_WGT  = "⑥ ADX — التثقيل والتخضير"
+G_DIAG = "⑦ التشخيص"
+
+// ══════════════════════════════ VWAP ══════════════════════════════
+showVWAP   = input.bool(true,  "تفعيل VWAP", group = G_VWAP)
+hideonDWM  = input.bool(false, "إخفاء على اليومي فأعلى", group = G_VWAP, display = display.none)
+var anchor = input.string("Session", "فترة التثبيت",
+     options = ["Session", "Week", "Month", "Quarter", "Year", "Decade", "Century", "Earnings", "Dividends", "Splits"],
+     group = G_VWAP)
+src        = input.source(hlc3, "المصدر", group = G_VWAP, display = display.none)
+vwapOffset = input.int(0, "الإزاحة", group = G_VWAP, display = display.none)
+vwapColor  = input.color(#2962FF, "لون VWAP", group = G_VWAP, display = display.none)
+
+CALC_MODE_TOOLTIP = "وحدة حساب مسافة النطاقات. عند اختيار النسبة المئوية، المضاعف 1 يعني 1%."
+calcModeInput = input.string("Standard Deviation", "طريقة حساب النطاقات",
+     options = ["Standard Deviation", "Percentage"], group = G_BAND, tooltip = CALC_MODE_TOOLTIP, display = display.none)
+showBand_1 = input.bool(true,  "", group = G_BAND, inline = "band_1", display = display.none)
+bandMult_1 = input.float(1.0, "مضاعف النطاق #1", group = G_BAND, inline = "band_1", step = 0.5, minval = 0, display = display.none, active = showBand_1)
+showBand_2 = input.bool(false, "", group = G_BAND, inline = "band_2", display = display.none)
+bandMult_2 = input.float(2.0, "مضاعف النطاق #2", group = G_BAND, inline = "band_2", step = 0.5, minval = 0, display = display.none, active = showBand_2)
+showBand_3 = input.bool(false, "", group = G_BAND, inline = "band_3", display = display.none)
+bandMult_3 = input.float(3.0, "مضاعف النطاق #3", group = G_BAND, inline = "band_3", step = 0.5, minval = 0, display = display.none, active = showBand_3)
+
+cumVolume = ta.cum(volume)
+
+if showVWAP and barstate.islast and cumVolume == 0
+    label.new(bar_index, high, "لا توجد بيانات فوليوم لهذا الرمز — VWAP معطّل",
+         style = label.style_label_down, color = color.new(color.orange, 20),
+         textcolor = color.white, size = size.small, force_overlay = true)
+
+isNewPeriod = switch anchor
+    "Earnings" =>
+        new_earnings_actual = request.earnings(syminfo.tickerid, earnings.actual, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol = true)
+        new_earnings_standardized = request.earnings(syminfo.tickerid, earnings.standardized, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol = true)
+        not na(new_earnings_actual) or not na(new_earnings_standardized)
+    "Dividends" =>
+        new_dividends = request.dividends(syminfo.tickerid, dividends.gross, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol = true)
+        not na(new_dividends)
+    "Splits" =>
+        new_split = request.splits(syminfo.tickerid, splits.denominator, barmerge.gaps_on, barmerge.lookahead_on, ignore_invalid_symbol = true)
+        not na(new_split)
+    "Session"  => timeframe.change("D")
+    "Week"     => timeframe.change("W")
+    "Month"    => timeframe.change("M")
+    "Quarter"  => timeframe.change("3M")
+    "Year"     => timeframe.change("12M")
+    "Decade"   => timeframe.change("12M") and year % 10 == 0
+    "Century"  => timeframe.change("12M") and year % 100 == 0
+    => false
+
+isEsdAnchor = anchor == "Earnings" or anchor == "Dividends" or anchor == "Splits"
+if na(src[1]) and not isEsdAnchor
+    isNewPeriod := true
+
+float vwapValue       = na
+float upperBandValue1 = na
+float lowerBandValue1 = na
+float upperBandValue2 = na
+float lowerBandValue2 = na
+float upperBandValue3 = na
+float lowerBandValue3 = na
+
+if showVWAP and cumVolume > 0 and not (hideonDWM and timeframe.isdwm)
+    [_vwap, _stdevUpper, _] = ta.vwap(src, isNewPeriod, 1)
+    vwapValue := _vwap
+    stdevAbs = _stdevUpper - _vwap
+    bandBasis = calcModeInput == "Standard Deviation" ? stdevAbs : _vwap * 0.01
+    upperBandValue1 := _vwap + bandBasis * bandMult_1
+    lowerBandValue1 := _vwap - bandBasis * bandMult_1
+    upperBandValue2 := _vwap + bandBasis * bandMult_2
+    lowerBandValue2 := _vwap - bandBasis * bandMult_2
+    upperBandValue3 := _vwap + bandBasis * bandMult_3
+    lowerBandValue3 := _vwap - bandBasis * bandMult_3
+
+plot(vwapValue, title = "VWAP", color = vwapColor, offset = vwapOffset, force_overlay = true)
+
+displayBand1 = showBand_1 ? display.all : display.none
+upperBand_1 = plot(upperBandValue1, "Upper Band #1", color.green, offset = vwapOffset, display = displayBand1, editable = showBand_1, force_overlay = true)
+lowerBand_1 = plot(lowerBandValue1, "Lower Band #1", color.green, offset = vwapOffset, display = displayBand1, editable = showBand_1, force_overlay = true)
+fill(upperBand_1, lowerBand_1, title = "Bands Fill #1", color = color.new(color.green, 95), display = displayBand1, editable = showBand_1)
+
+displayBand2 = showBand_2 ? display.all : display.none
+upperBand_2 = plot(upperBandValue2, "Upper Band #2", color.olive, offset = vwapOffset, display = displayBand2, editable = showBand_2, force_overlay = true)
+lowerBand_2 = plot(lowerBandValue2, "Lower Band #2", color.olive, offset = vwapOffset, display = displayBand2, editable = showBand_2, force_overlay = true)
+fill(upperBand_2, lowerBand_2, title = "Bands Fill #2", color = color.new(color.olive, 95), display = displayBand2, editable = showBand_2)
+
+displayBand3 = showBand_3 ? display.all : display.none
+upperBand_3 = plot(upperBandValue3, "Upper Band #3", color.teal, offset = vwapOffset, display = displayBand3, editable = showBand_3, force_overlay = true)
+lowerBand_3 = plot(lowerBandValue3, "Lower Band #3", color.teal, offset = vwapOffset, display = displayBand3, editable = showBand_3, force_overlay = true)
+fill(upperBand_3, lowerBand_3, title = "Bands Fill #3", color = color.new(color.teal, 95), display = displayBand3, editable = showBand_3)
+
+// ══════════════════════════ شريط المتوسطات ══════════════════════════
+// السكربت الأصلي كان overlay = true. هنا القاعدة overlay = false،
+// لذلك كل خط متوسط يحتاج force_overlay = true ليُرسم على الشموع لا في لوحة ADX.
+ma(source, length, MAtype) =>
+    switch MAtype
+        "SMA"        => ta.sma(source,  length)
+        "EMA"        => ta.ema(source,  length)
+        "SMMA (RMA)" => ta.rma(source,  length)
+        "WMA"        => ta.wma(source,  length)
+        "VWMA"       => ta.vwma(source, length)
+        => na
+
+show_ma1   = input(true,         "MA #1", inline = "MA #1", group = G_MA, display = display.none)
+ma1_type   = input.string("SMA", "",      inline = "MA #1", group = G_MA, active = show_ma1, options = ["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA"])
+ma1_source = input(close,        "",      inline = "MA #1", group = G_MA, active = show_ma1, display = display.none)
+ma1_length = input.int(20,       "",      inline = "MA #1", group = G_MA, active = show_ma1, minval  = 1)
+ma1_color  = input(#f6c309,      "",      inline = "MA #1", group = G_MA, active = show_ma1, display = display.none)
+
+show_ma2   = input(true,         "MA #2", inline = "MA #2", group = G_MA, display = display.none)
+ma2_type   = input.string("SMA", "",      inline = "MA #2", group = G_MA, active = show_ma2, options = ["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA"])
+ma2_source = input(close,        "",      inline = "MA #2", group = G_MA, active = show_ma2, display = display.none)
+ma2_length = input.int(50,       "",      inline = "MA #2", group = G_MA, active = show_ma2, minval  = 1)
+ma2_color  = input(#fb9800,      "",      inline = "MA #2", group = G_MA, active = show_ma2, display = display.none)
+
+show_ma3   = input(true,         "MA #3", inline = "MA #3", group = G_MA, display = display.none)
+ma3_type   = input.string("SMA", "",      inline = "MA #3", group = G_MA, active = show_ma3, options = ["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA"])
+ma3_source = input(close,        "",      inline = "MA #3", group = G_MA, active = show_ma3, display = display.none)
+ma3_length = input.int(100,      "",      inline = "MA #3", group = G_MA, active = show_ma3, minval  = 1)
+ma3_color  = input(#fb6500,      "",      inline = "MA #3", group = G_MA, active = show_ma3, display = display.none)
+
+show_ma4   = input(true,         "MA #4", inline = "MA #4", group = G_MA, display = display.none)
+ma4_type   = input.string("SMA", "",      inline = "MA #4", group = G_MA, active = show_ma4, options = ["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA"])
+ma4_source = input(close,        "",      inline = "MA #4", group = G_MA, active = show_ma4, display = display.none)
+ma4_length = input.int(200,      "",      inline = "MA #4", group = G_MA, active = show_ma4, minval  = 1)
+ma4_color  = input(#f60c0c,      "",      inline = "MA #4", group = G_MA, active = show_ma4, display = display.none)
+
+ma1 = show_ma1 ? ma(ma1_source, ma1_length, ma1_type) : na
+ma2 = show_ma2 ? ma(ma2_source, ma2_length, ma2_type) : na
+ma3 = show_ma3 ? ma(ma3_source, ma3_length, ma3_type) : na
+ma4 = show_ma4 ? ma(ma4_source, ma4_length, ma4_type) : na
+
+plot(ma1, "MA #1", ma1_color, display = show_ma1 ? display.all : display.none, force_overlay = true)
+plot(ma2, "MA #2", ma2_color, display = show_ma2 ? display.all : display.none, force_overlay = true)
+plot(ma3, "MA #3", ma3_color, display = show_ma3 ? display.all : display.none, force_overlay = true)
+plot(ma4, "MA #4", ma4_color, display = show_ma4 ? display.all : display.none, force_overlay = true)
+
+// ══════════════════════════════ ADX v3 ══════════════════════════════
+adxlen    = input.int(14, "تنعيم ADX", minval = 1, group = G_ADX,
+     tooltip = "تحذير: RMA(n) تكافئ EMA(2n-1). القيمة 14 تعني تنعيماً فعلياً بطول 27.")
+dilen     = input.int(14, "طول DI", minval = 1, group = G_ADX)
+adxColor  = input.color(#FF6D00, "لون ADX", group = G_ADX, display = display.none)
+showDI    = input.bool(false, "إظهار +DI / -DI", group = G_ADX)
+
+// ③ إصلاح الانقطاع عند حدّ السكين — نطاق ميت متناسب مع ATR
+fixKnife  = input.bool(true, "③ تنعيم حدّ الفصل بين DM+ و DM-", group = G_FIX,
+     tooltip = "بدل القفز الفوري عند up==down، وزن متدرّج داخل نطاق = مضاعف × ATR. القيمة 0 تعيد سلوك Wilder الأصلي.")
+bandK     = input.float(0.10, "  عرض النطاق الميت (× ATR)", minval = 0, maxval = 1, step = 0.05, group = G_FIX, active = fixKnife)
+
+// ④ إدخال سعر الإغلاق في وزن DM
+closeBeta = input.float(0.50, "④ وزن موقع الإغلاق داخل الشمعة", minval = 0, maxval = 1, step = 0.1, group = G_FIX,
+     tooltip = "0 = سلوك Wilder (الإغلاق مُهمَل تماماً). 1 = الإغلاق يحكم بالكامل، فشمعة الشهاب لا تُحتسب زخماً صاعداً.")
+
+// ① بوّابة المقدار — تغلق ثغرة انعدام حساسية DX للحجم
+useDIFloor = input.bool(true, "① اشتراط حدّ أدنى لمقدار DI", group = G_FIX,
+     tooltip = "DX نسبة فقط: (+DI=45,-DI=9) و(+DI=5,-DI=1) يعطيان 66.7 كلاهما. هذه البوّابة ترفض الثانية.")
+diFloor    = input.float(20.0, "  الحدّ الأدنى لـ max(+DI, -DI)", minval = 0, maxval = 100, step = 1, group = G_FIX, active = useDIFloor)
+
+// ⑤ عتبة مقيسة بدل الثابت الموروث 25
+useAdaptive = input.bool(true, "⑤ عتبة تكيّفية مقيسة (بدل 25)", group = G_FIX,
+     tooltip = "يحسب العتبة كمئين من توزيع ADX الفعلي لهذا الرمز/الفريم بدل ثابت 1978.")
+pctLen      = input.int(500, "  نافذة القياس (شمعة)", minval = 50, maxval = 5000, group = G_FIX, active = useAdaptive)
+pctTarget   = input.float(75.0, "  المئين المستهدف", minval = 50, maxval = 99, step = 1, group = G_FIX, active = useAdaptive)
+adxThreshFx = input.float(25.0, "  العتبة الثابتة (وكذلك البديل قبل اكتمال النافذة)", minval = 0, maxval = 100, group = G_FIX)
+
+// ② تعويض جزئي للتأخير عبر قياس الميل
+slopeLen  = input.int(3, "② طول قياس ميل ADX", minval = 1, maxval = 50, group = G_FIX,
+     tooltip = "التأخير البنيوي ~26 شمعة غير قابل للإزالة. الميل يستعيد جزءاً من الاستجابة دون تزييف التنعيم.")
+
+// ⑧ كتم فترة التسخين
+warmMult  = input.float(5.0, "⑧ مضاعف فترة التسخين", minval = 1, maxval = 10, step = 0.5, group = G_FIX,
+     tooltip = "تنعيمان أسّيان متتاليان يحتاجان ~5× مجموع الطولين للتقارب. قبلها لا يُرسم شيء.")
+
+// ─────────────────── ⑩..⑬ التثقيل والتخضير ───────────────────
+// ⑩ الوزن يُطبَّق كقاسم على العتبة وعلى أرضية DI — لا كضارب على ADX.
+//    السبب: مع العتبة التكيّفية، ضرب ADX يضرب العتبة معه لأنها مشتقة من
+//    نفس السلسلة، فالنسبة لا تتغيّر والوزن يصير بلا أثر إطلاقاً.
+//    القسمة على العتبة مكافئة رياضياً لتثقيل ADX في الوضع الثابت، وفعّالة في التكيّفي.
+adxWeight = input.float(1.00, "⑩ وزن تثقيل ADX", minval = 0.50, maxval = 3.00, step = 0.05, group = G_WGT,
+     tooltip = "أكبر من 1 = تثقيل: تنخفض العتبة وأرضية DI فيخضّر المؤشر أبكر مع التحركات الاتجاهية. أقل من 1 = تشديد. جرّب 1.15 إلى 1.40.")
+
+// ⑪ الترند القوي يُسطّح ADX في منتصفه فيسقط شرط الميل ويختفي الأخضر
+//    في أقوى جزء من الحركة. هذا يُبقيه أخضر ما دامت القراءة في أعلى توزيعها.
+useApex  = input.bool(true, "⑪ أخضر عند القوة القصوى ولو تسطّح الميل", group = G_WGT,
+     tooltip = "يعالج أهم سبب لاختفاء الأخضر: ADX مرتفع جداً لكنه مستقر أو يتراجع قليلاً داخل ترند ما زال قوياً.")
+apexRank = input.float(85.0, "  رتبة القوة القصوى (مئين)", minval = 50, maxval = 100, step = 1, group = G_WGT, active = useApex)
+
+// ⑫ بدون تثبيت يتذبذب اللون كلما لامس ADX العتبة ذهاباً وإياباً
+useHyst  = input.bool(true, "⑫ تثبيت اللون (هيستيريسيس)", group = G_WGT,
+     tooltip = "بعد دخول الأخضر لا يخرج إلا بهبوط تحت نسبة من العتبة، بدل الوميض عند كل ملامسة.")
+hystExit = input.float(0.90, "  نسبة الخروج من الأخضر", minval = 0.50, maxval = 1.00, step = 0.01, group = G_WGT, active = useHyst)
+
+// ⑬ إبراز بصري
+boldGreen = input.bool(true, "⑬ خط أثقل وخلفية عند الترند القوي", group = G_WGT)
+
+showTable = input.bool(true, "إظهار لوحة التشخيص", group = G_DIAG)
+
+// ─────────────────────────── الحساب ───────────────────────────
+atrVal = ta.atr(dilen)
+
+// ملاحظة: كل ما تحتاجه الدالة يُمرَّر كوسيط — لا قراءة ولا تعديل لمتغيّرات عامة متغيّرة
+dirmovFixed(len, atrIn) =>
+    up   = ta.change(high)
+    down = -ta.change(low)
+
+    // ③ وزن متدرّج بدل الاختيار الحدّي  (bandK = 0 ⟵ سلوك Wilder الأصلي)
+    diff  = up - down
+    band  = fixKnife ? bandK * atrIn : 0.0
+    wPlus  = band > 0 ? math.min(1.0, math.max(0.0,  diff / band)) : (diff > 0 ? 1.0 : 0.0)
+    wMinus = band > 0 ? math.min(1.0, math.max(0.0, -diff / band)) : (diff < 0 ? 1.0 : 0.0)
+
+    // ④ موقع الإغلاق داخل الشمعة، مع تطبيع يحفظ مقياس DI
+    rng   = high - low
+    cPos  = rng > 0 ? (close - low) / rng : 0.5
+    kNorm = 1.0 - closeBeta / 2.0
+    kPlus  = ((1.0 - closeBeta) + closeBeta * cPos)         / kNorm
+    kMinus = ((1.0 - closeBeta) + closeBeta * (1.0 - cPos)) / kNorm
+
+    plusDM  = na(up) or na(down) ? na : (up   > 0 ? up   * wPlus  * kPlus  : 0.0)
+    minusDM = na(up) or na(down) ? na : (down > 0 ? down * wMinus * kMinus : 0.0)
+
+    truerange = ta.rma(ta.tr, len)
+
+    // ⑥ الشمعة المنحلّة (مدى حقيقي صفري) تُرصد ولا تُبتلع بصمت
+    degenerate = na(truerange) or truerange <= 0
+
+    plus  = fixnan(100.0 * ta.rma(plusDM,  len) / truerange)
+    minus = fixnan(100.0 * ta.rma(minusDM, len) / truerange)
+    [plus, minus, degenerate]
+
+// ══ تجميع ADX في النطاق العام ══
+// Pine يمنع تعديل متغيّر عام داخل دالة (CE10088)، لذا يبقى الحارس ⑦ والعدّاد ⑥ هنا
+[diPlus, diMinus, degenBar] = dirmovFixed(dilen, atrVal)
+
+total = diPlus + diMinus
+
+// ⑦ عند total==0 نُبقي آخر قيمة بدل حقن صفر كاذب يشوّه المتوسط
+var float dxPrev = na
+float dxRaw = na
+if total > 0
+    dxRaw := 100.0 * math.abs(diPlus - diMinus) / total
+    dxPrev := dxRaw
+else
+    dxRaw := dxPrev
+
+// ⑧ كتم ما قبل التقارب — نُقدّم حسابه ليستفيد منه عدّاد ⑥
+warmupBars = math.round((dilen + adxlen) * warmMult)
+isWarm     = bar_index >= warmupBars
+
+// ⑥ عدّاد الشموع المنحلّة — بعد التسخين فقط، وإلا عدّ شموع التسخين الفارغة وأطلق إنذاراً كاذباً
+var int degenCnt = 0
+if isWarm and (degenBar or total <= 0)
+    degenCnt += 1
+
+sigRaw = ta.rma(dxRaw, adxlen)
+sig    = isWarm ? sigRaw : na
+
+// ⑤ العتبة المقيسة + رتبة مئينية للقراءة الحالية
+// تُحسب بلا شرط: sig أصلاً na أثناء التسخين، فالكتم موروث. وضعها داخل ternary يُطلق تحذير ta.*
+adxPctThresh = ta.percentile_nearest_rank(sig, pctLen, pctTarget)
+adxRank      = ta.percentrank(sig, pctLen)
+
+// ⑭ إصلاح: قبل امتلاء نافذة pctLen ترجع ta.percentile_* بـ na، فتصير
+//    العتبة na و levelOK دائماً false — أي لا أخضر إطلاقاً في أول 500 شمعة
+//    (ولا أبداً على رمز/فريم تاريخه أقصر). نرجع للعتبة الثابتة حتى تكتمل النافذة.
+threshBase   = useAdaptive ? nz(adxPctThresh, adxThreshFx) : adxThreshFx
+warmingPct   = useAdaptive and na(adxPctThresh)
+
+// ⑩ التثقيل: قاسم على العتبة وعلى أرضية DI
+thresh     = threshBase / adxWeight
+diFloorEff = diFloor / adxWeight
+
+// ① بوّابة المقدار
+maxDI       = math.max(diPlus, diMinus)
+magnitudeOK = not useDIFloor or maxDI >= diFloorEff
+
+// ② الميل
+adxSlope = ta.change(sig, slopeLen)
+rising   = adxSlope > 0
+
+// الحالة النهائية
+levelOK  = isWarm and not na(thresh) and sig >= thresh
+trendOn  = levelOK and magnitudeOK
+
+// ⑪ القوة القصوى تُغني عن شرط الميل
+atApex   = useApex and not na(adxRank) and adxRank >= apexRank
+qualify  = trendOn and (rising or atApex)
+
+// ⑫ تثبيت اللون: الدخول بالشرط الكامل، والخروج بشرط أرخى
+holdOn = isWarm and not na(thresh) and sig >= thresh * hystExit and magnitudeOK
+var bool greenLatch = false
+if qualify
+    greenLatch := true
+else if not (useHyst and holdOn)
+    greenLatch := false
+
+strongOn = useHyst ? greenLatch : qualify
+
+lineCol = not isWarm ? color.new(color.gray, 60) :
+     strongOn and atApex ? color.new(#00E676, 0) :
+     strongOn ? color.new(color.lime, 0) :
+     trendOn  ? adxColor :
+     levelOK  ? color.new(color.red, 20) :
+     color.new(adxColor, 55)
+
+plot(sig, title = "ADX", color = lineCol, linewidth = 2)
+// ⑬ linewidth في plot() لا يقبل قيمة متسلسلة، فالتثقيل يتم بخط ثانٍ فوق الأول
+plot(boldGreen and strongOn ? sig : na, title = "ADX (ترند قوي)", color = lineCol, linewidth = 4, style = plot.style_linebr)
+bgcolor(boldGreen and strongOn ? color.new(color.green, 90) : na, title = "خلفية الترند القوي")
+
+plot(showDI ? diPlus  : na, title = "+DI", color = color.new(color.green, 30), linewidth = 1)
+plot(showDI ? diMinus : na, title = "-DI", color = color.new(color.red, 30),   linewidth = 1)
+plot(useDIFloor ? diFloorEff : na, title = "أرضية DI (بعد الوزن)", color = color.new(color.fuchsia, 60), style = plot.style_linebr)
+
+plot(thresh, title = "العتبة (بعد الوزن)", color = color.new(color.gray, 30), style = plot.style_stepline)
+plot(useHyst ? thresh * hystExit : na, title = "عتبة الخروج", color = color.new(color.gray, 70), style = plot.style_stepline)
+hline(20, "مرجع 20", color = color.new(color.gray, 80), linestyle = hline.style_dotted)
+
+// ⑥ الإنذار البصري: الأعطال لم تعد صامتة
+if barstate.islast and degenCnt > 0
+    label.new(bar_index, nz(sig, 0), "⚠ " + str.tostring(degenCnt) + " شمعة منحلّة جُسِّرت (TR=0 أو DI=0)",
+         style = label.style_label_left, color = color.new(color.red, 25),
+         textcolor = color.white, size = size.small)
+
+// ⑭ تنبيه أن العتبة ما زالت الثابتة لأن نافذة القياس لم تكتمل
+if barstate.islast and warmingPct
+    label.new(bar_index, nz(sig, 0), "ℹ نافذة القياس (" + str.tostring(pctLen) + ") لم تكتمل — العتبة الثابتة مستخدمة مؤقتاً",
+         style = label.style_label_left, color = color.new(color.blue, 25),
+         textcolor = color.white, size = size.small)
+
+// ⑤ لوحة القياس — لتضبط العتبات على بياناتك بدل التخمين
+if showTable and barstate.islast
+    var table t = table.new(position.top_right, 2, 9, border_width = 1)
+    stateTxt = not isWarm ? "تسخين" :
+         strongOn and atApex ? "ترند قوي — قوة قصوى" :
+         strongOn ? "ترند قوي وصاعد" :
+         trendOn ? "ترند مؤكَّد" :
+         levelOK ? "⚠ فخ ①: مستوى بلا مقدار" : "لا ترند"
+    stateCol = not isWarm ? color.gray :
+         strongOn and atApex ? #00E676 :
+         strongOn ? color.lime :
+         trendOn ? color.orange :
+         levelOK ? color.red : color.new(color.gray, 40)
+    hdrBg = color.new(color.black, 20)
+    rowBg = color.new(color.black, 40)
+    table.cell(t, 0, 0, "ADX",              text_color = color.white, bgcolor = hdrBg, text_size = size.small)
+    table.cell(t, 1, 0, str.tostring(sig, "#.##"), text_color = color.white, bgcolor = hdrBg, text_size = size.small)
+    table.cell(t, 0, 1, "الرتبة المئينية",   text_color = color.white, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 1, 1, str.tostring(adxRank, "#.#") + "%", text_color = atApex ? #00E676 : color.white, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 0, 2, "وزن التثقيل",       text_color = color.white, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 1, 2, "× " + str.tostring(adxWeight, "#.##"), text_color = adxWeight > 1 ? color.lime : adxWeight < 1 ? color.orange : color.white, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 0, 3, "العتبة المستخدمة",  text_color = color.white, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 1, 3, str.tostring(thresh, "#.##") + (warmingPct ? " (ثابتة مؤقتاً)" : useAdaptive ? " (مقيسة)" : " (ثابتة)"), text_color = color.white, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 0, 4, "max(DI) / الأرضية", text_color = color.white, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 1, 4, str.tostring(maxDI, "#.##") + " / " + str.tostring(diFloorEff, "#.#") + (magnitudeOK ? " ✓" : " ✗"), text_color = magnitudeOK ? color.lime : color.red, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 0, 5, "ميل ADX",           text_color = color.white, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 1, 5, str.tostring(adxSlope, "#.##") + (atApex and not rising ? " (متجاوَز ⑪)" : ""), text_color = rising ? color.lime : atApex ? color.orange : color.red, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 0, 6, "سبب الأخضر",        text_color = color.white, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 1, 6, not strongOn ? "—" : rising and atApex ? "ميل + قوة قصوى" : rising ? "ميل موجب" : atApex ? "قوة قصوى ⑪" : "تثبيت ⑫", text_color = color.white, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 0, 7, "التأخير الفعلي",     text_color = color.white, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 1, 7, "~" + str.tostring((dilen - 1) + (adxlen - 1)) + " شمعة", text_color = color.orange, bgcolor = rowBg, text_size = size.small)
+    table.cell(t, 0, 8, "الحالة",            text_color = color.white, bgcolor = hdrBg, text_size = size.small)
+    table.cell(t, 1, 8, stateTxt,            text_color = stateCol,    bgcolor = hdrBg, text_size = size.small)
+
+// ⑨ تنبيهات على الشرط المركّب لا على عبور مستوى وحده
+alertcondition(trendOn and not trendOn[1],   "بدء ترند مؤكَّد", "ADX فوق العتبة المقيسة + مقدار DI كافٍ")
+alertcondition(strongOn and not strongOn[1], "ترند قوي (أخضر)", "ADX فوق العتبة + مقدار كافٍ + ميل موجب أو قوة قصوى")
+alertcondition(not strongOn and strongOn[1], "انطفاء الأخضر",   "سقط الترند القوي تحت شرط التثبيت")
+alertcondition(not trendOn and trendOn[1],   "انتهاء الترند",   "سقط أحد الشرطين: المستوى أو المقدار")
+alertcondition(levelOK and not magnitudeOK,  "⚠ فخ النسبة",     "ADX مرتفع لكن مقدار DI ضعيف — قناة زاحفة لا ترند")
