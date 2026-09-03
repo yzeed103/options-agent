@@ -158,11 +158,11 @@ plot(ma3, "MA #3", ma3_color, display = show_ma3 ? display.all : display.none, f
 plot(ma4, "MA #4", ma4_color, display = show_ma4 ? display.all : display.none, force_overlay = true)
 
 // ══════════════════════════════ ADX v3 ══════════════════════════════
-adxlen    = input.int(2, "تنعيم ADX", minval = 1, group = G_ADX,
+adxlen    = input.int(6, "تنعيم ADX", minval = 1, group = G_ADX,
      tooltip = "تحذير: RMA(n) تكافئ EMA(2n-1). القيمة 14 تعني تنعيماً فعلياً بطول 27.")
-dilen     = input.int(133, "طول DI", minval = 1, group = G_ADX)
+dilen     = input.int(300, "طول DI", minval = 1, group = G_ADX)
 adxColor  = input.color(#FF6D00, "لون ADX", group = G_ADX, display = display.none)
-showDI    = input.bool(false, "إظهار +DI / -DI", group = G_ADX)
+showDI    = input.bool(true, "إظهار +DI / -DI", group = G_ADX)
 
 // ③ إصلاح الانقطاع عند حدّ السكين — نطاق ميت متناسب مع ATR
 fixKnife  = input.bool(true, "③ تنعيم حدّ الفصل بين DM+ و DM-", group = G_FIX,
@@ -176,7 +176,7 @@ closeBeta = input.float(0.50, "④ وزن موقع الإغلاق داخل ال�
 // ① بوّابة المقدار — تغلق ثغرة انعدام حساسية DX للحجم
 useDIFloor = input.bool(true, "① اشتراط حدّ أدنى لمقدار DI", group = G_FIX,
      tooltip = "DX نسبة فقط: (+DI=45,-DI=9) و(+DI=5,-DI=1) يعطيان 66.7 كلاهما. هذه البوّابة ترفض الثانية.")
-diFloor    = input.float(20.0, "  الحدّ الأدنى لـ max(+DI, -DI)", minval = 0, maxval = 100, step = 1, group = G_FIX, active = useDIFloor)
+diFloor    = input.float(19.0, "  الحدّ الأدنى لـ max(+DI, -DI)", minval = 0, maxval = 100, step = 1, group = G_FIX, active = useDIFloor)
 
 // ⑤ عتبة مقيسة بدل الثابت الموروث 25
 useAdaptive = input.bool(true, "⑤ عتبة تكيّفية مقيسة (بدل 25)", group = G_FIX,
