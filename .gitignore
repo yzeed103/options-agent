@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+contracts.db
+contracts.db-wal
+contracts.db-shm
+contracts.json
+contracts.json.migrated
+alerts_log.txt
