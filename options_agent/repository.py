@@ -10,10 +10,10 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Iterator, Sequence
 
 from .errors import NotFoundError
 from .models import Contract, OptionType, Side
@@ -41,8 +41,8 @@ def _parse_datetime(raw: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(raw)
     except ValueError:
-        return datetime.now(timezone.utc)
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        return datetime.now(UTC)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def _row_to_contract(row: sqlite3.Row) -> Contract:

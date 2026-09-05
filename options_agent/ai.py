@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable, Mapping
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from .config import Settings
 from .errors import AuthError, ConfigurationError, UpstreamError, ValidationError
@@ -46,7 +47,9 @@ class ClaudeAdvisor:
     def _resolve_key(self, request_api_key: str | None) -> str:
         key = (request_api_key or "").strip() or self._settings.anthropic_api_key
         if not key:
-            raise ConfigurationError("مفتاح API غير متوفر. أدخله في التطبيق أو عيّن ANTHROPIC_API_KEY")
+            raise ConfigurationError(
+                "مفتاح API غير متوفر. أدخله في التطبيق أو عيّن ANTHROPIC_API_KEY"
+            )
         return key
 
     def ask(

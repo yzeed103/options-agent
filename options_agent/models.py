@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timezone
-from enum import Enum
-from typing import Any, Mapping
+from datetime import UTC, date, datetime
+from enum import Enum, StrEnum
+from typing import Any
 
 from .errors import ValidationError
 
@@ -15,12 +16,12 @@ MAX_QTY = 10_000
 MAX_PRICE = 1_000_000.0
 
 
-class OptionType(str, Enum):
+class OptionType(StrEnum):
     CALL = "call"
     PUT = "put"
 
 
-class Side(str, Enum):
+class Side(StrEnum):
     LONG = "long"
     SHORT = "short"
 
@@ -110,7 +111,7 @@ class Contract:
     id: int | None = None
 
     @classmethod
-    def from_payload(cls, payload: Mapping[str, Any] | None) -> "Contract":
+    def from_payload(cls, payload: Mapping[str, Any] | None) -> Contract:
         """Build a contract from untrusted JSON. Raises ValidationError."""
         if not isinstance(payload, Mapping):
             raise ValidationError("الطلب يجب أن يكون كائن JSON")
@@ -124,15 +125,15 @@ class Contract:
             current_premium=_price(payload, "current_premium", default=entry),
             qty=_qty(payload),
             expiry=_expiry(payload),
-            added_at=datetime.now(timezone.utc),
+            added_at=datetime.now(UTC),
         )
 
-    def with_id(self, contract_id: int) -> "Contract":
+    def with_id(self, contract_id: int) -> Contract:
         return replace(self, id=contract_id)
 
     @property
     def is_expired(self) -> bool:
-        return self.expiry < datetime.now(timezone.utc).date()
+        return self.expiry < datetime.now(UTC).date()
 
     def to_dict(self) -> dict[str, Any]:
         return {

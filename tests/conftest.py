@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
@@ -15,17 +15,17 @@ from options_agent.services import Services
 
 
 def make_contract(**overrides: Any) -> Contract:
-    defaults: dict[str, Any] = dict(
-        symbol="AAPL",
-        type=OptionType.CALL,
-        side=Side.LONG,
-        strike=200.0,
-        entry_premium=5.0,
-        current_premium=7.5,
-        qty=2,
-        expiry=date(2030, 1, 17),
-        added_at=datetime(2030, 1, 1, tzinfo=timezone.utc),
-    )
+    defaults: dict[str, Any] = {
+        "symbol": "AAPL",
+        "type": OptionType.CALL,
+        "side": Side.LONG,
+        "strike": 200.0,
+        "entry_premium": 5.0,
+        "current_premium": 7.5,
+        "qty": 2,
+        "expiry": date(2030, 1, 17),
+        "added_at": datetime(2030, 1, 1, tzinfo=UTC),
+    }
     defaults.update(overrides)
     return Contract(**defaults)
 
@@ -42,10 +42,10 @@ class FakeFrame:
     def __init__(self, records: list[dict[str, Any]]) -> None:
         self._records = records
 
-    def __getitem__(self, columns: list[str]) -> "FakeFrame":
+    def __getitem__(self, columns: list[str]) -> FakeFrame:
         return FakeFrame([{c: row.get(c) for c in columns} for row in self._records])
 
-    def head(self, n: int) -> "FakeFrame":
+    def head(self, n: int) -> FakeFrame:
         return FakeFrame(self._records[:n])
 
     def to_dict(self, _orient: str) -> list[dict[str, Any]]:
@@ -96,7 +96,7 @@ class FakeAnthropicClient:
         self.calls: list[dict[str, Any]] = []
 
         class _Messages:
-            def __init__(self, outer: "FakeAnthropicClient") -> None:
+            def __init__(self, outer: FakeAnthropicClient) -> None:
                 self._outer = outer
 
             def create(self, **kwargs: Any) -> FakeMessage:

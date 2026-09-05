@@ -41,8 +41,14 @@ def test_empty_portfolio_is_not_an_error():
 def test_portfolio_aggregates():
     contracts = [
         make_contract(symbol="AAPL", entry_premium=5.0, current_premium=7.0, qty=1),
-        make_contract(symbol="TSLA", type=OptionType.PUT, side=Side.SHORT,
-                      entry_premium=4.0, current_premium=6.0, qty=1),
+        make_contract(
+            symbol="TSLA",
+            type=OptionType.PUT,
+            side=Side.SHORT,
+            entry_premium=4.0,
+            current_premium=6.0,
+            qty=1,
+        ),
     ]
     result = analyze_portfolio(contracts)
     assert result["empty"] is False

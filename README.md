@@ -27,6 +27,8 @@ tests/                      # 65 اختبار pytest
 
 ## التشغيل
 
+يتطلب Python 3.11 أو أحدث.
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -49,12 +51,17 @@ gunicorn app:app --bind 0.0.0.0:$PORT   # إنتاج
 > على منصات النشر ذات القرص المؤقت، وجّه `OPTIONS_DB_PATH` إلى وحدة تخزين دائمة
 > وإلا فُقدت العقود عند إعادة النشر.
 
-## الاختبارات
+## الاختبارات والفحص
 
 ```bash
 pip install -r requirements-dev.txt
-pytest
+pytest          # 65 اختباراً، بلا شبكة وبلا مفتاح API
+ruff check .    # فحص الأسلوب
+ruff format .   # تنسيق
 ```
+
+في جلسات Claude Code على الويب تُجهَّز البيئة تلقائياً عبر
+`.claude/hooks/session-start.sh`، وقواعد المشروع موثّقة في `CLAUDE.md`.
 
 ## واجهة API
 

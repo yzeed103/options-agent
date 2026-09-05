@@ -19,8 +19,9 @@ class RateLimitError(Exception):
 
 
 def test_missing_key_raises_configuration_error(settings):
-    advisor = ClaudeAdvisor(dataclasses.replace(settings, anthropic_api_key=None),
-                            client_factory=FakeAnthropicClient)
+    advisor = ClaudeAdvisor(
+        dataclasses.replace(settings, anthropic_api_key=None), client_factory=FakeAnthropicClient
+    )
     with pytest.raises(ConfigurationError):
         advisor.ask("سؤال", {})
 

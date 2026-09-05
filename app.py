@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """WSGI entrypoint — `gunicorn app:app`.
 
 The application itself lives in the `options_agent` package.
