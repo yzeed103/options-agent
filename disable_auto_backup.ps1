@@ -46,8 +46,9 @@ $ErrorActionPreference = 'Continue'
 $Drive = $Drive.TrimEnd('\')
 if ($Drive -notmatch '^[A-Za-z]:$') { throw "Drive must look like 'D:' - got '$Drive'" }
 
-$script:Findings = @()
-$script:Changes  = @()
+$script:Findings    = @()
+$script:Changes     = @()
+$script:ScriptFiles = @()
 
 function Write-Section {
     param([string] $Title)
@@ -185,18 +186,41 @@ foreach ($t in $tasks) {
 
     $nameHit = ($t.TaskName -match $BackupKeyword) -or ($t.TaskPath -match $BackupKeyword)
 
-    $driveHit = $false
+    $driveHit   = $false
+    $scriptHit  = $false
+
     foreach ($a in $t.Actions) {
         $blob = "$($a.Execute) $($a.Arguments) $($a.WorkingDirectory)"
-        if ($blob -like "*$Drive\*") { $driveHit = $true; break }
+        if ($blob -like "*$Drive\*") { $driveHit = $true }
+
+        # The task may call a script whose *contents* do the copying, so the
+        # drive letter never appears in the task definition itself. Open any
+        # small script the task points at and look inside it.
+        foreach ($m in [regex]::Matches($blob, '(?i)[a-z]:\\[^"'']+\.(ps1|bat|cmd|vbs|py)')) {
+            $f = $m.Value.Trim('"', "'", ' ')
+            if (-not (Test-Path -LiteralPath $f)) { continue }
+            if ((Get-Item -LiteralPath $f).Length -gt 1MB) { continue }
+
+            $text = Get-Content -LiteralPath $f -Raw -ErrorAction SilentlyContinue
+            if (-not $text) { continue }
+
+            if ($text -like "*$Drive\*" -or $text -match '(?i)robocopy|xcopy|Copy-Item|Compress-Archive') {
+                $scriptHit = $true
+                if ($script:ScriptFiles -notcontains $f) { $script:ScriptFiles += $f }
+            }
+        }
     }
 
-    if ($nameHit -or $driveHit) {
+    if ($nameHit -or $driveHit -or $scriptHit) {
+        $why = if ($driveHit)       { "writes to $Drive" }
+               elseif ($scriptHit)  { "calls a script that copies to $Drive" }
+               else                 { 'backup-related name' }
+
         $hits += [pscustomobject]@{
             Task    = $t.TaskName
             Path    = $t.TaskPath
             State   = $t.State
-            Why     = if ($driveHit) { "writes to $Drive" } else { 'backup-related name' }
+            Why     = $why
             Object  = $t
         }
     }
@@ -329,6 +353,14 @@ if (-not $script:Findings) {
 } else {
     Write-Host "  Found $($script:Findings.Count) item(s):" -ForegroundColor Yellow
     $script:Findings | ForEach-Object { Write-Host "    - $_" -ForegroundColor Yellow }
+}
+
+if ($script:ScriptFiles) {
+    Write-Host ''
+    Write-Host '  These script files are doing the copying:' -ForegroundColor Yellow
+    $script:ScriptFiles | ForEach-Object { Write-Host "    - $_" -ForegroundColor Yellow }
+    Write-Host '  Disabling the task above is enough to stop them. The files themselves' -ForegroundColor DarkGray
+    Write-Host '  are left on disk - delete them yourself if you want them gone.'        -ForegroundColor DarkGray
 }
 
 if ($Apply) {
