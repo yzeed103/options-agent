@@ -179,7 +179,7 @@ def combined(with_heat, fname):
         ax.text(x0, y0 - .045 * k - .03, a, transform=ax.transAxes, color="#9598a1", fontsize=9, zorder=8)
         ax.text(x0 + .185, y0 - .045 * k - .03, b, transform=ax.transAxes, color=c, fontsize=9, ha="right", weight="bold", zorder=8)
     ax.text(.01, .965, "bright candle = volume ≥1.5x   dark = weak   dotted box = weak pool   #1-#3 = strongest volume zones   red line = POC",
-            transform=ax.transAxes, color="#9598a1", fontsize=9, zorder=8)
+            transform=ax.transAxes, color="#9598a1", fontsize=9, zorder=8, bbox=dict(fc=BG, ec=GR, alpha=.9))
     fig.savefig(OUT / fname, dpi=100, facecolor=BG); plt.close(fig)
 
 
@@ -189,3 +189,63 @@ tot = sum(z[2] for z in zones)
 combined(False, "E_combined.png")
 combined(True, "E_combined_heat.png")
 print("ok2")
+
+
+# ------------------------------------------------------------------ F: heatmap themes
+from scipy.ndimage import gaussian_filter
+from matplotlib.colors import to_rgba
+THEMES = {
+    "F1_thermal":   dict(name="Thermal (inferno)", colors=["#1b0c41", "#6a176e", "#c73e4c", "#f98c0a", "#fcffa4"], mode="smooth"),
+    "F2_ice":       dict(name="Ice / Bookmap blue", colors=["#0b1f3a", "#0f4c75", "#1fa2c7", "#7fe3ff", "#ffffff"], mode="smooth"),
+    "F3_tv_vpvr":   dict(name="TradingView VPVR (teal → gold)", colors=["#1d4f5a", "#2b7a78", "#3aa59a", "#c9a227", "#f2d16b"], mode="strips"),
+    "F4_contours":  dict(name="Contours only (outline of liquidity)", colors=["#5d6aa8", "#9b7ff2", "#f2c14e", "#ff5d5d"], mode="contour"),
+    "F5_purple":    dict(name="Mono purple fade (alpha = volume)", colors=["#b388ff"], mode="alpha"),
+    "F6_dots":      dict(name="Liquidity dots (size + color = volume)", colors=["#2a6f97", "#3d8b5a", "#e8c547", "#e8432d"], mode="dots"),
+}
+edges_f = np.linspace(lo, hi, 120); hgt_f = edges_f[1] - edges_f[0]
+gf, _ = vzones.heatmap(r.iloc[s - 120:e], 120, edges=edges_f); gf = np.nan_to_num(gf[120:])
+
+
+def themed(key, th):
+    fig, ax = base(f"Heatmap theme · {th['name']}")
+    cm = LinearSegmentedColormap.from_list(key, th["colors"] if len(th["colors"]) > 1 else ["#000000", th["colors"][0]])
+    ext = (-.5, N - .5, lo, hi)
+    if th["mode"] == "smooth":
+        sm = gaussian_filter(gf, (1.0, 1.2)); img = cm(sm.T); img[..., 3] = np.clip((sm.T - .25) / .75, 0, 1) * .75
+        ax.imshow(img, origin="lower", aspect="auto", extent=ext, interpolation="bilinear", zorder=0)
+    elif th["mode"] == "strips":
+        for i in range(N):
+            for k in np.flatnonzero(gf[i] >= .4):
+                ax.add_patch(Rectangle((i - .45, edges_f[k] + hgt_f * .2), .9, hgt_f * .6, color=cm((gf[i, k] - .4) / .6), alpha=.6, lw=0, zorder=1))
+    elif th["mode"] == "contour":
+        X, Y = np.meshgrid(np.arange(N), (edges_f[:-1] + edges_f[1:]) / 2)
+        ax.contour(X, Y, gaussian_filter(gf, 1.2).T, levels=[.4, .6, .8, .95], colors=th["colors"], linewidths=[.8, 1, 1.3, 1.8], zorder=1)
+    elif th["mode"] == "alpha":
+        rgba = np.zeros((*gf.T.shape, 4)); rgba[..., :3] = to_rgba(th["colors"][0])[:3]
+        rgba[..., 3] = np.clip((gaussian_filter(gf, .8).T - .3) / .7, 0, 1) ** 1.5 * .7
+        ax.imshow(rgba, origin="lower", aspect="auto", extent=ext, interpolation="bilinear", zorder=0)
+    elif th["mode"] == "dots":
+        for i in range(0, N, 2):
+            ks = np.flatnonzero(gf[i] >= .5)[::2]
+            ax.scatter(np.full(len(ks), i), edges_f[ks] + hgt_f / 2, s=(gf[i, ks] ** 3) * 28, c=[cm((v - .5) / .5) for v in gf[i, ks]], alpha=.75, lw=0, zorder=1)
+    for rank, (zl, zh, zv) in enumerate(zones, 1):
+        c = ["#e8432d", "#e8a33d", "#e8d547"][rank - 1]
+        ax.hlines([zl, zh], -.5, N + 8, color=c, lw=.9, alpha=.8, zorder=2)
+        ax.text(N + 7.5, zh, f"#{rank}  {zv / tot * 100:.0f}%", color=c, ha="right", va="bottom", fontsize=9, weight="bold", zorder=6)
+    candles(ax, regime_color); signals(ax, labels=False)
+    # colour scale legend
+    cax = fig.add_axes([0.06, 0.885, 0.18, 0.012]); cax.imshow(np.linspace(0, 1, 256)[None], aspect="auto", cmap=cm); cax.set_axis_off()
+    fig.text(0.06, 0.902, "low volume", color="#9598a1", fontsize=8); fig.text(0.24, 0.902, "high", color="#9598a1", fontsize=8, ha="right")
+    fig.savefig(OUT / f"{key}.png", dpi=100, facecolor=BG); plt.close(fig)
+
+
+for k, th in THEMES.items():
+    themed(k, th)
+# contact sheet
+from matplotlib.image import imread
+fig, axs = plt.subplots(3, 2, figsize=(16, 13.5), facecolor=BG)
+for a, k in zip(axs.flat, THEMES):
+    a.imshow(imread(OUT / f"{k}.png")[30:860, 40:1520]); a.set_axis_off()
+    a.set_title(f"{k.split('_')[0]} · {THEMES[k]['name']}", color=TX, fontsize=12)
+fig.tight_layout(); fig.savefig(OUT / "F_all_themes.png", dpi=90, facecolor=BG)
+print("ok3")
