@@ -341,3 +341,36 @@ def latest_state(df: pd.DataFrame) -> dict:
             for i, r in recent.iterrows() if r.pool_break or r.hunt or r.rejection
         ],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Heatmap (time x price liquidity map, like the VPVR heatmap overlay)
+# --------------------------------------------------------------------------- #
+def heatmap(df: pd.DataFrame, lookback: int = 120, rows: int = 60,
+            edges: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """For every bar t, volume traded at each price row over bars t-lookback..t-1.
+
+    Returns (grid[n_bars, rows] normalised 0..1 per bar, edges). A fixed price grid
+    is used so rows line up across time and can be drawn as horizontal bands.
+    """
+    h, l, v = (df[k].to_numpy(float) for k in ("high", "low", "volume"))
+    if edges is None:
+        edges = np.linspace(l.min(), h.max(), rows + 1)
+    per_bar = np.stack([distribute_volume(h[i:i + 1], l[i:i + 1], v[i:i + 1], edges) for i in range(len(df))])
+    csum = np.vstack([np.zeros(len(edges) - 1), np.cumsum(per_bar, axis=0)])
+    grid = np.full((len(df), len(edges) - 1), np.nan)
+    for t in range(1, len(df)):
+        s = max(0, t - lookback)
+        row = csum[t] - csum[s]
+        m = row.max()
+        if m > 0:
+            grid[t] = row / m
+    return grid, edges
+
+
+def split_profile(df: pd.DataFrame, edges: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Up-bar (buy) and down-bar (sell) volume per price row."""
+    up = df["close"] >= df["open"]
+    h, l, v = (df[k].to_numpy(float) for k in ("high", "low", "volume"))
+    m = up.to_numpy()
+    return (distribute_volume(h[m], l[m], v[m], edges), distribute_volume(h[~m], l[~m], v[~m], edges))

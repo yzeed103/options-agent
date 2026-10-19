@@ -2,7 +2,7 @@
 // Volume Zones: rolling volume profile HVN/POC/VA, weak-volume pools,
 // pool breakouts hunting previous HVNs in a strong trend, HVN rejections.
 // Mirrors vzones/indicator.py (profile built from past bars only).
-indicator("Volume Zones", overlay=true, max_lines_count=100, max_boxes_count=60, max_labels_count=200)
+indicator("Volume Zones", overlay=true, max_lines_count=100, max_boxes_count=500, max_labels_count=200)
 
 lookback   = input.int(120, "Profile lookback (bars)", minval=20, maxval=500)
 rows       = input.int(40, "Profile rows", minval=10, maxval=100)
@@ -18,6 +18,11 @@ adxStrong  = input.float(25, "Strong trend ADX >=")
 minTgtAtr  = input.float(1.0, "Min target distance (ATR)")
 maxTgtAtr  = input.float(12.0, "Max target distance (ATR)")
 wickPct    = input.float(0.5, "Rejection wick share")
+showHeat   = input.bool(true, "Show heatmap", group="Heatmap")
+heatStep   = input.int(4, "Heatmap column width (bars)", minval=1, group="Heatmap")
+heatMin    = input.float(0.30, "Hide rows below (0-1 of max)", group="Heatmap")
+heatAlpha  = input.int(55, "Heatmap transparency", minval=0, maxval=95, group="Heatmap")
+showSplit  = input.bool(true, "Show Up/Down profile on last bar", group="Heatmap")
 
 atrV  = ta.atr(14)
 volMa = ta.sma(volume, volMaLen)
@@ -153,3 +158,46 @@ alertcondition(weak and not weak[1], "Weak volume", "Volume turned weak")
 alertcondition(brk != 0, "Weak pool broken", "Weak-volume pool broken with volume")
 alertcondition(hunt != 0, "HUNT", "Pool break in strong trend: targeting previous HVN")
 alertcondition(rej != 0, "HVN rejection", "Price rejected from a high-volume zone")
+
+// ---- heatmap: every `heatStep` bars draw one column of boxes, one per profile row ----
+heatColor(x) =>
+    x < 0.45 ? color.from_gradient(x, heatMin, 0.45, #1e3a5f, #2a6f97) :
+     x < 0.65 ? color.from_gradient(x, 0.45, 0.65, #2a6f97, #3d8b5a) :
+     x < 0.85 ? color.from_gradient(x, 0.65, 0.85, #8bbf3c, #e8c547) :
+     color.from_gradient(x, 0.85, 1.0, #e8c547, #e8432d)
+var box[] heatBoxes = array.new_box()
+if showHeat and bar_index > lookback and step > 0 and bar_index % heatStep == 0
+    mx = array.max(rowVol)
+    for r = 0 to rows - 1
+        x = mx > 0 ? array.get(rowVol, r) / mx : 0.0
+        if x >= heatMin
+            b = box.new(bar_index, pLo + (r + 1) * step, bar_index + heatStep, pLo + r * step,
+                 border_color=na, bgcolor=color.new(heatColor(x), heatAlpha))
+            array.push(heatBoxes, b)
+    while array.size(heatBoxes) > 440
+        box.delete(array.shift(heatBoxes))
+
+// ---- Up/Down split profile (buy = up bars, sell = down bars) at the right edge ----
+var box[] splitBoxes = array.new_box()
+if showSplit and barstate.islast and step > 0
+    for b in splitBoxes
+        box.delete(b)
+    array.clear(splitBoxes)
+    upV = array.new_float(rows, 0.0), dnV = array.new_float(rows, 0.0)
+    for i = 1 to lookback
+        r = math.max(0, math.min(rows - 1, int((hl2[i] - pLo) / step)))
+        if close[i] >= open[i]
+            array.set(upV, r, array.get(upV, r) + volume[i])
+        else
+            array.set(dnV, r, array.get(dnV, r) + volume[i])
+    tot = 0.0
+    for r = 0 to rows - 1
+        tot := math.max(tot, array.get(upV, r) + array.get(dnV, r))
+    width = 40
+    for r = 0 to math.min(rows, 29) - 1
+        rr = rows <= 29 ? r : int(r * rows / 29)
+        u = int(width * array.get(upV, rr) / tot), d = int(width * array.get(dnV, rr) / tot)
+        if u > 0
+            array.push(splitBoxes, box.new(bar_index + 8, pLo + (rr + 1) * step, bar_index + 8 + u, pLo + rr * step, border_color=na, bgcolor=color.new(#2f7fd1, 20)))
+        if d > 0
+            array.push(splitBoxes, box.new(bar_index + 8 + u, pLo + (rr + 1) * step, bar_index + 8 + u + d, pLo + rr * step, border_color=na, bgcolor=color.new(#c9a227, 20)))

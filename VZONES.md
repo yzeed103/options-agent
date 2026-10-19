@@ -1,5 +1,7 @@
 # Volume Zones indicator
 
+Heatmap: `vzones.heatmap()` (time x price liquidity bands, blue→red) + `split_profile()` (Up/Down VP). Preview: `python reports/make_preview.py`.
+
 Python: `vzones/` · TradingView: `pine/volume_zones.pine` · Backtest: `python run_backtest.py` · API: `GET /api/vzones/SPY?interval=1d`
 
 Signals (all computed from past bars only):

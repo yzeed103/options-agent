@@ -58,3 +58,12 @@ def test_backtest_runs_on_bundled_data():
     s = stats(tr)
     assert s["trades"] > 0 and 0 <= s["win_rate"] <= 1
     assert set(vzones.indicator.latest_state(vzones.compute(df.iloc[-300:])))>={"poc","hunt","weak_volume"}
+
+
+def test_heatmap_shape_and_range():
+    df = _synthetic(300)
+    g, edges = vzones.heatmap(df, 50, rows=30)
+    assert g.shape == (300, 30) and len(edges) == 31
+    assert np.nanmax(g) == pytest.approx(1.0) and np.nanmin(g) >= 0
+    up, dn = vzones.split_profile(df.iloc[:100], edges)
+    assert up.sum() + dn.sum() == pytest.approx(df.volume.iloc[:100].sum())
