@@ -1,0 +1,2 @@
+kind,dir,entry_time,exit_time,entry,exit,target,stop,reason,ret,r_mult,bars
+hunt,1,2019-06-19,2019-07-03,186.66,191.32,191.32,181.94,target,0.02476517732776169,0.9872881355932198,11

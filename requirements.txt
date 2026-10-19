@@ -2,3 +2,5 @@ flask
 anthropic
 yfinance
 gunicorn
+pandas
+numpy

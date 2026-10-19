@@ -204,6 +204,19 @@ def api_options(symbol):
     expiry = request.args.get("expiry")
     return jsonify(get_options_chain(symbol.upper(), expiry))
 
+@app.route("/api/vzones/<symbol>")
+def api_vzones(symbol):
+    """Volume Zones indicator state: ?interval=1d|1h&source=auto|yahoo|lean"""
+    try:
+        import vzones
+        from vzones.indicator import latest_state
+        iv = request.args.get("interval", "1d")
+        df = vzones.load_ohlcv(symbol, request.args.get("source", "auto"),
+                               period="2y" if iv == "1d" else "60d", interval=iv)
+        return jsonify(latest_state(vzones.compute(df)))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
     data      = request.json
