@@ -249,3 +249,96 @@ for a, k in zip(axs.flat, THEMES):
     a.set_title(f"{k.split('_')[0]} · {THEMES[k]['name']}", color=TX, fontsize=12)
 fig.tight_layout(); fig.savefig(OUT / "F_all_themes.png", dpi=90, facecolor=BG)
 print("ok3")
+
+
+# ------------------------------------------------------------------ G: ten more heatmap styles
+ctxg = r.iloc[s - 120:e]
+upm = (ctxg.close >= ctxg.open).astype(float)
+def _raw(dfx):
+    gg, _ = vzones.heatmap(dfx, 120, edges=edges_f); return gg
+# un-normalised buy / sell heat (normalise jointly)
+cu = ctxg.assign(volume=ctxg.volume * upm); cd = ctxg.assign(volume=ctxg.volume * (1 - upm))
+hb = np.nan_to_num(_raw(cu))[120:]; hs = np.nan_to_num(_raw(cd))[120:]
+# rescale both to joint max per bar using raw ratio
+tot_b = hb + hs
+G = {
+    "G01_neon":      dict(name="Neon (magenta → cyan)", colors=["#2b0b3f", "#8a1c7c", "#ff2bd6", "#36e2ff", "#e8fdff"], mode="smooth"),
+    "G02_fire":      dict(name="Fire blocks", colors=["#3a0d0d", "#8c1c13", "#e2481b", "#ffa630", "#fff1a8"], mode="cells"),
+    "G03_emerald":   dict(name="Emerald mono", colors=["#062a1e", "#0b6e4f", "#21c48b", "#b8ffe0"], mode="smooth"),
+    "G04_viridis":   dict(name="Viridis pixel grid", colors=["#440154", "#3b528b", "#21918c", "#5ec962", "#fde725"], mode="cells"),
+    "G05_lines":     dict(name="Thickness lines (Pine-friendly)", colors=["#4f6d8f", "#8fb3d9", "#ffd166"], mode="lines"),
+    "G06_ridge":     dict(name="Ridge: top 3 rows per bar only (POC trail)", colors=["#7f5af0", "#ff8906", "#f25f4c"], mode="ridge"),
+    "G07_buysell":   dict(name="Buy / Sell dominance (blue buy, orange sell)", colors=[], mode="buysell"),
+    "G08_delta":     dict(name="Delta heat (green = buyers, red = sellers)", colors=[], mode="delta"),
+    "G09_fog":       dict(name="White fog (minimal grayscale)", colors=["#131722", "#3a3f4f", "#9aa0ad", "#ffffff"], mode="smooth"),
+    "G10_shadow":    dict(name="Shadow profile (current VP projected left, fading)", colors=["#2962ff"], mode="shadow"),
+}
+
+
+def themed2(key, th):
+    fig, ax = base(f"Heatmap · {key.split('_')[0]} · {th['name']}")
+    ext = (-.5, N - .5, lo, hi); cm = None
+    if th["colors"]:
+        cm = LinearSegmentedColormap.from_list(key, th["colors"] if len(th["colors"]) > 1 else ["#000", th["colors"][0]])
+    m = th["mode"]; yc = (edges_f[:-1] + edges_f[1:]) / 2
+    if m == "smooth":
+        sm = gaussian_filter(gf, (1.0, 1.2)); img = cm(sm.T); img[..., 3] = np.clip((sm.T - .25) / .75, 0, 1) * .75
+        ax.imshow(img, origin="lower", aspect="auto", extent=ext, interpolation="bilinear", zorder=0)
+    elif m == "cells":
+        q = gf.reshape(N, 30, 4).mean(axis=2) if gf.shape[1] % 4 == 0 else gf
+        img = cm(q.T); img[..., 3] = np.where(q.T >= .35, .7, 0)
+        ax.imshow(img, origin="lower", aspect="auto", extent=ext, interpolation="nearest", zorder=0)
+        for xg in range(0, N, 3): ax.axvline(xg - .5, color=BG, lw=.6, zorder=0.5)
+        for yg in np.linspace(lo, hi, 31): ax.axhline(yg, color=BG, lw=.6, zorder=0.5)
+    elif m == "lines":
+        for k in range(0, len(yc), 2):
+            col = gf[:, k]
+            for i in range(N - 1):
+                if col[i] >= .4:
+                    ax.plot([i - .5, i + .5], [yc[k], yc[k]], color=cm((col[i] - .4) / .6), lw=.5 + 3.5 * (col[i] - .4) / .6, alpha=.8, solid_capstyle="butt", zorder=1)
+    elif m == "ridge":
+        for i in range(N):
+            top = np.argsort(gf[i])[-3:]
+            for rank_, k in enumerate(top):
+                ax.add_patch(Rectangle((i - .5, edges_f[k]), 1, hgt_f * 1.6, color=th["colors"][rank_], alpha=.55, lw=0, zorder=1))
+    elif m in ("buysell", "delta"):
+        tot_ = hb + hs; mx = tot_.max(axis=1, keepdims=True); mx[mx == 0] = 1
+        inten = gaussian_filter(tot_ / mx, (1, 1)); share = np.where(tot_ > 0, hb / np.maximum(tot_, 1e-9), .5)
+        share = gaussian_filter(share, (1, 1.5))
+        if m == "buysell":
+            cmb = LinearSegmentedColormap.from_list("bs", ["#ff9f1c", "#5a5a6a", "#2f7fd1"])
+        else:
+            cmb = LinearSegmentedColormap.from_list("dl", ["#ff1744", "#3a3f4f", "#00e676"])
+        img = cmb(np.clip((share.T - .5) * 2.5 + .5, 0, 1)); img[..., 3] = np.clip((inten.T - .3) / .7, 0, 1) * .8
+        ax.imshow(img, origin="lower", aspect="auto", extent=ext, interpolation="bilinear", zorder=0)
+        cm = cmb
+    elif m == "shadow":
+        vp = gf[-1]
+        for k in np.flatnonzero(vp >= .25):
+            ln = vp[k] * N * .9
+            xs = np.linspace(N - .5 - ln, N - .5, 40)
+            for a0, a1 in zip(xs[:-1], xs[1:]):
+                frac = (a1 - xs[0]) / ln
+                ax.add_patch(Rectangle((a0, edges_f[k]), a1 - a0, hgt_f * .85, color="#2962ff" if vp[k] < .8 else "#ff4d4d", alpha=.05 + .45 * frac * vp[k], lw=0, zorder=1))
+        cm = LinearSegmentedColormap.from_list("sh", ["#131722", "#2962ff", "#ff4d4d"])
+    for rank, (zl, zh, zv) in enumerate(zones, 1):
+        c = ["#e8432d", "#e8a33d", "#e8d547"][rank - 1]
+        ax.hlines([zl, zh], -.5, N + 8, color=c, lw=.9, alpha=.8, zorder=2)
+        ax.text(N + 7.5, zh, f"#{rank}  {zv / tot * 100:.0f}%", color=c, ha="right", va="bottom", fontsize=9, weight="bold", zorder=6)
+    candles(ax, regime_color); signals(ax, labels=False)
+    cax = fig.add_axes([0.06, 0.885, 0.18, 0.012]); cax.imshow(np.linspace(0, 1, 256)[None], aspect="auto", cmap=cm); cax.set_axis_off()
+    lab = ("sellers", "buyers") if m in ("buysell", "delta") else ("low volume", "high")
+    fig.text(0.06, 0.902, lab[0], color="#9598a1", fontsize=8); fig.text(0.24, 0.902, lab[1], color="#9598a1", fontsize=8, ha="right")
+    fig.savefig(OUT / f"{key}.png", dpi=100, facecolor=BG); plt.close(fig)
+
+
+for k, th in G.items():
+    themed2(k, th)
+for part, keys in (("G_sheet_1.png", list(G)[:6]), ("G_sheet_2.png", list(G)[6:])):
+    rows_n = (len(keys) + 1) // 2
+    fig, axs = plt.subplots(rows_n, 2, figsize=(16, 4.5 * rows_n), facecolor=BG)
+    for a in axs.flat: a.set_axis_off()
+    for a, k in zip(axs.flat, keys):
+        a.imshow(imread(OUT / f"{k}.png")[30:860, 40:1520]); a.set_title(f"{k.split('_')[0]} · {G[k]['name']}", color=TX, fontsize=12)
+    fig.tight_layout(); fig.savefig(OUT / part, dpi=90, facecolor=BG); plt.close(fig)
+print("ok4")
