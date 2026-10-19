@@ -153,3 +153,39 @@ for b0, poc in naked:
 candles(ax, std_color); signals(ax)
 fig.savefig(OUT / "D_session_profiles.png", dpi=100, facecolor=BG); plt.close(fig)
 print("ok")
+
+
+# ------------------------------------------------------------------ E: combined A + C (+ optional B heat)
+def combined(with_heat, fname):
+    fig, ax = base("SPY · 1H · Volume Zones" + ("  ·  heatmap ON" if with_heat else ""))
+    if with_heat:
+        for i in range(N):
+            for k in np.flatnonzero(g[i] >= .45):
+                ax.add_patch(Rectangle((i - .45, edges_b[k] + hgt_b * .15), .9, hgt_b * .7,
+                                       color=cmap((g[i, k] - .35) / .65), alpha=.45, lw=0, zorder=1))
+    for rank, (zl, zh, zv) in enumerate(zones, 1):
+        c = ["#e8432d", "#e8a33d", "#e8d547"][rank - 1]
+        ax.add_patch(Rectangle((-.5, zl), N + 8, zh - zl, color=c, alpha=.05 if with_heat else .11, lw=0, zorder=1))
+        ax.hlines([zl, zh], -.5, N + 8, color=c, lw=.9, alpha=.8, zorder=2)
+        ax.text(N + 7.5, zh, f"#{rank}  {zv / tot * 100:.0f}%  {zl:.1f}-{zh:.1f}", color=c, ha="right",
+                va="bottom", fontsize=9, weight="bold", zorder=6)
+    candles(ax, regime_color); pools_as_boxes(ax); signals(ax)
+    pc = w.poc.to_numpy().copy(); pc[1:][np.abs(np.diff(pc)) > yr * .1] = np.nan
+    ax.step(range(N), pc, where="mid", color="#ff4d4d", lw=1, alpha=.8, zorder=4)
+    x0, y0 = .80, .36
+    ax.add_patch(FancyBboxPatch((x0 - .01, y0 - .045 * len(rows_) - .01), .2, .045 * len(rows_) + .02, transform=ax.transAxes,
+                                boxstyle="round,pad=0.005", fc="#1e222d", ec=GR, zorder=7))
+    for k, (a, b, c) in enumerate(rows_):
+        ax.text(x0, y0 - .045 * k - .03, a, transform=ax.transAxes, color="#9598a1", fontsize=9, zorder=8)
+        ax.text(x0 + .185, y0 - .045 * k - .03, b, transform=ax.transAxes, color=c, fontsize=9, ha="right", weight="bold", zorder=8)
+    ax.text(.01, .965, "bright candle = volume ≥1.5x   dark = weak   dotted box = weak pool   #1-#3 = strongest volume zones   red line = POC",
+            transform=ax.transAxes, color="#9598a1", fontsize=9, zorder=8)
+    fig.savefig(OUT / fname, dpi=100, facecolor=BG); plt.close(fig)
+
+
+edges_b = np.linspace(lo, hi, 90); hgt_b = edges_b[1] - edges_b[0]
+g, _ = vzones.heatmap(r.iloc[s - 120:e], 120, edges=edges_b); g = g[120:]
+tot = sum(z[2] for z in zones)
+combined(False, "E_combined.png")
+combined(True, "E_combined_heat.png")
+print("ok2")
