@@ -1,0 +1,514 @@
+//@version=5
+// Volume Zones
+// Rolling volume profile (POC / VAH / VAL / HVN), weak-volume pools,
+// pool breakouts that hunt previous volume zones in a strong trend,
+// HVN rejections, ranked top-3 zones, status table and a Viridis
+// strip heatmap (no smoothing) with an optional buy / sell layer.
+// Mirrors vzones/indicator.py: the profile is built from past bars only.
+indicator("Volume Zones", overlay=true, max_bars_back=500, max_lines_count=100, max_boxes_count=500, max_labels_count=200)
+
+// ═══════════════ Inputs ═══════════════
+lookback   = input.int(120, "فترة البروفايل (عدد الشموع)", minval=20, maxval=400, group="البروفايل")
+rows       = input.int(40, "عدد صفوف البروفايل", minval=10, maxval=100, group="البروفايل")
+vaPct      = input.float(0.70, "نسبة منطقة القيمة", group="البروفايل")
+hvnMult    = input.float(1.5, "منطقة فوليوم عالي = أكبر من المتوسط بـ", group="البروفايل")
+
+volMaLen   = input.int(20, "متوسط الفوليوم (عدد الشموع)", group="الإشارات")
+weakRatio  = input.float(0.80, "فوليوم ضعيف إذا أقل من المتوسط بنسبة", group="الإشارات")
+weakBars   = input.int(4, "عدد الشموع لتكوين تجمع ضعيف", minval=2, group="الإشارات")
+poolMaxAtr = input.float(2.5, "أقصى مدى للتجمع (بوحدات ATR)", group="الإشارات")
+breakRatio = input.float(1.5, "فوليوم الكسر: أكبر من المتوسط بنسبة", group="الإشارات")
+adxLen     = input.int(14, "فترة ADX", group="الإشارات")
+adxStrong  = input.float(25, "ترند قوي إذا ADX أكبر من", group="الإشارات")
+minTgtAtr  = input.float(1.0, "أقل مسافة للهدف (ATR)", group="الإشارات")
+maxTgtAtr  = input.float(12.0, "أقصى مسافة للهدف (ATR)", group="الإشارات")
+wickPct    = input.float(0.5, "نسبة الذيل لإشارة الارتداد", group="الإشارات")
+
+showTop    = input.bool(true, "إظهار أقوى 3 مناطق", group="المناطق")
+tblPos     = input.string("أسفل اليمين", "موقع الجدول", options=["أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "أسفل اليسار"], group="المناطق")
+showVA     = input.bool(true, "إظهار POC و VAH و VAL", group="المناطق")
+
+showEarly  = input.bool(false, "إظهار الإنذار المبكر (بدون ميزة مثبتة)", group="الإنذار المبكر")
+earlyN     = input.int(5, "اختراق أعلى أو أدنى سعر لعدد شموع", minval=2, maxval=50, group="الإنذار المبكر")
+earlyVol   = input.float(1.2, "فوليوم الإنذار: أكبر من المتوسط بنسبة", group="الإنذار المبكر")
+cEarlyUp   = input.color(color.new(#00e676, 30), "لون الإنذار صعود", inline="ea", group="الإنذار المبكر")
+cEarlyDn   = input.color(color.new(#ff5252, 30), "هبوط", inline="ea", group="الإنذار المبكر")
+
+showHeat   = input.bool(true, "إظهار الخريطة الحرارية", group="الخريطة الحرارية")
+heatStep   = input.int(3, "عرض عمود الخريطة (شموع)", minval=1, group="الخريطة الحرارية")
+heatMin    = input.float(0.40, "إخفاء المستويات الأقل من (0 إلى 1)", minval=0.0, maxval=0.95, group="الخريطة الحرارية")
+heatAlpha  = input.int(35, "شفافية الخريطة", minval=0, maxval=95, group="الخريطة الحرارية")
+stripGap   = input.float(0.18, "المسافة بين الخطوط (0 إلى 0.45)", minval=0.0, maxval=0.45, group="الخريطة الحرارية")
+showDelta  = input.bool(false, "طبقة الشراء والبيع", group="الخريطة الحرارية")
+deltaMin   = input.float(0.55, "طبقة الشراء والبيع: فقط المستويات الأعلى من", group="الخريطة الحرارية")
+deltaEdge  = input.float(0.12, "طبقة الشراء والبيع: أقل فرق مطلوب", group="الخريطة الحرارية")
+showLegend = input.bool(true, "إظهار مفتاح الألوان", group="الخريطة الحرارية")
+showSplit  = input.bool(true, "إظهار البروفايل على اليمين", group="الخريطة الحرارية")
+
+// ═══════════════ Colours & styles ═══════════════
+G_LN = "ألوان · الخطوط"
+cPoc     = input.color(#ff4d4d, "خط POC (أعلى تداول)", inline="poc", group=G_LN)
+wPoc     = input.int(1, "السماكة", minval=1, maxval=5, inline="poc", group=G_LN)
+cVah     = input.color(color.new(color.gray, 40), "خط VAH (أعلى منطقة القيمة)", inline="vah", group=G_LN)
+wVah     = input.int(1, "السماكة", minval=1, maxval=5, inline="vah", group=G_LN)
+cVal     = input.color(color.new(color.gray, 40), "خط VAL (أدنى منطقة القيمة)", inline="val", group=G_LN)
+wVal     = input.int(1, "السماكة", minval=1, maxval=5, inline="val", group=G_LN)
+cHuntUpL = input.color(color.lime, "خط الهدف صعود", inline="tl", group=G_LN)
+cHuntDnL = input.color(color.red, "هبوط", inline="tl", group=G_LN)
+wHunt    = input.int(2, "سماكة خط الهدف", minval=1, maxval=5, inline="tw", group=G_LN)
+lenHunt  = input.int(20, "الطول (شموع)", minval=5, maxval=200, inline="tw", group=G_LN)
+
+G_CD = "ألوان · الشموع"
+colorBars = input.bool(true, "تلوين الشموع حسب الفوليوم", group=G_CD)
+cStrongUp = input.color(#00e676, "فوليوم قوي صعود", inline="sv", group=G_CD)
+cStrongDn = input.color(#ff1744, "هبوط", inline="sv", group=G_CD)
+cWeakBar  = input.color(#4a4e5a, "شمعة فوليوم ضعيف", group=G_CD)
+
+G_SG = "ألوان · الإشارات"
+cBrkUp   = input.color(color.teal, "كسر التجمع صعود", inline="pb", group=G_SG)
+cBrkDn   = input.color(color.maroon, "هبوط", inline="pb", group=G_SG)
+cHuntUp  = input.color(color.lime, "إشارة HUNT صعود", inline="hu", group=G_SG)
+cHuntDn  = input.color(color.red, "هبوط", inline="hu", group=G_SG)
+cHuntTx  = input.color(color.black, "لون نص HUNT", group=G_SG)
+cRejUp   = input.color(color.aqua, "ارتداد صاعد", inline="rj", group=G_SG)
+cRejDn   = input.color(color.orange, "هابط", inline="rj", group=G_SG)
+cPool    = input.color(color.new(color.gray, 20), "مربع التجمع الضعيف", inline="pl", group=G_SG)
+cPoolBg  = input.color(color.new(color.gray, 100), "التعبئة", inline="pl", group=G_SG)
+
+G_ZN = "ألوان · أقوى 3 مناطق"
+cZone1   = input.color(#e8432d, "#1", inline="z", group=G_ZN)
+cZone2   = input.color(#e8a33d, "#2", inline="z", group=G_ZN)
+cZone3   = input.color(#e8d547, "#3", inline="z", group=G_ZN)
+zoneFill = input.int(90, "شفافية تعبئة المنطقة", minval=0, maxval=100, group=G_ZN)
+zoneBord = input.int(20, "شفافية حدود المنطقة", minval=0, maxval=100, group=G_ZN)
+
+G_TB = "ألوان · الجدول"
+cTblBg   = input.color(#1e222d, "الخلفية", inline="tb", group=G_TB)
+cTblBd   = input.color(#2a2e39, "الحدود", inline="tb", group=G_TB)
+cTblLbl  = input.color(color.gray, "العناوين", inline="tt", group=G_TB)
+cTblTxt  = input.color(color.white, "القيم", inline="tt", group=G_TB)
+cTblUp   = input.color(#00e676, "صعود وقوي", inline="tc", group=G_TB)
+cTblDn   = input.color(#ff5252, "هبوط", inline="tc", group=G_TB)
+cTblWeak = input.color(#f0c419, "ضعيف", inline="tc", group=G_TB)
+cTblAbv  = input.color(#ff9800, "المنطقة الأعلى", inline="tz", group=G_TB)
+cTblBlw  = input.color(#00bcd4, "المنطقة الأدنى", inline="tz", group=G_TB)
+tblSize  = input.string("عادي", "حجم خط الجدول", options=["صغير جدا", "صغير", "عادي", "كبير"], group=G_TB)
+
+G_HM = "ألوان · الخريطة الحرارية"
+cH1 = input.color(#440154, "الأقل", inline="h", group=G_HM)
+cH2 = input.color(#3b528b, "", inline="h", group=G_HM)
+cH3 = input.color(#21918c, "", inline="h", group=G_HM)
+cH4 = input.color(#5ec962, "", inline="h", group=G_HM)
+cH5 = input.color(#fde725, "الأعلى", inline="h", group=G_HM)
+cBuy  = input.color(#00e676, "المشترون", inline="d", group=G_HM)
+cSell = input.color(#ff1744, "البائعون", inline="d", group=G_HM)
+
+G_VP = "ألوان · فوليوم بروفايل"
+cVpUp    = input.color(#2f7fd1, "فوليوم الشراء", inline="vp", group=G_VP)
+cVpDn    = input.color(#c9a227, "فوليوم البيع", inline="vp", group=G_VP)
+vpAlpha  = input.int(20, "شفافية البروفايل", minval=0, maxval=95, group=G_VP)
+vpWidth  = input.int(40, "أقصى عرض للبروفايل (شموع)", minval=5, maxval=200, group=G_VP)
+vpOffset = input.int(8, "بُعد البروفايل عن آخر شمعة", minval=0, maxval=100, group=G_VP)
+cVpPoc   = input.color(#ff4d4d, "لون صف POC", inline="vpp", group=G_VP)
+vpHighlightPoc = input.bool(true, "تمييز", inline="vpp", group=G_VP)
+
+// ═══════════════ Volume / trend ═══════════════
+atrV  = ta.atr(14)
+volMa = ta.sma(volume, volMaLen)
+vr    = volMa > 0 ? volume / volMa : 1.0
+weak  = vr < weakRatio
+strongVol = vr >= breakRatio
+[diP, diM, adxV] = ta.dmi(adxLen, adxLen)
+emaF = ta.ema(close, 20)
+emaS = ta.ema(close, 50)
+trendDir = emaF > emaS and diP > diM ? 1 : emaF < emaS and diM > diP ? -1 : 0
+
+// ═══════════════ Rolling volume profile (bars 1..lookback, past only) ═══════════════
+var float[] rowVol = array.new_float(rows, 0.0)
+var float[] rowBuy = array.new_float(rows, 0.0)
+var float[] hvnLo  = array.new_float()
+var float[] hvnHi  = array.new_float()
+pHi  = ta.highest(high, lookback)[1]
+pLo  = ta.lowest(low, lookback)[1]
+step = (pHi - pLo) / rows
+float poc = na
+float vah = na
+float val = na
+ready = bar_index > lookback and step > 0
+
+if ready
+    array.fill(rowVol, 0.0)
+    array.fill(rowBuy, 0.0)
+    for i = 1 to lookback
+        bh = high[i]
+        bl = low[i]
+        bv = nz(volume[i])
+        isUp = close[i] >= open[i]
+        rng = math.max(bh - bl, syminfo.mintick)
+        r0 = math.max(0, math.min(rows - 1, int((bl - pLo) / step)))
+        r1 = math.max(0, math.min(rows - 1, int((bh - pLo) / step)))
+        for r = r0 to r1
+            rLo = pLo + r * step
+            rHi = rLo + step
+            ov = math.max(0.0, math.min(bh, rHi) - math.max(bl, rLo))
+            add = bh == bl ? bv : bv * ov / rng
+            array.set(rowVol, r, array.get(rowVol, r) + add)
+            if isUp
+                array.set(rowBuy, r, array.get(rowBuy, r) + add)
+    total = array.sum(rowVol)
+    pocI = array.indexof(rowVol, array.max(rowVol))
+    loI = pocI
+    hiI = pocI
+    acc = array.get(rowVol, pocI)
+    while acc < vaPct * total and (loI > 0 or hiI < rows - 1)
+        upV1 = hiI < rows - 1 ? array.get(rowVol, hiI + 1) : -1.0
+        dnV1 = loI > 0 ? array.get(rowVol, loI - 1) : -1.0
+        if upV1 >= dnV1
+            hiI += 1
+            acc += upV1
+        else
+            loI -= 1
+            acc += dnV1
+    poc := pLo + (pocI + 0.5) * step
+    vah := pLo + (hiI + 1) * step
+    val := pLo + loI * step
+    array.clear(hvnLo)
+    array.clear(hvnHi)
+    mean = total / rows
+    inRun = false
+    for r = 0 to rows - 1
+        isH = array.get(rowVol, r) > hvnMult * mean
+        if isH and not inRun
+            array.push(hvnLo, pLo + r * step)
+            array.push(hvnHi, pLo + (r + 1) * step)
+            inRun := true
+        else if isH and inRun
+            array.set(hvnHi, array.size(hvnHi) - 1, pLo + (r + 1) * step)
+        else
+            inRun := false
+
+nZones = array.size(hvnLo)
+
+// ═══════════════ Nearest targets (HVN edges, POC, VA edges) ═══════════════
+float tgtUp = na
+float tgtDn = na
+cands = array.new_float()
+if nZones > 0
+    for k = 0 to nZones - 1
+        array.push(cands, array.get(hvnLo, k))
+        array.push(cands, array.get(hvnHi, k))
+if not na(poc)
+    array.push(cands, poc)
+    array.push(cands, vah)
+    array.push(cands, val)
+if array.size(cands) > 0 and atrV > 0
+    for k = 0 to array.size(cands) - 1
+        x = array.get(cands, k)
+        dist = math.abs(x - close) / atrV
+        if dist >= minTgtAtr and dist <= maxTgtAtr
+            if x > close and (na(tgtUp) or x < tgtUp)
+                tgtUp := x
+            if x < close and (na(tgtDn) or x > tgtDn)
+                tgtDn := x
+inHvn = false
+if nZones > 0
+    for k = 0 to nZones - 1
+        if close >= array.get(hvnLo, k) and close <= array.get(hvnHi, k)
+            inHvn := true
+
+// ═══════════════ Weak-volume pool → break → HUNT ═══════════════
+var int poolStart = na
+winRng  = ta.highest(high, weakBars) - ta.lowest(low, weakBars)
+weakCnt = math.sum(weak ? 1 : 0, weakBars)
+if na(poolStart) and weakCnt >= weakBars - 1 and winRng <= poolMaxAtr * atrV
+    poolStart := bar_index - weakBars + 1
+
+int brk = 0
+int hunt = 0
+float poolH = na
+float poolL = na
+float huntTgt = na
+if not na(poolStart)
+    len = math.min(bar_index - poolStart, 400)
+    if len >= 1
+        float ph = high[1]
+        float pl = low[1]
+        for i = 1 to len
+            ph := math.max(ph, high[i])
+            pl := math.min(pl, low[i])
+        poolH := ph
+        poolL := pl
+    if not na(poolH) and close > poolH and strongVol
+        brk := 1
+    else if not na(poolL) and close < poolL and strongVol
+        brk := -1
+    if brk != 0
+        t = brk > 0 ? tgtUp : tgtDn
+        emaOk = brk > 0 ? emaF > emaS : emaF < emaS
+        if not na(t) and adxV >= adxStrong and emaOk
+            hunt := brk
+            huntTgt := t
+        poolStart := na
+    else if not na(poolH) and ((poolH - poolL) > poolMaxAtr * atrV or strongVol)
+        poolStart := na   // pool widened, or strong volume inside it without a break: pool is over
+
+// ═══════════════ Rejection at an HVN edge ═══════════════
+int rej = 0
+rngB = high - low
+if rngB > 0 and nZones > 0
+    uw = (high - math.max(open, close)) / rngB
+    lw = (math.min(open, close) - low) / rngB
+    for k = 0 to nZones - 1
+        zLo = array.get(hvnLo, k)
+        zHi = array.get(hvnHi, k)
+        if low < zLo and high >= zLo and close < zLo and close < open and uw >= wickPct
+            rej := -1
+        if low <= zHi and high > zHi and close > zHi and close > open and lw >= wickPct
+            rej := 1
+
+// ═══════════════ Plots & candles ═══════════════
+plot(showVA ? poc : na, "POC", cPoc, wPoc, plot.style_stepline)
+plot(showVA ? vah : na, "VAH", cVah, wVah, plot.style_stepline)
+plot(showVA ? val : na, "VAL", cVal, wVal, plot.style_stepline)
+barcolor(not colorBars ? na : strongVol ? (close >= open ? cStrongUp : cStrongDn) : weak ? cWeakBar : na, title="شموع حسب الفوليوم")
+plotshape(brk == 1 and hunt == 0, "كسر التجمع صعود", shape.triangleup, location.belowbar, cBrkUp, size=size.tiny)
+plotshape(brk == -1 and hunt == 0, "كسر التجمع هبوط", shape.triangledown, location.abovebar, cBrkDn, size=size.tiny)
+plotshape(hunt == 1, "HUNT صعود", shape.labelup, location.belowbar, cHuntUp, text="HUNT", textcolor=cHuntTx)
+plotshape(hunt == -1, "HUNT هبوط", shape.labeldown, location.abovebar, cHuntDn, text="HUNT", textcolor=cHuntTx)
+plotshape(rej == 1, "ارتداد صاعد", shape.circle, location.belowbar, cRejUp, size=size.tiny)
+plotshape(rej == -1, "ارتداد هابط", shape.circle, location.abovebar, cRejDn, size=size.tiny)
+if hunt != 0
+    hc = hunt > 0 ? cHuntUpL : cHuntDnL
+    line.new(bar_index, huntTgt, bar_index + lenHunt, huntTgt, color=hc, style=line.style_dashed, width=wHunt)
+    label.new(bar_index + lenHunt, huntTgt, "الهدف " + str.tostring(huntTgt, format.mintick), style=label.style_none, textcolor=hc, size=size.small)
+
+// weak pool as a dotted box
+var box poolBox = na
+if not na(poolStart) and not na(poolH)
+    if na(poolBox)
+        poolBox := box.new(poolStart, math.max(poolH, high), bar_index, math.min(poolL, low), border_color=cPool, border_style=line.style_dotted, bgcolor=cPoolBg, text="تجمع ضعيف", text_color=cPool, text_size=size.tiny, text_valign=text.align_top, text_halign=text.align_left)
+    else
+        box.set_right(poolBox, bar_index)
+        box.set_top(poolBox, math.max(poolH, high))
+        box.set_bottom(poolBox, math.min(poolL, low))
+else
+    poolBox := na
+
+// ═══════════════ Top-3 volume zones (ranked, % of zone volume) ═══════════════
+var box[] topBoxes = array.new_box()
+if showTop and barstate.islast and nZones > 0
+    for b in topBoxes
+        box.delete(b)
+    array.clear(topBoxes)
+    zv = array.new_float()
+    for k = 0 to nZones - 1
+        sv = 0.0
+        for r = 0 to rows - 1
+            mid = pLo + (r + 0.5) * step
+            if mid >= array.get(hvnLo, k) and mid <= array.get(hvnHi, k)
+                sv += array.get(rowVol, r)
+        array.push(zv, sv)
+    totZ = array.sum(zv)
+    idx = array.sort_indices(zv, order.descending)
+    cols = array.from(cZone1, cZone2, cZone3)
+    for j = 0 to math.min(3, nZones) - 1
+        k = array.get(idx, j)
+        c = array.get(cols, j)
+        pct = totZ > 0 ? math.round(100 * array.get(zv, k) / totZ) : 0
+        txt = "#" + str.tostring(j + 1) + "  " + str.tostring(pct) + "%  " + str.tostring(array.get(hvnLo, k), format.mintick) + "-" + str.tostring(array.get(hvnHi, k), format.mintick)
+        array.push(topBoxes, box.new(bar_index - lookback, array.get(hvnHi, k), bar_index + 15, array.get(hvnLo, k), border_color=color.new(c, zoneBord), bgcolor=color.new(c, zoneFill), text=txt, text_color=c, text_size=size.small, text_halign=text.align_right, text_valign=text.align_top))
+
+// ═══════════════ Early warning (optional, no proven edge alone) ═══════════════
+eHH = ta.highest(high, earlyN)[1]
+eLL = ta.lowest(low, earlyN)[1]
+early = close > eHH and vr >= earlyVol and emaF > emaS ? 1 : close < eLL and vr >= earlyVol and emaF < emaS ? -1 : 0
+plotshape(showEarly and early == 1 and hunt == 0, "إنذار مبكر صعود", shape.diamond, location.belowbar, cEarlyUp, size=size.tiny)
+plotshape(showEarly and early == -1 and hunt == 0, "إنذار مبكر هبوط", shape.diamond, location.abovebar, cEarlyDn, size=size.tiny)
+alertcondition(early != 0, "إنذار مبكر", "اختراق بفوليوم مع اتجاه المتوسطات")
+
+// ═══════════════ Status panel (Arabic) ═══════════════
+tPos = tblPos == "أعلى اليمين" ? position.top_right : tblPos == "أعلى اليسار" ? position.top_left : tblPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
+var table tbl = table.new(tPos, 3, 11, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
+if barstate.isfirst
+    table.merge_cells(tbl, 0, 0, 1, 0)
+    table.merge_cells(tbl, 0, 7, 1, 7)
+    table.merge_cells(tbl, 0, 10, 2, 10)
+tSz = tblSize == "صغير جدا" ? size.tiny : tblSize == "صغير" ? size.small : tblSize == "كبير" ? size.large : size.normal
+
+// last HUNT bookkeeping: direction, target, invalidation, bar, status
+var int   lastHunt = 0
+var float lastTgt  = na
+var float lastStop = na
+var int   lastBar  = na
+var int   lastStat = 0          // 0 active, 1 target reached, -1 stopped
+if hunt != 0
+    lastHunt := hunt
+    lastTgt  := huntTgt
+    lastStop := hunt > 0 ? poolL : poolH
+    lastBar  := bar_index
+    lastStat := 0
+else if lastHunt != 0 and lastStat == 0
+    if (lastHunt > 0 and high >= lastTgt) or (lastHunt < 0 and low <= lastTgt)
+        lastStat := 1
+    else if not na(lastStop) and ((lastHunt > 0 and close < lastStop) or (lastHunt < 0 and close > lastStop))
+        lastStat := -1
+
+fmt(float x) => str.tostring(x, format.mintick)
+ck(bool ok, string t) => (ok ? "✓ " : "✗ ") + t
+meter(int k, int n) =>
+    string m = ""
+    for i = 1 to n
+        m := m + (i <= k ? "■" : "□")
+    m
+
+if barstate.islast
+    // --- trend
+    strongT = adxV >= adxStrong
+    tTxt = trendDir > 0 ? (strongT ? "صاعد قوي" : "صاعد") : trendDir < 0 ? (strongT ? "هابط قوي" : "هابط") : "عرضي"
+    tCol = trendDir > 0 ? cTblUp : trendDir < 0 ? cTblDn : cTblLbl
+    tSub = "قوة الترند " + str.tostring(adxV, "#") + (adxV < 20 ? "، ضعيفة" : adxV < adxStrong ? "، متوسطة" : "، قوية")
+    tMet = int(math.min(5, math.max(1, math.ceil(adxV / 10))))
+    // --- volume
+    vTxt = weak ? "ضعيف" : vr >= 2.5 ? "قوي جدا" : strongVol ? "قوي" : "عادي"
+    vCol = weak ? cTblWeak : strongVol ? cTblUp : cTblTxt
+    vMet = int(math.min(5, math.max(1, math.round(vr * 1.5))))
+    vSub = str.tostring(vr, "#.0") + " أضعاف المتوسط"
+    // --- where is price: which ranked zone contains it
+    string zTxt = "خارج المناطق"
+    string zSub = "بين المناطق، الحركة غالبا أسرع"
+    color  zCol = cTblTxt
+    if nZones > 0 and step > 0
+        zvol = array.new_float()
+        for k = 0 to nZones - 1
+            sv = 0.0
+            for r = 0 to rows - 1
+                mid = pLo + (r + 0.5) * step
+                if mid >= array.get(hvnLo, k) and mid <= array.get(hvnHi, k)
+                    sv += array.get(rowVol, r)
+            array.push(zvol, sv)
+        totZ = array.sum(zvol)
+        ord = array.sort_indices(zvol, order.descending)
+        for j = 0 to nZones - 1
+            k = array.get(ord, j)
+            if close >= array.get(hvnLo, k) and close <= array.get(hvnHi, k)
+                zTxt := "داخل المنطقة " + str.tostring(j + 1)
+                zSub := fmt(array.get(hvnLo, k)) + " إلى " + fmt(array.get(hvnHi, k)) + "، " + str.tostring(math.round(100 * array.get(zvol, k) / totZ)) + "% من التداول"
+                zCol := j == 0 ? cZone1 : j == 1 ? cZone2 : j == 2 ? cZone3 : cTblTxt
+    // --- distances
+    upSub = na(tgtUp) ? "لا توجد منطقة قريبة فوق" : "فوق السعر بـ " + fmt(tgtUp - close) + " نقطة، " + str.tostring(100 * (tgtUp - close) / close, "#.00") + "%"
+    dnSub = na(tgtDn) ? "لا توجد منطقة قريبة تحت" : "تحت السعر بـ " + fmt(close - tgtDn) + " نقطة، " + str.tostring(100 * (close - tgtDn) / close, "#.00") + "%"
+    // --- last signal
+    sTxt = lastHunt == 0 ? "لا توجد" : (lastHunt > 0 ? "صعود ← " : "هبوط ← ") + fmt(lastTgt)
+    sCol = lastHunt > 0 ? cTblUp : lastHunt < 0 ? cTblDn : cTblLbl
+    sSub = lastHunt == 0 ? "-" : "قبل " + str.tostring(bar_index - lastBar) + " شمعة، " + (lastStat == 1 ? "الهدف تحقق ✓" : lastStat == -1 ? "ألغيت ✗" : "ما زالت نشطة")
+    // --- HUNT readiness (4 conditions)
+    dir  = trendDir != 0 ? trendDir : (brk != 0 ? brk : 0)
+    c1 = not na(poolStart) or brk != 0
+    c2 = dir > 0 ? not na(tgtUp) : dir < 0 ? not na(tgtDn) : (not na(tgtUp) or not na(tgtDn))
+    c3 = brk != 0
+    c4 = adxV >= adxStrong and trendDir != 0
+    nOk = (c1 ? 1 : 0) + (c2 ? 1 : 0) + (c3 ? 1 : 0) + (c4 ? 1 : 0)
+    // --- verdict
+    string vd = ""
+    color  vdc = cTblWeak
+    if hunt != 0
+        vd := "إشارة HUNT " + (hunt > 0 ? "صعود" : "هبوط") + " الآن، الهدف " + fmt(huntTgt) + "، الإلغاء عند " + fmt(lastStop)
+        vdc := hunt > 0 ? cTblUp : cTblDn
+    else if not na(poolStart) and not na(poolH)
+        vd := "انتظار: تجمع ضعيف بين " + fmt(poolL) + " و " + fmt(poolH) + ". راقب الكسر بفوليوم قوي"
+    else if c4 and ((trendDir > 0 and na(tgtUp)) or (trendDir < 0 and na(tgtDn)))
+        vd := "ترند قوي والمسار مفتوح، لا توجد منطقة فوليوم قريبة أمام السعر"
+        vdc := trendDir > 0 ? cTblUp : cTblDn
+    else if inHvn and adxV < 20
+        vd := "انتظار: السعر داخل منطقة كثيفة بدون ترند. راقب إغلاقا " + (na(tgtUp) ? "" : "فوق " + fmt(tgtUp)) + (na(tgtUp) or na(tgtDn) ? "" : " أو ") + (na(tgtDn) ? "" : "تحت " + fmt(tgtDn)) + " بفوليوم قوي"
+    else
+        vd := "حياد: لا توجد إشارة. أقرب مقاومة " + (na(tgtUp) ? "-" : fmt(tgtUp)) + " وأقرب دعم " + (na(tgtDn) ? "-" : fmt(tgtDn))
+        vdc := cTblTxt
+
+    // --- draw (column 2 = label on the right, column 1 = value, column 0 = meter)
+    table.cell(tbl, 2, 0, "مناطق الفوليوم", text_color=cTblTxt, text_size=tSz, text_halign=text.align_right)
+    table.cell(tbl, 0, 0, syminfo.ticker + " · " + timeframe.period + " · " + fmt(close), text_color=cTblLbl, text_size=tSz, text_halign=text.align_left)
+    rowsL = array.from("الاتجاه", "الفوليوم", "موقع السعر", "أقرب مقاومة", "أقرب دعم", "آخر إشارة")
+    vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, zTxt + "\n" + zSub, (na(tgtUp) ? "-" : fmt(tgtUp)) + "\n" + upSub, (na(tgtDn) ? "-" : fmt(tgtDn)) + "\n" + dnSub, sTxt + "\n" + sSub)
+    cols  = array.from(tCol, vCol, zCol, cTblAbv, cTblBlw, sCol)
+    for i = 0 to 5
+        table.cell(tbl, 2, i + 1, array.get(rowsL, i), text_color=cTblLbl, text_size=tSz, text_halign=text.align_right)
+        table.cell(tbl, 1, i + 1, array.get(vals, i), text_color=array.get(cols, i), text_size=tSz, text_halign=text.align_right)
+    table.cell(tbl, 0, 1, meter(tMet, 5), text_color=tCol, text_size=tSz)
+    table.cell(tbl, 0, 2, meter(vMet, 5), text_color=vCol, text_size=tSz)
+    table.cell(tbl, 2, 7, "جاهزية إشارة HUNT", text_color=cTblTxt, text_size=tSz, text_halign=text.align_right)
+    table.cell(tbl, 0, 7, str.tostring(nOk) + " / 4", text_color=nOk >= 3 ? cTblUp : cTblWeak, text_size=tSz)
+    table.cell(tbl, 2, 8, ck(c1, "تجمع فوليوم ضعيف"), text_color=c1 ? cTblUp : cTblLbl, text_size=tSz, text_halign=text.align_right)
+    table.cell(tbl, 0, 8, "", text_size=tSz)
+    table.cell(tbl, 1, 8, ck(c2, "هدف أمام السعر"), text_color=c2 ? cTblUp : cTblLbl, text_size=tSz, text_halign=text.align_right)
+    table.cell(tbl, 2, 9, ck(c3, "كسر بفوليوم قوي"), text_color=c3 ? cTblUp : cTblLbl, text_size=tSz, text_halign=text.align_right)
+    table.cell(tbl, 0, 9, "", text_size=tSz)
+    table.cell(tbl, 1, 9, ck(c4, "ترند قوي"), text_color=c4 ? cTblUp : cTblLbl, text_size=tSz, text_halign=text.align_right)
+    table.cell(tbl, 0, 10, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=color.new(vdc, 85))
+
+// ═══════════════ Heatmap: Viridis strips, no smoothing ═══════════════
+// colour = volume at that price over the last `lookback` bars, relative to the busiest row (0..1)
+viridis(float x) =>
+    t = (x - heatMin) / math.max(1.0 - heatMin, 0.000001)
+    t < 0.25 ? color.from_gradient(t, 0.00, 0.25, cH1, cH2) : t < 0.50 ? color.from_gradient(t, 0.25, 0.50, cH2, cH3) : t < 0.75 ? color.from_gradient(t, 0.50, 0.75, cH3, cH4) : color.from_gradient(t, 0.75, 1.00, cH4, cH5)
+
+var box[] heatBoxes = array.new_box()
+if showHeat and ready and bar_index % heatStep == 0
+    mx = array.max(rowVol)
+    gap = step * stripGap
+    if mx > 0
+        for r = 0 to rows - 1
+            v = array.get(rowVol, r)
+            x = v / mx
+            if x >= heatMin
+                c = color.new(viridis(x), heatAlpha)
+                if showDelta and x >= deltaMin and v > 0
+                    share = array.get(rowBuy, r) / v - 0.5
+                    if math.abs(share) >= deltaEdge
+                        c := color.new(share > 0 ? cBuy : cSell, math.max(heatAlpha, 100 - math.min(75, math.abs(share) * 200)))
+                array.push(heatBoxes, box.new(bar_index, pLo + (r + 1) * step - gap, bar_index + heatStep - 1, pLo + r * step + gap, border_color=color.new(color.black, 100), bgcolor=c))
+    while array.size(heatBoxes) > 400
+        box.delete(array.shift(heatBoxes))
+
+// colour legend
+var table legend = table.new(position.bottom_center, 7, 2, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
+if showLegend and showHeat and barstate.islast
+    table.cell(legend, 0, 0, "أقل", text_color=cTblLbl, text_size=size.tiny)
+    stops = array.from(cH1, cH2, cH3, cH4, cH5)
+    for k = 0 to 4
+        table.cell(legend, k + 1, 0, "   ", bgcolor=array.get(stops, k), text_size=size.tiny)
+    table.cell(legend, 6, 0, "فوليوم أعلى", text_color=cTblLbl, text_size=size.tiny)
+    if showDelta
+        table.cell(legend, 0, 1, "   ", bgcolor=cBuy, text_size=size.tiny)
+        table.cell(legend, 1, 1, "مشترون", text_color=cTblLbl, text_size=size.tiny)
+        table.cell(legend, 3, 1, "   ", bgcolor=cSell, text_size=size.tiny)
+        table.cell(legend, 4, 1, "بائعون", text_color=cTblLbl, text_size=size.tiny)
+
+// ═══════════════ Up/Down split profile at the right edge ═══════════════
+var box[] splitBoxes = array.new_box()
+if showSplit and barstate.islast and ready
+    for b in splitBoxes
+        box.delete(b)
+    array.clear(splitBoxes)
+    mxS = array.max(rowVol)
+    pocRow = array.indexof(rowVol, mxS)
+    x0 = bar_index + vpOffset
+    if mxS > 0
+        for r = 0 to rows - 1
+            buyV = array.get(rowBuy, r)
+            sellV = array.get(rowVol, r) - buyV
+            u = int(vpWidth * buyV / mxS)
+            d = int(vpWidth * sellV / mxS)
+            isPoc = vpHighlightPoc and r == pocRow
+            cu = isPoc ? cVpPoc : cVpUp
+            cdn = isPoc ? cVpPoc : cVpDn
+            if u > 0
+                array.push(splitBoxes, box.new(x0, pLo + (r + 1) * step, x0 + u, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=color.new(cu, vpAlpha)))
+            if d > 0
+                array.push(splitBoxes, box.new(x0 + u, pLo + (r + 1) * step, x0 + u + d, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=color.new(cdn, vpAlpha)))
+
+// ═══════════════ Alerts ═══════════════
+alertcondition(weak and not weak[1], "فوليوم ضعيف", "الفوليوم أصبح ضعيفا")
+alertcondition(brk != 0, "كسر التجمع الضعيف", "انكسر تجمع الفوليوم الضعيف بفوليوم قوي")
+alertcondition(hunt != 0, "إشارة HUNT", "كسر تجمع ضعيف في ترند قوي: استهداف منطقة فوليوم سابقة")
+alertcondition(rej != 0, "ارتداد من منطقة", "السعر ارتد من منطقة فوليوم عالي")
