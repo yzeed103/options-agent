@@ -342,3 +342,54 @@ for part, keys in (("G_sheet_1.png", list(G)[:6]), ("G_sheet_2.png", list(G)[6:]
         a.imshow(imread(OUT / f"{k}.png")[30:860, 40:1520]); a.set_title(f"{k.split('_')[0]} · {G[k]['name']}", color=TX, fontsize=12)
     fig.tight_layout(); fig.savefig(OUT / part, dpi=90, facecolor=BG); plt.close(fig)
 print("ok4")
+
+
+# ------------------------------------------------------------------ H: recommended = viridis strips, no smoothing
+def recommended(with_delta, fname):
+    fig, ax = base("SPY · 1H · Volume Zones  ·  heatmap: Viridis strips (no smoothing)" + ("  +  delta layer" if with_delta else ""))
+    vir = LinearSegmentedColormap.from_list("vir", ["#440154", "#3b528b", "#21918c", "#5ec962", "#fde725"])
+    thr = .40
+    for i in range(N):
+        for k in np.flatnonzero(gf[i] >= thr):
+            ax.add_patch(Rectangle((i - .45, edges_f[k] + hgt_f * .18), .9, hgt_f * .64,
+                                   color=vir((gf[i, k] - thr) / (1 - thr)), alpha=.40 if with_delta else .70, lw=0, zorder=1))
+    if with_delta:
+        tot_ = hb + hs; mx = tot_.max(axis=1, keepdims=True); mx[mx == 0] = 1
+        inten = tot_ / mx; share = np.where(tot_ > 0, hb / np.maximum(tot_, 1e-9), .5)
+        for i in range(N):
+            for k in np.flatnonzero(inten[i] >= .55):
+                d = share[i, k] - .5
+                if abs(d) < .12: continue
+                ax.add_patch(Rectangle((i - .45, edges_f[k] + hgt_f * .18), .9, hgt_f * .64,
+                                       color="#00e676" if d > 0 else "#ff1744", alpha=min(.75, abs(d) * 2), lw=0, zorder=1.5))
+    for rank, (zl, zh, zv) in enumerate(zones, 1):
+        c = ["#e8432d", "#e8a33d", "#e8d547"][rank - 1]
+        ax.hlines([zl, zh], -.5, N + 8, color=c, lw=.9, alpha=.85, zorder=2)
+        ax.text(N + 7.5, zh, f"#{rank}  {zv / tot * 100:.0f}%  {zl:.1f}-{zh:.1f}", color=c, ha="right", va="bottom", fontsize=9, weight="bold", zorder=6)
+    candles(ax, regime_color); pools_as_boxes(ax); signals(ax)
+    pc = w.poc.to_numpy().copy(); pc[1:][np.abs(np.diff(pc)) > yr * .1] = np.nan
+    ax.step(range(N), pc, where="mid", color="#ff4d4d", lw=1, alpha=.8, zorder=4)
+    x0, y0 = .80, .36
+    ax.add_patch(FancyBboxPatch((x0 - .01, y0 - .045 * len(rows_) - .01), .2, .045 * len(rows_) + .02, transform=ax.transAxes,
+                                boxstyle="round,pad=0.005", fc="#1e222d", ec=GR, zorder=7))
+    for k, (a, b, c) in enumerate(rows_):
+        ax.text(x0, y0 - .045 * k - .03, a, transform=ax.transAxes, color="#9598a1", fontsize=9, zorder=8)
+        ax.text(x0 + .185, y0 - .045 * k - .03, b, transform=ax.transAxes, color=c, fontsize=9, ha="right", weight="bold", zorder=8)
+    # legend in empty lower-left area
+    lx, ly = .015, .03
+    ax.add_patch(FancyBboxPatch((lx - .005, ly - .01), .30 if not with_delta else .36, .13 if not with_delta else .17, transform=ax.transAxes,
+                                boxstyle="round,pad=0.005", fc="#1e222d", ec=GR, zorder=7))
+    cax = fig.add_axes([0.04 + lx * .9 + .005, 0.08 + (ly + .085) * .84, 0.18, 0.012]); cax.imshow(np.linspace(0, 1, 256)[None], aspect="auto", cmap=vir); cax.set_axis_off(); cax.set_zorder(9)
+    ax.text(lx, ly + .065, "less volume  →  more volume (last 120 bars)", transform=ax.transAxes, color="#b2b5be", fontsize=8.5, zorder=8)
+    ax.text(lx, ly + .025, "bright candle = strong vol   dark = weak   dotted = weak pool", transform=ax.transAxes, color="#9598a1", fontsize=8, zorder=8)
+    if with_delta:
+        ax.text(lx, ly + .105, "■", transform=ax.transAxes, color="#00e676", fontsize=10, zorder=8)
+        ax.text(lx + .015, ly + .105, "buyers dominate", transform=ax.transAxes, color="#b2b5be", fontsize=8.5, zorder=8)
+        ax.text(lx + .14, ly + .105, "■", transform=ax.transAxes, color="#ff1744", fontsize=10, zorder=8)
+        ax.text(lx + .155, ly + .105, "sellers dominate", transform=ax.transAxes, color="#b2b5be", fontsize=8.5, zorder=8)
+    fig.savefig(OUT / fname, dpi=110, facecolor=BG); plt.close(fig)
+
+
+recommended(False, "H_recommended.png")
+recommended(True, "H_recommended_delta.png")
+print("ok5")
