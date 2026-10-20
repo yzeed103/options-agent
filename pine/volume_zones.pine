@@ -39,6 +39,73 @@ deltaEdge  = input.float(0.12, "Buy/Sell layer: min imbalance (0-0.5)", group="H
 showLegend = input.bool(true, "Show colour legend", group="Heatmap")
 showSplit  = input.bool(true, "Show Up/Down profile on last bar", group="Heatmap")
 
+// ═══════════════ Colours & styles ═══════════════
+G_LN = "Colours · Lines"
+cPoc     = input.color(#ff4d4d, "POC", inline="poc", group=G_LN)
+wPoc     = input.int(1, "width", minval=1, maxval=5, inline="poc", group=G_LN)
+cVah     = input.color(color.new(color.gray, 40), "VAH", inline="vah", group=G_LN)
+wVah     = input.int(1, "width", minval=1, maxval=5, inline="vah", group=G_LN)
+cVal     = input.color(color.new(color.gray, 40), "VAL", inline="val", group=G_LN)
+wVal     = input.int(1, "width", minval=1, maxval=5, inline="val", group=G_LN)
+cHuntUpL = input.color(color.lime, "Target line up", inline="tl", group=G_LN)
+cHuntDnL = input.color(color.red, "down", inline="tl", group=G_LN)
+wHunt    = input.int(2, "Target line width", minval=1, maxval=5, inline="tw", group=G_LN)
+lenHunt  = input.int(20, "length (bars)", minval=5, maxval=200, inline="tw", group=G_LN)
+
+G_CD = "Colours · Candles"
+colorBars = input.bool(true, "Colour candles by volume regime", group=G_CD)
+cStrongUp = input.color(#00e676, "Strong volume up", inline="sv", group=G_CD)
+cStrongDn = input.color(#ff1744, "down", inline="sv", group=G_CD)
+cWeakBar  = input.color(#4a4e5a, "Weak volume candle", group=G_CD)
+
+G_SG = "Colours · Signals"
+cBrkUp   = input.color(color.teal, "Pool break up", inline="pb", group=G_SG)
+cBrkDn   = input.color(color.maroon, "down", inline="pb", group=G_SG)
+cHuntUp  = input.color(color.lime, "HUNT up", inline="hu", group=G_SG)
+cHuntDn  = input.color(color.red, "down", inline="hu", group=G_SG)
+cHuntTx  = input.color(color.black, "HUNT text", group=G_SG)
+cRejUp   = input.color(color.aqua, "Rejection bull", inline="rj", group=G_SG)
+cRejDn   = input.color(color.orange, "bear", inline="rj", group=G_SG)
+cPool    = input.color(color.new(color.gray, 20), "Weak pool box", inline="pl", group=G_SG)
+cPoolBg  = input.color(color.new(color.gray, 100), "fill", inline="pl", group=G_SG)
+
+G_ZN = "Colours · Top-3 zones"
+cZone1   = input.color(#e8432d, "#1", inline="z", group=G_ZN)
+cZone2   = input.color(#e8a33d, "#2", inline="z", group=G_ZN)
+cZone3   = input.color(#e8d547, "#3", inline="z", group=G_ZN)
+zoneFill = input.int(90, "Zone fill transparency", minval=0, maxval=100, group=G_ZN)
+zoneBord = input.int(20, "Zone border transparency", minval=0, maxval=100, group=G_ZN)
+
+G_TB = "Colours · Table"
+cTblBg   = input.color(#1e222d, "Background", inline="tb", group=G_TB)
+cTblBd   = input.color(#2a2e39, "Border", inline="tb", group=G_TB)
+cTblLbl  = input.color(color.gray, "Labels", inline="tt", group=G_TB)
+cTblTxt  = input.color(color.white, "Values", inline="tt", group=G_TB)
+cTblUp   = input.color(#00e676, "Up / strong", inline="tc", group=G_TB)
+cTblDn   = input.color(#ff5252, "Down", inline="tc", group=G_TB)
+cTblWeak = input.color(#f0c419, "Weak", inline="tc", group=G_TB)
+cTblAbv  = input.color(#ff9800, "Zone above", inline="tz", group=G_TB)
+cTblBlw  = input.color(#00bcd4, "Zone below", inline="tz", group=G_TB)
+tblSize  = input.string("Normal", "Table text size", options=["Tiny", "Small", "Normal", "Large"], group=G_TB)
+
+G_HM = "Colours · Heatmap"
+cH1 = input.color(#440154, "Low", inline="h", group=G_HM)
+cH2 = input.color(#3b528b, "", inline="h", group=G_HM)
+cH3 = input.color(#21918c, "", inline="h", group=G_HM)
+cH4 = input.color(#5ec962, "", inline="h", group=G_HM)
+cH5 = input.color(#fde725, "High", inline="h", group=G_HM)
+cBuy  = input.color(#00e676, "Buyers", inline="d", group=G_HM)
+cSell = input.color(#ff1744, "Sellers", inline="d", group=G_HM)
+
+G_VP = "Colours · Volume profile"
+cVpUp    = input.color(#2f7fd1, "Up / buy volume", inline="vp", group=G_VP)
+cVpDn    = input.color(#c9a227, "Down / sell volume", inline="vp", group=G_VP)
+vpAlpha  = input.int(20, "Profile transparency", minval=0, maxval=95, group=G_VP)
+vpWidth  = input.int(40, "Profile max width (bars)", minval=5, maxval=200, group=G_VP)
+vpOffset = input.int(8, "Profile offset from last bar", minval=0, maxval=100, group=G_VP)
+cVpPoc   = input.color(#ff4d4d, "Profile POC row", inline="vpp", group=G_VP)
+vpHighlightPoc = input.bool(true, "highlight", inline="vpp", group=G_VP)
+
 // ═══════════════ Volume / trend ═══════════════
 atrV  = ta.atr(14)
 volMa = ta.sma(volume, volMaLen)
@@ -194,25 +261,26 @@ if rngB > 0 and nZones > 0
             rej := 1
 
 // ═══════════════ Plots & candles ═══════════════
-plot(showVA ? poc : na, "POC", color.new(#ff4d4d, 0), 1, plot.style_stepline)
-plot(showVA ? vah : na, "VAH", color.new(color.gray, 40), 1, plot.style_stepline)
-plot(showVA ? val : na, "VAL", color.new(color.gray, 40), 1, plot.style_stepline)
-barcolor(strongVol ? (close >= open ? #00e676 : #ff1744) : weak ? #4a4e5a : na, title="Volume regime candles")
-plotshape(brk == 1 and hunt == 0, "Pool break up", shape.triangleup, location.belowbar, color.teal, size=size.tiny)
-plotshape(brk == -1 and hunt == 0, "Pool break down", shape.triangledown, location.abovebar, color.maroon, size=size.tiny)
-plotshape(hunt == 1, "HUNT up", shape.labelup, location.belowbar, color.lime, text="HUNT", textcolor=color.black)
-plotshape(hunt == -1, "HUNT down", shape.labeldown, location.abovebar, color.red, text="HUNT", textcolor=color.white)
-plotshape(rej == 1, "HVN rejection bull", shape.circle, location.belowbar, color.aqua, size=size.tiny)
-plotshape(rej == -1, "HVN rejection bear", shape.circle, location.abovebar, color.orange, size=size.tiny)
+plot(showVA ? poc : na, "POC", cPoc, wPoc, plot.style_stepline)
+plot(showVA ? vah : na, "VAH", cVah, wVah, plot.style_stepline)
+plot(showVA ? val : na, "VAL", cVal, wVal, plot.style_stepline)
+barcolor(not colorBars ? na : strongVol ? (close >= open ? cStrongUp : cStrongDn) : weak ? cWeakBar : na, title="Volume regime candles")
+plotshape(brk == 1 and hunt == 0, "Pool break up", shape.triangleup, location.belowbar, cBrkUp, size=size.tiny)
+plotshape(brk == -1 and hunt == 0, "Pool break down", shape.triangledown, location.abovebar, cBrkDn, size=size.tiny)
+plotshape(hunt == 1, "HUNT up", shape.labelup, location.belowbar, cHuntUp, text="HUNT", textcolor=cHuntTx)
+plotshape(hunt == -1, "HUNT down", shape.labeldown, location.abovebar, cHuntDn, text="HUNT", textcolor=cHuntTx)
+plotshape(rej == 1, "HVN rejection bull", shape.circle, location.belowbar, cRejUp, size=size.tiny)
+plotshape(rej == -1, "HVN rejection bear", shape.circle, location.abovebar, cRejDn, size=size.tiny)
 if hunt != 0
-    line.new(bar_index, huntTgt, bar_index + 20, huntTgt, color=hunt > 0 ? color.lime : color.red, style=line.style_dashed, width=2)
-    label.new(bar_index + 20, huntTgt, "TARGET " + str.tostring(huntTgt, format.mintick), style=label.style_none, textcolor=hunt > 0 ? color.lime : color.red, size=size.small)
+    hc = hunt > 0 ? cHuntUpL : cHuntDnL
+    line.new(bar_index, huntTgt, bar_index + lenHunt, huntTgt, color=hc, style=line.style_dashed, width=wHunt)
+    label.new(bar_index + lenHunt, huntTgt, "TARGET " + str.tostring(huntTgt, format.mintick), style=label.style_none, textcolor=hc, size=size.small)
 
 // weak pool as a dotted box
 var box poolBox = na
 if not na(poolStart) and not na(poolH)
     if na(poolBox)
-        poolBox := box.new(poolStart, math.max(poolH, high), bar_index, math.min(poolL, low), border_color=color.new(color.gray, 20), border_style=line.style_dotted, bgcolor=color.new(color.gray, 100), text="weak pool", text_color=color.gray, text_size=size.tiny, text_valign=text.align_top, text_halign=text.align_left)
+        poolBox := box.new(poolStart, math.max(poolH, high), bar_index, math.min(poolL, low), border_color=cPool, border_style=line.style_dotted, bgcolor=cPoolBg, text="weak pool", text_color=cPool, text_size=size.tiny, text_valign=text.align_top, text_halign=text.align_left)
     else
         box.set_right(poolBox, bar_index)
         box.set_top(poolBox, math.max(poolH, high))
@@ -236,17 +304,18 @@ if showTop and barstate.islast and nZones > 0
         array.push(zv, sv)
     totZ = array.sum(zv)
     idx = array.sort_indices(zv, order.descending)
-    cols = array.from(#e8432d, #e8a33d, #e8d547)
+    cols = array.from(cZone1, cZone2, cZone3)
     for j = 0 to math.min(3, nZones) - 1
         k = array.get(idx, j)
         c = array.get(cols, j)
         pct = totZ > 0 ? math.round(100 * array.get(zv, k) / totZ) : 0
         txt = "#" + str.tostring(j + 1) + "  " + str.tostring(pct) + "%  " + str.tostring(array.get(hvnLo, k), format.mintick) + "-" + str.tostring(array.get(hvnHi, k), format.mintick)
-        array.push(topBoxes, box.new(bar_index - lookback, array.get(hvnHi, k), bar_index + 15, array.get(hvnLo, k), border_color=color.new(c, 20), bgcolor=color.new(c, 90), text=txt, text_color=c, text_size=size.small, text_halign=text.align_right, text_valign=text.align_top))
+        array.push(topBoxes, box.new(bar_index - lookback, array.get(hvnHi, k), bar_index + 15, array.get(hvnLo, k), border_color=color.new(c, zoneBord), bgcolor=color.new(c, zoneFill), text=txt, text_color=c, text_size=size.small, text_halign=text.align_right, text_valign=text.align_top))
 
 // ═══════════════ Status table ═══════════════
 tPos = tblPos == "Top Right" ? position.top_right : tblPos == "Top Left" ? position.top_left : tblPos == "Bottom Left" ? position.bottom_left : position.bottom_right
-var table tbl = table.new(tPos, 2, 7, bgcolor=#1e222d, border_color=#2a2e39, border_width=1)
+var table tbl = table.new(tPos, 2, 7, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
+tSz = tblSize == "Tiny" ? size.tiny : tblSize == "Small" ? size.small : tblSize == "Large" ? size.large : size.normal
 var int lastHunt = 0
 var float lastTgt = na
 if hunt != 0
@@ -255,32 +324,32 @@ if hunt != 0
 if barstate.islast
     strongT = adxV >= adxStrong
     tTxt = trendDir > 0 ? (strongT ? "STRONG UP" : "UP") : trendDir < 0 ? (strongT ? "STRONG DOWN" : "DOWN") : "RANGE"
-    tCol = trendDir > 0 ? #00e676 : trendDir < 0 ? #ff5252 : color.gray
+    tCol = trendDir > 0 ? cTblUp : trendDir < 0 ? cTblDn : cTblLbl
     vTxt = str.tostring(vr, "#.00") + "x " + (weak ? "WEAK" : strongVol ? "STRONG" : "NORMAL")
-    vCol = weak ? #f0c419 : strongVol ? #00e676 : color.white
+    vCol = weak ? cTblWeak : strongVol ? cTblUp : cTblTxt
     zTxt = inHvn ? "HVN (slow)" : "outside zone"
     sTxt = not na(poolStart) ? "WEAK POOL forming" : lastHunt != 0 ? "HUNT -> " + str.tostring(lastTgt, format.mintick) : "-"
-    sCol = lastHunt > 0 ? #00e676 : lastHunt < 0 ? #ff5252 : color.white
-    table.cell(tbl, 0, 0, "Trend", text_color=color.gray)
-    table.cell(tbl, 1, 0, tTxt, text_color=tCol)
-    table.cell(tbl, 0, 1, "ADX", text_color=color.gray)
-    table.cell(tbl, 1, 1, str.tostring(adxV, "#"), text_color=color.white)
-    table.cell(tbl, 0, 2, "Volume", text_color=color.gray)
-    table.cell(tbl, 1, 2, vTxt, text_color=vCol)
-    table.cell(tbl, 0, 3, "In zone", text_color=color.gray)
-    table.cell(tbl, 1, 3, zTxt, text_color=color.white)
-    table.cell(tbl, 0, 4, "Zone above", text_color=color.gray)
-    table.cell(tbl, 1, 4, na(tgtUp) ? "-" : str.tostring(tgtUp, format.mintick), text_color=#ff9800)
-    table.cell(tbl, 0, 5, "Zone below", text_color=color.gray)
-    table.cell(tbl, 1, 5, na(tgtDn) ? "-" : str.tostring(tgtDn, format.mintick), text_color=#00bcd4)
-    table.cell(tbl, 0, 6, "Signal", text_color=color.gray)
-    table.cell(tbl, 1, 6, sTxt, text_color=sCol)
+    sCol = lastHunt > 0 ? cTblUp : lastHunt < 0 ? cTblDn : cTblTxt
+    table.cell(tbl, 0, 0, "Trend", text_color=cTblLbl, text_size=tSz)
+    table.cell(tbl, 1, 0, tTxt, text_color=tCol, text_size=tSz)
+    table.cell(tbl, 0, 1, "ADX", text_color=cTblLbl, text_size=tSz)
+    table.cell(tbl, 1, 1, str.tostring(adxV, "#"), text_color=cTblTxt, text_size=tSz)
+    table.cell(tbl, 0, 2, "Volume", text_color=cTblLbl, text_size=tSz)
+    table.cell(tbl, 1, 2, vTxt, text_color=vCol, text_size=tSz)
+    table.cell(tbl, 0, 3, "In zone", text_color=cTblLbl, text_size=tSz)
+    table.cell(tbl, 1, 3, zTxt, text_color=cTblTxt, text_size=tSz)
+    table.cell(tbl, 0, 4, "Zone above", text_color=cTblLbl, text_size=tSz)
+    table.cell(tbl, 1, 4, na(tgtUp) ? "-" : str.tostring(tgtUp, format.mintick), text_color=cTblAbv, text_size=tSz)
+    table.cell(tbl, 0, 5, "Zone below", text_color=cTblLbl, text_size=tSz)
+    table.cell(tbl, 1, 5, na(tgtDn) ? "-" : str.tostring(tgtDn, format.mintick), text_color=cTblBlw, text_size=tSz)
+    table.cell(tbl, 0, 6, "Signal", text_color=cTblLbl, text_size=tSz)
+    table.cell(tbl, 1, 6, sTxt, text_color=sCol, text_size=tSz)
 
 // ═══════════════ Heatmap: Viridis strips, no smoothing ═══════════════
 // colour = volume at that price over the last `lookback` bars, relative to the busiest row (0..1)
 viridis(float x) =>
     t = (x - heatMin) / math.max(1.0 - heatMin, 0.000001)
-    t < 0.25 ? color.from_gradient(t, 0.00, 0.25, #440154, #3b528b) : t < 0.50 ? color.from_gradient(t, 0.25, 0.50, #3b528b, #21918c) : t < 0.75 ? color.from_gradient(t, 0.50, 0.75, #21918c, #5ec962) : color.from_gradient(t, 0.75, 1.00, #5ec962, #fde725)
+    t < 0.25 ? color.from_gradient(t, 0.00, 0.25, cH1, cH2) : t < 0.50 ? color.from_gradient(t, 0.25, 0.50, cH2, cH3) : t < 0.75 ? color.from_gradient(t, 0.50, 0.75, cH3, cH4) : color.from_gradient(t, 0.75, 1.00, cH4, cH5)
 
 var box[] heatBoxes = array.new_box()
 if showHeat and ready and bar_index % heatStep == 0
@@ -295,24 +364,24 @@ if showHeat and ready and bar_index % heatStep == 0
                 if showDelta and x >= deltaMin and v > 0
                     share = array.get(rowBuy, r) / v - 0.5
                     if math.abs(share) >= deltaEdge
-                        c := color.new(share > 0 ? #00e676 : #ff1744, math.max(heatAlpha, 100 - math.min(75, math.abs(share) * 200)))
+                        c := color.new(share > 0 ? cBuy : cSell, math.max(heatAlpha, 100 - math.min(75, math.abs(share) * 200)))
                 array.push(heatBoxes, box.new(bar_index, pLo + (r + 1) * step - gap, bar_index + heatStep - 1, pLo + r * step + gap, border_color=color.new(color.black, 100), bgcolor=c))
     while array.size(heatBoxes) > 400
         box.delete(array.shift(heatBoxes))
 
 // colour legend
-var table legend = table.new(position.bottom_center, 7, 2, bgcolor=#1e222d, border_color=#2a2e39, border_width=1)
+var table legend = table.new(position.bottom_center, 7, 2, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
 if showLegend and showHeat and barstate.islast
-    table.cell(legend, 0, 0, "less", text_color=color.gray, text_size=size.tiny)
-    stops = array.from(#440154, #3b528b, #21918c, #5ec962, #fde725)
+    table.cell(legend, 0, 0, "less", text_color=cTblLbl, text_size=size.tiny)
+    stops = array.from(cH1, cH2, cH3, cH4, cH5)
     for k = 0 to 4
         table.cell(legend, k + 1, 0, "   ", bgcolor=array.get(stops, k), text_size=size.tiny)
-    table.cell(legend, 6, 0, "more volume", text_color=color.gray, text_size=size.tiny)
+    table.cell(legend, 6, 0, "more volume", text_color=cTblLbl, text_size=size.tiny)
     if showDelta
-        table.cell(legend, 0, 1, "   ", bgcolor=#00e676, text_size=size.tiny)
-        table.cell(legend, 1, 1, "buyers", text_color=color.gray, text_size=size.tiny)
-        table.cell(legend, 3, 1, "   ", bgcolor=#ff1744, text_size=size.tiny)
-        table.cell(legend, 4, 1, "sellers", text_color=color.gray, text_size=size.tiny)
+        table.cell(legend, 0, 1, "   ", bgcolor=cBuy, text_size=size.tiny)
+        table.cell(legend, 1, 1, "buyers", text_color=cTblLbl, text_size=size.tiny)
+        table.cell(legend, 3, 1, "   ", bgcolor=cSell, text_size=size.tiny)
+        table.cell(legend, 4, 1, "sellers", text_color=cTblLbl, text_size=size.tiny)
 
 // ═══════════════ Up/Down split profile at the right edge ═══════════════
 var box[] splitBoxes = array.new_box()
@@ -320,18 +389,22 @@ if showSplit and barstate.islast and ready
     for b in splitBoxes
         box.delete(b)
     array.clear(splitBoxes)
-    width = 40
     mxS = array.max(rowVol)
+    pocRow = array.indexof(rowVol, mxS)
+    x0 = bar_index + vpOffset
     if mxS > 0
         for r = 0 to rows - 1
             buyV = array.get(rowBuy, r)
             sellV = array.get(rowVol, r) - buyV
-            u = int(width * buyV / mxS)
-            d = int(width * sellV / mxS)
+            u = int(vpWidth * buyV / mxS)
+            d = int(vpWidth * sellV / mxS)
+            isPoc = vpHighlightPoc and r == pocRow
+            cu = isPoc ? cVpPoc : cVpUp
+            cdn = isPoc ? cVpPoc : cVpDn
             if u > 0
-                array.push(splitBoxes, box.new(bar_index + 8, pLo + (r + 1) * step, bar_index + 8 + u, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=color.new(#2f7fd1, 20)))
+                array.push(splitBoxes, box.new(x0, pLo + (r + 1) * step, x0 + u, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=color.new(cu, vpAlpha)))
             if d > 0
-                array.push(splitBoxes, box.new(bar_index + 8 + u, pLo + (r + 1) * step, bar_index + 8 + u + d, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=color.new(#c9a227, 20)))
+                array.push(splitBoxes, box.new(x0 + u, pLo + (r + 1) * step, x0 + u + d, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=color.new(cdn, vpAlpha)))
 
 // ═══════════════ Alerts ═══════════════
 alertcondition(weak and not weak[1], "Weak volume", "Volume turned weak")
