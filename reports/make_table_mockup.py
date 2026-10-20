@@ -2,10 +2,8 @@
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch, Rectangle
-import arabic_reshaper
-from bidi.algorithm import get_display
 
-def ar(t): return get_display(arabic_reshaper.reshape(t))
+def ar(t): return t  # matplotlib >= 3.10 shapes Arabic and applies bidi itself
 BG, PANEL, GR, TX, MUT = "#131722", "#1e222d", "#2a2e39", "#d1d4dc", "#8a8f9c"
 G, R, Y, O, C, P = "#00e676", "#ff5252", "#f0c419", "#ff9800", "#00bcd4", "#b388ff"
 plt.rcParams["font.family"] = "DejaVu Sans"
