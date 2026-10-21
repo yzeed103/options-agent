@@ -62,3 +62,17 @@ configuration), `intraday_walkforward_picks.csv`, `intraday_search.txt` (console
 both symbols with a profit factor near the 1.3 bar, and the best cross-symbol candidate (15m ORB with
 volume filter and a 2-ATR trail) trades only ~1.5-1.8 times a week. It is the only idea worth re-testing on a
 longer history (15m exports cover about 3x more time for the same bar limit).
+
+## Final check: unseen year on 15m (SPY_15m.csv, QQQ_15m.csv, 2025-04-01 .. 2026-04-10, 258 sessions)
+All rules were fixed before this data existed and applied unchanged (`intraday_unseen_test.py`, `.txt`, `.csv`).
+
+| Rule | SPY PF | QQQ PF | Trades/week |
+|---|---|---|---|
+| ORB first 2 h, RVOL >= 1.2, stop 0.75, trail 2 ATR (best candidate) | 0.93 | 0.92 | ~1.6 |
+| ORB first 2 h, RVOL >= 1.2, stop 0.75, target 6 ATR | 0.91 | 0.99 | ~1.6 |
+| POC reclaim with trend, trail 2 ATR | 0.83 | 0.80 | ~3.6 |
+| VWAP reclaim first 2 h, trail 2 ATR | 0.82 | 0.79 | ~4.0 |
+
+Every rule loses on the unseen year, on both symbols, even at normal costs (worse at 2x costs).
+**Final conclusion: within this search space (8 setups x 12 filters x 24 far-target exits) there is no
+5m/15m rule for SPY/QQQ with a durable edge. The earlier positive numbers were noise from short samples.**

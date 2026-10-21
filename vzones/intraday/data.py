@@ -8,9 +8,11 @@ COLS = ["open", "high", "low", "close", "volume"]
 def load_csv(path, tz_in: str = "America/New_York", time_col: str = "time") -> pd.DataFrame:
     """CSV with columns time,open,high,low,close,volume. Naive times are taken as `tz_in`."""
     df = pd.read_csv(path)
-    t = pd.to_datetime(df[time_col], utc=False)
-    if t.dt.tz is None:
-        t = t.dt.tz_localize(tz_in, ambiguous="infer", nonexistent="shift_forward")
+    raw = df[time_col].astype(str)
+    if raw.str.contains(r"[+-]\d{2}:?\d{2}$|Z$", regex=True).any():
+        t = pd.to_datetime(raw, utc=True)                      # offsets present (e.g. -04:00 / -05:00 across DST)
+    else:
+        t = pd.to_datetime(raw).dt.tz_localize(tz_in, ambiguous="infer", nonexistent="shift_forward")
     df.index = t.dt.tz_convert("America/New_York")
     return df[COLS].astype(float).sort_index()
 

@@ -1,0 +1,17 @@
+symbol,rule,cost,trades,per_week,win_rate,pf,expectancy_r,avg_win_r,avg_loss_r,max_dd_r,total_r
+SPY,"ORB first 2h, RVOL>=1.2, stop 0.75, trail 2 ATR (best cross-symbol idea)",1x,81,1.52,0.284,0.93,-0.053,2.39,-1.02,-14.42,-4.3
+SPY,"ORB first 2h, RVOL>=1.2, stop 0.75, trail 2 ATR (best cross-symbol idea)",2x,81,1.52,0.259,0.77,-0.186,2.45,-1.11,-17.74,-15.1
+SPY,"ORB first 2h, RVOL>=1.2, stop 0.75, target 6 ATR",1x,81,1.52,0.235,0.91,-0.072,3.24,-1.09,-22.25,-5.8
+SPY,"ORB first 2h, RVOL>=1.2, stop 0.75, target 6 ATR",2x,81,1.52,0.235,0.78,-0.205,3.09,-1.21,-26.28,-16.6
+SPY,"POC reclaim with trend, stop 0.75, trail 2 ATR (SPY frozen 15m)",1x,188,3.52,0.287,0.83,-0.132,2.22,-1.08,-33.62,-24.8
+SPY,"POC reclaim with trend, stop 0.75, trail 2 ATR (SPY frozen 15m)",2x,188,3.52,0.266,0.67,-0.291,2.25,-1.21,-62.88,-54.7
+SPY,"VWAP reclaim, first 2h, stop 0.75, trail 2 ATR (QQQ frozen 15m)",1x,222,4.16,0.27,0.82,-0.143,2.36,-1.07,-42.3,-31.7
+SPY,"VWAP reclaim, first 2h, stop 0.75, trail 2 ATR (QQQ frozen 15m)",2x,222,4.16,0.261,0.68,-0.285,2.31,-1.2,-72.23,-63.2
+QQQ,"ORB first 2h, RVOL>=1.2, stop 0.75, trail 2 ATR (best cross-symbol idea)",1x,86,1.61,0.314,0.92,-0.052,2.02,-1.0,-14.89,-4.5
+QQQ,"ORB first 2h, RVOL>=1.2, stop 0.75, trail 2 ATR (best cross-symbol idea)",2x,86,1.61,0.291,0.8,-0.15,2.07,-1.06,-17.12,-12.9
+QQQ,"ORB first 2h, RVOL>=1.2, stop 0.75, target 6 ATR",1x,86,1.61,0.279,0.99,-0.01,2.76,-1.08,-14.38,-0.9
+QQQ,"ORB first 2h, RVOL>=1.2, stop 0.75, target 6 ATR",2x,86,1.61,0.279,0.87,-0.108,2.65,-1.18,-17.73,-9.3
+QQQ,"POC reclaim with trend, stop 0.75, trail 2 ATR (SPY frozen 15m)",1x,194,3.63,0.299,0.8,-0.141,1.92,-1.02,-44.97,-27.4
+QQQ,"POC reclaim with trend, stop 0.75, trail 2 ATR (SPY frozen 15m)",2x,194,3.63,0.294,0.68,-0.258,1.84,-1.13,-64.82,-50.0
+QQQ,"VWAP reclaim, first 2h, stop 0.75, trail 2 ATR (QQQ frozen 15m)",1x,207,3.87,0.256,0.79,-0.16,2.39,-1.04,-50.12,-33.1
+QQQ,"VWAP reclaim, first 2h, stop 0.75, trail 2 ATR (QQQ frozen 15m)",2x,207,3.87,0.256,0.68,-0.271,2.28,-1.15,-72.26,-56.1
