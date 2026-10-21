@@ -649,7 +649,7 @@ drawRange(int t0, int t1, int boxEnd, bool live) =>
                 array.push(whLv, L)
                 if showWhale
                     isPoc = math.abs(L - pocV) <= 3 * stW
-                    array.push(whLines, line.new(t0, L, boxEnd, L, xloc=xloc.bar_time, extend=extend.right, color=isPoc ? cWhPoc : cWhLv, width=isPoc ? 2 : 1, style=live ? line.style_dashed : line.style_solid))
+                    array.push(whLines, line.new(t0, L, boxEnd, L, xloc=xloc.bar_time, extend=extend.right, color=isPoc ? cWhPoc : cWhLv, width=isPoc ? 2 : 1))
         if showWBox
             array.push(whBoxA, box.new(t0, pHiW, boxEnd, pLoW, xloc=xloc.bar_time, border_color=cWhBoxB, border_style=line.style_dashed, bgcolor=cWhBoxF, text=live ? "منطقة قيد التكوين" : "", text_color=cWhBoxB, text_size=size.small, text_valign=text.align_top, text_halign=text.align_left))
     nUsed
