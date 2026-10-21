@@ -76,3 +76,21 @@ All rules were fixed before this data existed and applied unchanged (`intraday_u
 Every rule loses on the unseen year, on both symbols, even at normal costs (worse at 2x costs).
 **Final conclusion: within this search space (8 setups x 12 filters x 24 far-target exits) there is no
 5m/15m rule for SPY/QQQ with a durable edge. The earlier positive numbers were noise from short samples.**
+
+## Multi-symbol test: SPY, QQQ, COST, INTU, JNJ, UNH, HOOD (15m, 2025-04-01 .. 2026-10-21)
+(`multi_symbol_search.py`, `.txt`, `multi_symbol_grid.csv`, `multi_symbol_test.csv`)
+
+**A) Earlier rules, unchanged, on the 5 new stocks (profit factor):** ORB with 6-ATR target 0.78-1.24,
+ORB with trail 0.83-1.38, POC reclaim 0.78-1.13, VWAP reclaim 0.78-1.01. No rule is above 1 on all five.
+
+**B) Pooled search:** 2,289 configurations chosen on 2025-04-01..2026-03-09 across all 7 symbols, requiring
+>= 5 of 7 symbols positive, >= 1 trade/week/symbol and average win >= 2R (37 qualified). Top 3 frozen and run once
+on 2026-03-10..2026-10-21:
+
+| Frozen rule | Test trades | Pooled PF | Pooled PF at 2x costs |
+|---|---|---|---|
+| Acceptance above/below prior-day value, with trend, first 2 h, stop 1 ATR, trail 3 ATR | 224 | 0.98 | 0.91 |
+| ORB with trend, first 2 h, stop 0.75 ATR, target 2.5 ATR | 257 | 1.01 | 0.91 |
+| Acceptance outside prior-day value, with trend, first 2 h, stop 1 ATR, target 2.5 ATR | 224 | 0.88 | 0.81 |
+
+Break-even at best, losing after realistic costs. Same conclusion on individual stocks as on the indices.

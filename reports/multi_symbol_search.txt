@@ -1,0 +1,33 @@
+=== A) pre-registered rules on the 5 new stocks (full period, unchanged)
+symbol                    COST  HOOD  INTU   JNJ   UNH
+rule                                                  
+ORB 2h RVOL1.2 tgt6       1.17  1.19  1.24  0.78  1.00
+ORB 2h RVOL1.2 trail2     0.87  1.07  1.38  0.97  0.83
+POC reclaim trend trail2  0.89  0.84  1.13  0.78  0.90
+VWAP reclaim 2h trail2    0.86  0.78  1.01  0.81  0.94
+
+=== B) pooled search
+dev: 2025-04-01 .. 2026-03-09   test: 2026-03-10 .. 2026-10-21
+configs tested: 2289 | eligible (>=5/7 symbols positive, >=1 trade/week/symbol, avg win>=2R): 37
+    setup trend  window  rvol_min  x_stop_atr x_target  x_target_atr  x_min_target_r  x_trail_atr  x_partial_r  trades  per_week_per_symbol    pf  exp_r  avg_win  pos_symbols  median_sym_exp
+va_accept  with first2h       0.0        1.00      atr          10.0             NaN          3.0          NaN     410                1.195 1.186  0.123    2.285            5           0.320
+      orb  with first2h       0.0        0.75      atr           2.5             NaN          NaN          NaN     390                1.137 1.234  0.167    2.686            6           0.266
+va_accept  with first2h       0.0        1.00      atr           2.5             NaN          NaN          NaN     410                1.195 1.176  0.116    2.080            5           0.202
+va_accept   any first2h       0.0        1.00      atr           6.0             NaN          NaN          NaN     661                1.927 1.178  0.123    2.482            6           0.192
+      orb  with     all       0.0        0.75      atr           2.5             NaN          NaN          NaN     404                1.178 1.203  0.146    2.695            6           0.125
+va_accept  with first2h       0.0        0.75      atr          10.0             NaN          2.0          NaN     410                1.195 1.110  0.075    2.494            5           0.122
+      orb   any     all       1.2        0.75      atr           2.5             NaN          NaN          NaN     512                1.493 1.127  0.092    2.621            5           0.120
+      orb   any first2h       1.2        0.75      atr           2.5             NaN          NaN          NaN     498                1.452 1.142  0.102    2.619            5           0.114
+va_accept   any first2h       0.0        0.75      atr           6.0             NaN          NaN          NaN     661                1.927 1.136  0.106    3.281            5           0.110
+      orb  with first2h       0.0        0.75      atr           4.0             NaN          NaN          NaN     390                1.137 1.172  0.127    2.914            5           0.109
+
+=== Frozen top 3 -> TEST period (touched once)
+                                                                rule cost  trades  pooled_pf  pooled_exp_r  avg_win   win   SPY   QQQ  COST  INTU   JNJ   UNH  HOOD
+va_accept with first2h rvol0.0 stop1.0 atr 10.0 trail3.0 minR- part-   1x     224       0.98        -0.013     2.54 0.277 -0.45  0.04 -0.05 -0.02 -0.41  0.28  0.46
+va_accept with first2h rvol0.0 stop1.0 atr 10.0 trail3.0 minR- part-   2x     224       0.91        -0.069     2.49 0.277 -0.58 -0.05 -0.11 -0.05 -0.47  0.23  0.44
+        orb with first2h rvol0.0 stop0.75 atr 2.5 trail- minR- part-   1x     257       1.01         0.006     2.50 0.300  0.35 -0.11 -0.15  0.23 -0.14  0.13 -0.26
+        orb with first2h rvol0.0 stop0.75 atr 2.5 trail- minR- part-   2x     257       0.91        -0.069     2.45 0.296  0.20 -0.20 -0.23  0.20 -0.21  0.07 -0.28
+   va_accept with first2h rvol0.0 stop1.0 atr 2.5 trail- minR- part-   1x     224       0.88        -0.090     2.11 0.299 -0.31 -0.07 -0.05 -0.06 -0.30 -0.00  0.13
+   va_accept with first2h rvol0.0 stop1.0 atr 2.5 trail- minR- part-   2x     224       0.81        -0.146     2.05 0.299 -0.44 -0.16 -0.11 -0.09 -0.36 -0.05  0.11
+
+(per-symbol columns = expectancy in R per trade on the test period)
