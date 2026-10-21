@@ -448,9 +448,10 @@ if newSess
     dnCnt := 0
     taFired := false
     taDir := 0
-array.push(sH, high)
-array.push(sL, low)
-array.push(sV, nz(volume))
+if timeframe.isintraday
+    array.push(sH, high)
+    array.push(sL, low)
+    array.push(sV, nz(volume))
 
 int taFire = 0
 if not na(pdVAH)
