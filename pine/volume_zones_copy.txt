@@ -35,8 +35,9 @@ cEarlyUp   = input.color(color.new(#00e676, 30), "لون الإنذار صعود
 cEarlyDn   = input.color(color.new(#ff5252, 30), "هبوط", inline="ea", group="الإنذار المبكر")
 
 showHeat   = input.bool(true, "إظهار الخريطة الحرارية", group="الخريطة الحرارية")
-heatMode   = input.string("لونان", "شكل الخريطة", options=["لونان", "تدرج خمسة ألوان"], group="الخريطة الحرارية")
-heatHigh   = input.float(0.70, "مستوى التداول العالي (0 إلى 1)", minval=0.05, maxval=1.0, group="الخريطة الحرارية")
+heatMode   = input.string("ثلاثة ألوان", "شكل الخريطة", options=["ثلاثة ألوان", "لونان", "تدرج خمسة ألوان"], group="الخريطة الحرارية")
+heatMid    = input.float(0.60, "بداية التداول المتوسط (0 إلى 1)", minval=0.05, maxval=1.0, group="الخريطة الحرارية")
+heatHigh   = input.float(0.80, "بداية التداول العالي (0 إلى 1)", minval=0.05, maxval=1.0, group="الخريطة الحرارية")
 heatStep   = input.int(1, "عرض عمود الخريطة (شموع)", minval=1, group="الخريطة الحرارية")
 heatMin    = input.float(0.40, "إخفاء المستويات الأقل من (0 إلى 1)", minval=0.0, maxval=0.95, group="الخريطة الحرارية")
 heatAlpha  = input.int(20, "شفافية الخريطة", minval=0, maxval=95, group="الخريطة الحرارية")
@@ -97,8 +98,11 @@ cTblBlw  = input.color(#00bcd4, "المنطقة الأدنى", inline="tz", grou
 tblSize  = input.string("عادي", "حجم خط الجدول", options=["صغير جدا", "صغير", "عادي", "كبير"], group=G_TB)
 
 G_HM = "ألوان · الخريطة الحرارية"
-cMed  = input.color(#4a5568, "تداول متوسط", inline="k", group=G_HM)
-cHigh = input.color(#ff4d4d, "تداول عالي", inline="k", group=G_HM)
+cLow3 = input.color(#1a2a6c, "ثلاثة ألوان: منخفض", inline="k3", group=G_HM)
+cMid3 = input.color(#7b3fbf, "متوسط", inline="k3", group=G_HM)
+cTop3 = input.color(#ff4fa3, "عالي", inline="k3", group=G_HM)
+cMed  = input.color(#4a5568, "لونان: متوسط", inline="k", group=G_HM)
+cHigh = input.color(#ff4d4d, "عالي", inline="k", group=G_HM)
 cH1 = input.color(#440154, "تدرج: الأقل", inline="h", group=G_HM)
 cH2 = input.color(#3b528b, "", inline="h", group=G_HM)
 cH3 = input.color(#21918c, "", inline="h", group=G_HM)
@@ -458,7 +462,8 @@ viridis(float x) =>
 
 // Ribbons: a row that keeps the same colour level on consecutive bars is drawn as ONE
 // continuous box (extended to the right) instead of many small boxes.
-twoCol = heatMode == "لونان"
+twoCol   = heatMode == "لونان"
+threeCol = heatMode == "ثلاثة ألوان"
 var box[]   heatBoxes = array.new_box()
 var box[]   rowBox    = array.new_box(100, na)     // current ribbon per row
 var int[]   rowKey    = array.new_int(100, 0)      // colour key of that ribbon
@@ -473,7 +478,10 @@ if showHeat and ready and bar_index % heatStep == 0
             int key = 0
             color c = na
             if x >= heatMin
-                if twoCol
+                if threeCol
+                    key := x >= heatHigh ? 7 : x >= heatMid ? 6 : 5
+                    c := color.new(x >= heatHigh ? cTop3 : x >= heatMid ? cMid3 : cLow3, heatAlpha)
+                else if twoCol
                     key := x >= heatHigh ? 2 : 1
                     c := color.new(x >= heatHigh ? cHigh : cMed, heatAlpha)
                 else
@@ -504,7 +512,14 @@ if showHeat and ready and bar_index % heatStep == 0
 // colour legend
 var table legend = table.new(position.bottom_center, 7, 2, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
 if showLegend and showHeat and barstate.islast
-    if twoCol
+    if threeCol
+        table.cell(legend, 0, 0, "   ", bgcolor=cLow3, text_size=size.tiny)
+        table.cell(legend, 1, 0, "منخفض", text_color=cTblLbl, text_size=size.tiny)
+        table.cell(legend, 2, 0, "   ", bgcolor=cMid3, text_size=size.tiny)
+        table.cell(legend, 3, 0, "متوسط", text_color=cTblLbl, text_size=size.tiny)
+        table.cell(legend, 4, 0, "   ", bgcolor=cTop3, text_size=size.tiny)
+        table.cell(legend, 5, 0, "عالي", text_color=cTblLbl, text_size=size.tiny)
+    else if twoCol
         table.cell(legend, 0, 0, "   ", bgcolor=cMed, text_size=size.tiny)
         table.cell(legend, 1, 0, "تداول متوسط", text_color=cTblLbl, text_size=size.tiny)
         table.cell(legend, 2, 0, "   ", bgcolor=cHigh, text_size=size.tiny)
