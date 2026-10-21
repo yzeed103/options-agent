@@ -52,7 +52,7 @@ showDelta  = input.bool(false, "طبقة الشراء والبيع", group="ال
 deltaMin   = input.float(0.55, "طبقة الشراء والبيع: فقط المستويات الأعلى من (0 إلى 1)", minval=0.0, maxval=1.0, step=0.05, tooltip="قيمة بين 0 و 1: نسبة من أعلى مستوى تداول. 0.5 = نصف أعلى مستوى", group="الخريطة الحرارية")
 deltaEdge  = input.float(0.12, "طبقة الشراء والبيع: أقل فرق مطلوب (0 إلى 0.5)", minval=0.0, maxval=0.5, step=0.02, tooltip="0.12 = أحد الطرفين يملك 62% على الأقل", group="الخريطة الحرارية")
 showLegend = input.bool(true, "إظهار مفتاح الألوان", group="الخريطة الحرارية")
-showSplit  = input.bool(true, "إظهار البروفايل على اليمين", group="الخريطة الحرارية")
+showSplit  = input.bool(false, "إظهار البروفايل على اليمين", group="الخريطة الحرارية")
 
 // ═══════════════ Colours & styles ═══════════════
 G_LN = "ألوان · الخطوط"
@@ -513,10 +513,12 @@ alertcondition(taFire != 0, "تنبيه اتجاه", "ثبات السعر خار
 // statistically proven (random levels can do as well). Use as an experiment.
 G_WH = "مستويات الحيتان (تحت الاختبار)"
 showWhale = input.bool(true, "إظهار مستويات الحيتان", group=G_WH)
-whLen     = input.int(20, "طول المنطقة العرضية (أيام)", minval=5, maxval=60, group=G_WH)
+whLen     = input.int(10, "أقل عدد أيام لتكوين المنطقة العرضية", minval=3, maxval=60, tooltip="أول هذه الأيام تحدد القمة والقاع. بعدها أي إغلاق يومي فوق القمة أو تحت القاع يُنهي المنطقة ويبدأ منطقة جديدة", group=G_WH)
 whMult    = input.float(6.0, "أقصى مدى للمنطقة (ATR يومي)", minval=1.0, maxval=20, step=0.5, group=G_WH)
-whRows    = input.int(200, "عدد صفوف البروفايل", minval=50, maxval=300, group=G_WH)
-whMode    = input.string("تلقائي", "طريقة تحديد المنطقة العرضية", options=["تلقائي", "يدوي"], tooltip="تلقائي: آخر منطقة عرضية على الشموع اليومية. يدوي: أنت تحدد بداية المنطقة ونهايتها", group=G_WH)
+whRows    = input.int(200, "عدد صفوف البروفايل (العواميد الأفقية)", minval=20, maxval=500, tooltip="البروفايل لا يُرسم على الشارت. يُستخدم فقط لحساب خطوط الحيتان. صفوف أكثر = خطوط أدق", group=G_WH)
+whKeep    = input.int(2, "عدد المناطق العرضية المكتملة المعروضة", minval=1, maxval=5, group=G_WH)
+showLive  = input.bool(true, "حساب المنطقة الحالية (قيد التكوين)", group=G_WH)
+whMode    = input.string("تلقائي", "طريقة تحديد المنطقة العرضية", options=["تلقائي", "يدوي"], tooltip="تلقائي: كل منطقة عرضية على الشموع اليومية تنتهي بكسر القمة أو القاع. يدوي: أنت تحدد بداية المنطقة ونهايتها", group=G_WH)
 whStartT  = input.time(timestamp("2026-05-01T00:00:00"), "بداية المنطقة (الوضع اليدوي)", group=G_WH)
 whEndT    = input.time(timestamp("2026-10-01T00:00:00"), "نهاية المنطقة (الوضع اليدوي)", group=G_WH)
 whSrcTF   = input.timeframe("60", "فريم بيانات البروفايل", tooltip="البروفايل يُبنى دائما من هذا الفريم، فتبقى الخطوط ثابتة عند تغيير فريم الشارت", group=G_WH)
@@ -583,30 +585,31 @@ var float[] wdL = array.new_float()
 var float[] wdC = array.new_float()
 var int[]   wdT = array.new_int()
 var float dATR = na
-var bool  inRange = false
-var int   rIdx = na
+var int   rIdx = na            // first day of the range being formed (index into wd*)
 var float rHi = na
 var float rLo = na
+var int[]   rgT0 = array.new_int()   // completed sideways ranges: start / end time
+var int[]   rgT1 = array.new_int()
 var float[] whLv = array.new_float()
-var float[] whPocA = array.new_float(1, na)
 var line[] whLines = array.new_line()
 var box[] whBoxA = array.new_box()
 var int   lastBuildT = na
+var int   lastLiveDraw = na
 
-// build the profile of [t0, t1) from the source bars, pick peaks, redraw
-buildWhale(int t0, int t1) =>
+// profile of [t0, t1) from the source bars (never drawn), tall columns -> lines. Appends to whLv / whLines / whBoxA.
+drawRange(int t0, int t1, int boxEnd, bool live) =>
     int nUsed = 0
     float pHiW = na
     float pLoW = na
     nSrc = array.size(wsT)
-    for j = 0 to math.max(nSrc - 1, 0)
-        if nSrc == 0
-            break
-        tj = array.get(wsT, j)
+    int j0 = 0
+    while j0 < nSrc
+        tj = array.get(wsT, j0)
         if tj >= t0 and tj < t1
-            pHiW := na(pHiW) ? array.get(wsH, j) : math.max(pHiW, array.get(wsH, j))
-            pLoW := na(pLoW) ? array.get(wsL, j) : math.min(pLoW, array.get(wsL, j))
+            pHiW := na(pHiW) ? array.get(wsH, j0) : math.max(pHiW, array.get(wsH, j0))
+            pLoW := na(pLoW) ? array.get(wsL, j0) : math.min(pLoW, array.get(wsL, j0))
             nUsed += 1
+        j0 += 1
     if nUsed > 10 and pHiW > pLoW
         stW = (pHiW - pLoW) / whRows
         pv = array.new_float(whRows, 0.0)
@@ -627,74 +630,100 @@ buildWhale(int t0, int t1) =>
         for q = 0 to whRows - 1
             array.set(sm, q, (array.get(pv, math.max(0, q - 1)) + array.get(pv, q) + array.get(pv, math.min(whRows - 1, q + 1))) / 3)
         mS = array.avg(sm)
+        nb = math.max(2, int(whRows / 40))      // peak neighbourhood scales with the number of rows
         cand = array.new_float()
         candV = array.new_float()
         for q = 0 to whRows - 1
             isMax = true
-            for z = math.max(0, q - 5) to math.min(whRows - 1, q + 5)
+            for z = math.max(0, q - nb) to math.min(whRows - 1, q + nb)
                 if array.get(sm, z) > array.get(sm, q)
                     isMax := false
             if isMax and array.get(sm, q) >= 1.3 * mS
                 array.push(cand, pLoW + (q + 0.5) * stW)
                 array.push(candV, array.get(sm, q))
-        array.clear(whLv)
+        pocV = pLoW + (array.indexof(pv, array.max(pv)) + 0.5) * stW
         if array.size(cand) > 0
             ordW = array.sort_indices(candV, order.descending)
             for j = 0 to math.min(whPeaks, array.size(cand)) - 1
-                array.push(whLv, array.get(cand, array.get(ordW, j)))
-        pocV = pLoW + (array.indexof(pv, array.max(pv)) + 0.5) * stW
-        array.set(whPocA, 0, pocV)
-        for ln in whLines
-            line.delete(ln)
-        array.clear(whLines)
-        if showWhale and array.size(whLv) > 0
-            for j = 0 to array.size(whLv) - 1
-                L = array.get(whLv, j)
-                isPoc = math.abs(L - pocV) <= 3 * stW
-                array.push(whLines, line.new(t0, L, t1, L, xloc=xloc.bar_time, extend=extend.right, color=isPoc ? cWhPoc : cWhLv, width=isPoc ? 2 : 1))
-        for bx in whBoxA
-            box.delete(bx)
-        array.clear(whBoxA)
+                L = array.get(cand, array.get(ordW, j))
+                array.push(whLv, L)
+                if showWhale
+                    isPoc = math.abs(L - pocV) <= 3 * stW
+                    array.push(whLines, line.new(t0, L, boxEnd, L, xloc=xloc.bar_time, extend=extend.right, color=isPoc ? cWhPoc : cWhLv, width=isPoc ? 2 : 1, style=live ? line.style_dashed : line.style_solid))
         if showWBox
-            array.push(whBoxA, box.new(t0, pHiW, t1, pLoW, xloc=xloc.bar_time, border_color=cWhBoxB, border_style=line.style_dashed, bgcolor=cWhBoxF))
+            array.push(whBoxA, box.new(t0, pHiW, boxEnd, pLoW, xloc=xloc.bar_time, border_color=cWhBoxB, border_style=line.style_dashed, bgcolor=cWhBoxF, text=live ? "منطقة قيد التكوين" : "", text_color=cWhBoxB, text_size=size.small, text_valign=text.align_top, text_halign=text.align_left))
     nUsed
+
+// delete everything and redraw the completed ranges (+ the live one if liveT0 is not na)
+redrawAll(int liveT0) =>
+    for ln in whLines
+        line.delete(ln)
+    array.clear(whLines)
+    for bx in whBoxA
+        box.delete(bx)
+    array.clear(whBoxA)
+    array.clear(whLv)
+    int k = 0
+    while k < array.size(rgT0)
+        drawRange(array.get(rgT0, k), array.get(rgT1, k), array.get(rgT1, k), false)
+        k += 1
+    if not na(liveT0)
+        drawRange(liveT0, time_close + 1, time, true)
+    k
 
 int lastDayT = array.size(wdT) > 0 ? array.get(wdT, array.size(wdT) - 1) : na
 if whMode == "يدوي"
     // manual: rebuild once the source bars cover the chosen end time (and on the last bar for live data)
     int newestSrcT = array.size(wsT) > 0 ? array.get(wsT, array.size(wsT) - 1) : na
     if na(lastBuildT) and ((not na(newestSrcT) and newestSrcT >= whEndT) or barstate.islast)
-        if buildWhale(whStartT, whEndT) > 0
-            lastBuildT := time
-else if not na(pdT) and (na(lastDayT) or pdT != lastDayT)
-    array.push(wdH, pdHi)
-    array.push(wdL, pdLo)
-    array.push(wdC, pdCl)
-    array.push(wdT, pdT)
-    n = array.size(wdC) - 1
-    pcD = n > 0 ? array.get(wdC, n - 1) : pdCl
-    trD = math.max(pdHi - pdLo, math.max(math.abs(pdHi - pcD), math.abs(pdLo - pcD)))
-    dATR := na(dATR) ? trD : dATR + (trD - dATR) / 14
-    if inRange
-        if pdCl >= rLo and pdCl <= rHi
+        array.clear(rgT0)
+        array.clear(rgT1)
+        array.push(rgT0, whStartT)
+        array.push(rgT1, whEndT)
+        redrawAll(na)
+        lastBuildT := time
+else
+    if not na(pdT) and (na(lastDayT) or pdT != lastDayT)
+        array.push(wdH, pdHi)
+        array.push(wdL, pdLo)
+        array.push(wdC, pdCl)
+        array.push(wdT, pdT)
+        n = array.size(wdC) - 1
+        pcD = n > 0 ? array.get(wdC, n - 1) : pdCl
+        trD = math.max(pdHi - pdLo, math.max(math.abs(pdHi - pcD), math.abs(pdLo - pcD)))
+        dATR := na(dATR) ? trD : dATR + (trD - dATR) / 14
+        if na(rIdx)
+            rIdx := n
+            rHi := pdHi
+            rLo := pdLo
+        else if n - rIdx < whLen
+            // forming: the first whLen days set the top and bottom
             rHi := math.max(rHi, pdHi)
             rLo := math.min(rLo, pdLo)
+            if rHi - rLo > whMult * dATR
+                // too wide = trending, not sideways: restart from today
+                rIdx := n
+                rHi := pdHi
+                rLo := pdLo
+        else if pdCl > rHi or pdCl < rLo
+            // daily close outside the top / bottom: range complete (breakout day excluded), new range starts today
+            array.push(rgT0, array.get(wdT, rIdx))
+            array.push(rgT1, pdT)
+            while array.size(rgT0) > whKeep
+                array.shift(rgT0)
+                array.shift(rgT1)
+            redrawAll(na)
+            rIdx := n
+            rHi := pdHi
+            rLo := pdLo
         else
-            // range completed on day n (breakout day excluded from the profile)
-            buildWhale(array.get(wdT, rIdx), array.get(wdT, n))
-            inRange := false
-    else if n + 1 >= whLen and not na(dATR)
-        sI = n - whLen + 1
-        hiW = array.get(wdH, sI)
-        loW = array.get(wdL, sI)
-        for j = sI to n
-            hiW := math.max(hiW, array.get(wdH, j))
-            loW := math.min(loW, array.get(wdL, j))
-        if hiW - loW <= whMult * dATR
-            inRange := true
-            rIdx := sI
-            rHi := hiW
-            rLo := loW
+            rHi := math.max(rHi, pdHi)
+            rLo := math.min(rLo, pdLo)
+    // live range: drawn on the last bar only (cheap), once per new day
+    if barstate.islast and not na(rIdx) and (na(lastLiveDraw) or lastLiveDraw != lastDayT)
+        liveOk = showLive and array.size(wdT) - rIdx >= whLen
+        redrawAll(liveOk ? array.get(wdT, rIdx) : na)
+        lastLiveDraw := lastDayT
 
 // whale bounce signal
 int wbSig = 0
