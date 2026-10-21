@@ -61,6 +61,8 @@ class VZParams:
     max_target_atr: float = 12.0 # and not further than this
     reject_wick: float = 0.5     # wick share of the bar range for a rejection
     atr_len: int = 14
+    # 'sma' = volume vs last `vol_ma` bars; 'tod' = volume vs the same time-of-day over the last `vol_ma` sessions
+    vol_mode: str = "sma"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -204,7 +206,12 @@ def compute(df: pd.DataFrame, params: VZParams | None = None, keep_profiles: boo
         "in_hvn", "in_lvn", "weak_volume", "pool_active", "pool_break", "hunt", "magnet", "rejection", "strong_trend")}
     profiles = [None] * n if keep_profiles else None
 
-    vol_sma = pd.Series(v).rolling(p.vol_ma, min_periods=p.vol_ma).mean().to_numpy()
+    if p.vol_mode == "tod":
+        slot = pd.Series(df.index.time if hasattr(df.index, "time") else np.zeros(n), index=range(n))
+        vs = pd.Series(v)
+        vol_sma = vs.groupby(slot.values).transform(lambda x: x.shift(1).rolling(p.vol_ma, min_periods=5).mean()).to_numpy()
+    else:
+        vol_sma = pd.Series(v).rolling(p.vol_ma, min_periods=p.vol_ma).mean().to_numpy()
     vol_ratio = v / vol_sma
     atr_ = atr(df, p.atr_len).to_numpy()
     dmi = adx(df, p.adx_len)

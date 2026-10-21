@@ -14,7 +14,8 @@ FILTERS = ("adx25", "adx_rising", "ema_only")
 
 
 def signals(r: pd.DataFrame, trigger: str, filt: str, br: float = 1.5, rng_n: int = 10, rng_max_atr: float | None = 4.0,
-            min_atr: float = 1.0, max_atr: float = 12.0, fallback_atr: float | None = None) -> pd.DataFrame:
+            min_atr: float = 1.0, max_atr: float = 12.0, fallback_atr: float | None = None,
+            cap_atr: float | None = None, adx_min: float = 25.0) -> pd.DataFrame:
     """fallback_atr: if no volume level is ahead (price in thin air), target = close +/- fallback_atr * ATR."""
     c, h, l = r.close.to_numpy(), r.high.to_numpy(), r.low.to_numpy()
     atr, vr, adx = r.atr.to_numpy(), r.vol_ratio.to_numpy(), r.adx.to_numpy()
@@ -27,6 +28,13 @@ def signals(r: pd.DataFrame, trigger: str, filt: str, br: float = 1.5, rng_n: in
         tight = np.ones(n, bool) if rng_max_atr is None else (hh - ll) <= rng_max_atr * atr
         up = (c > hh) & tight & (vr >= br); dn = (c < ll) & tight & (vr >= br)
         d = np.where(up, 1, np.where(dn, -1, 0))
+    elif trigger == "va_reentry":
+        # close back inside the value area after the previous close was outside it -> target the far edge / POC
+        vah, val = r.vah.to_numpy(), r.val.to_numpy()
+        pc = np.r_[np.nan, c[:-1]]; pvah = np.r_[np.nan, vah[:-1]]; pval = np.r_[np.nan, val[:-1]]
+        up = (pc < pval) & (c > val) & (c < vah)
+        dn = (pc > pvah) & (c < vah) & (c > val)
+        d = np.where(up, 1, np.where(dn, -1, 0))
     elif trigger == "va":
         vah, val = r.vah.to_numpy(), r.val.to_numpy()
         pc = np.r_[np.nan, c[:-1]]; inside = (pc <= np.r_[np.nan, vah[:-1]]) & (pc >= np.r_[np.nan, val[:-1]])
@@ -34,7 +42,9 @@ def signals(r: pd.DataFrame, trigger: str, filt: str, br: float = 1.5, rng_n: in
         d = np.where(up, 1, np.where(dn, -1, 0))
     ema_up, ema_dn = ema_f > ema_s, ema_f < ema_s
     if filt == "adx25":
-        ok_up, ok_dn = ema_up & (adx >= 25), ema_dn & (adx >= 25)
+        ok_up, ok_dn = ema_up & (adx >= adx_min), ema_dn & (adx >= adx_min)
+    elif filt == "none":
+        ok_up, ok_dn = np.ones(n, bool), np.ones(n, bool)
     elif filt == "adx_rising":
         rising = (adx > np.r_[np.full(3, np.nan), adx[:-3]]) & (adx >= 15)
         ok_up, ok_dn = ema_up & rising, ema_dn & rising
@@ -50,6 +60,8 @@ def signals(r: pd.DataFrame, trigger: str, filt: str, br: float = 1.5, rng_n: in
         ok = cand[(dist >= min_atr) & (dist <= max_atr)]
         if len(ok):
             tgt[t] = ok[np.argmin(np.abs(ok - c[t]))]
+            if cap_atr is not None and abs(tgt[t] - c[t]) > cap_atr * atr[t]:
+                tgt[t] = c[t] + d[t] * cap_atr * atr[t]
         elif fallback_atr:
             tgt[t] = c[t] + d[t] * fallback_atr * atr[t]
         else:
