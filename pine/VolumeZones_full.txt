@@ -5,7 +5,7 @@
 // HVN rejections, ranked top-3 zones, status table and a Viridis
 // strip heatmap (no smoothing) with an optional buy / sell layer.
 // Mirrors vzones/indicator.py: the profile is built from past bars only.
-indicator("Volume Zones", overlay=true, max_bars_back=5000, max_lines_count=100, max_boxes_count=500, max_labels_count=200)
+indicator("Volume Zones", overlay=true, max_bars_back=5000, max_lines_count=500, max_boxes_count=500, max_labels_count=200)
 
 // ═══════════════ Inputs ═══════════════
 lookback   = input.int(120, "فترة البروفايل (عدد الشموع)", minval=20, maxval=400, group="البروفايل")
@@ -58,9 +58,9 @@ showSplit  = input.bool(false, "إظهار البروفايل على اليمي�
 G_LN = "ألوان · الخطوط"
 cPoc     = input.color(#ff4d4d, "خط POC (أعلى تداول)", inline="poc", group=G_LN)
 wPoc     = input.int(1, "السماكة", minval=1, maxval=5, inline="poc", group=G_LN)
-cVah     = input.color(color.new(color.gray, 40), "خط VAH (أعلى منطقة القيمة)", inline="vah", group=G_LN)
+cVah     = input.color(#26c6da, "خط VAH (أعلى منطقة القيمة)", inline="vah", group=G_LN)
 wVah     = input.int(1, "السماكة", minval=1, maxval=5, inline="vah", group=G_LN)
-cVal     = input.color(color.new(color.gray, 40), "خط VAL (أدنى منطقة القيمة)", inline="val", group=G_LN)
+cVal     = input.color(#26c6da, "خط VAL (أدنى منطقة القيمة)", inline="val", group=G_LN)
 wVal     = input.int(1, "السماكة", minval=1, maxval=5, inline="val", group=G_LN)
 cHuntUpL = input.color(color.lime, "خط الهدف صعود", inline="tl", group=G_LN)
 cHuntDnL = input.color(color.red, "هبوط", inline="tl", group=G_LN)
@@ -296,6 +296,16 @@ if rngB > 0 and nZones > 0
 plot(showVA ? poc : na, "POC", cPoc, wPoc, plot.style_stepline)
 plot(showVA ? vah : na, "VAH", cVah, wVah, plot.style_stepline)
 plot(showVA ? val : na, "VAL", cVal, wVal, plot.style_stepline)
+var label lbPoc = na
+var label lbVah = na
+var label lbVal = na
+if barstate.islast and showVA and not na(poc)
+    label.delete(lbPoc)
+    label.delete(lbVah)
+    label.delete(lbVal)
+    lbPoc := label.new(bar_index + 2, poc, "POC", style=label.style_label_left, color=color.new(cPoc, 100), textcolor=cPoc, size=size.small)
+    lbVah := label.new(bar_index + 2, vah, "VAH", style=label.style_label_left, color=color.new(cVah, 100), textcolor=cVah, size=size.small)
+    lbVal := label.new(bar_index + 2, val, "VAL", style=label.style_label_left, color=color.new(cVal, 100), textcolor=cVal, size=size.small)
 barcolor(not colorBars ? na : strongVol ? (close >= open ? cStrongUp : cStrongDn) : weak ? cWeakBar : na, title="شموع حسب الفوليوم")
 showRevW = input.bool(true, "عرض كسر التجمع كتحذير انعكاس", group="تنبيه الاتجاه")
 cRevW    = input.color(#ffb020, "لون تحذير الانعكاس", group="تنبيه الاتجاه")
@@ -522,7 +532,10 @@ whMode    = input.string("تلقائي", "طريقة تحديد المنطقة �
 whStartT  = input.time(timestamp("2026-05-01T00:00:00"), "بداية المنطقة (الوضع اليدوي)", group=G_WH)
 whEndT    = input.time(timestamp("2026-10-01T00:00:00"), "نهاية المنطقة (الوضع اليدوي)", group=G_WH)
 whSrcTF   = input.timeframe("60", "فريم بيانات البروفايل", tooltip="البروفايل يُبنى دائما من هذا الفريم، فتبقى الخطوط ثابتة عند تغيير فريم الشارت", group=G_WH)
-whPeaks   = input.int(8, "أقصى عدد للأعمدة الطويلة", minval=1, maxval=12, group=G_WH)
+whPeaks   = input.int(8, "أقصى عدد للأعمدة الطويلة", minval=1, maxval=100, group=G_WH)
+showWhVA  = input.bool(true, "إظهار POC و VAH و VAL لكل منطقة عرضية", group=G_WH)
+cWhVA     = input.color(#ffb020, "لون VAH و VAL للمنطقة", inline="wva", group=G_WH)
+wWhVA     = input.int(2, "السماكة", minval=1, maxval=5, inline="wva", group=G_WH)
 cWhPoc    = input.color(#ff3b3b, "أعلى فوليوم POC", inline="wc", group=G_WH)
 cWhLv     = input.color(#9b5cff, "باقي الأعمدة", inline="wc", group=G_WH)
 showWBox  = input.bool(true, "إظهار مستطيل المنطقة العرضية", group=G_WH)
@@ -593,6 +606,7 @@ var int[]   rgT1 = array.new_int()
 var float[] whLv = array.new_float()
 var line[] whLines = array.new_line()
 var box[] whBoxA = array.new_box()
+var label[] whLbls = array.new_label()
 var int   lastBuildT = na
 var int   lastLiveDraw = na
 
@@ -641,7 +655,31 @@ drawRange(int t0, int t1, int boxEnd, bool live) =>
             if isMax and array.get(sm, q) >= 1.3 * mS
                 array.push(cand, pLoW + (q + 0.5) * stW)
                 array.push(candV, array.get(sm, q))
-        pocV = pLoW + (array.indexof(pv, array.max(pv)) + 0.5) * stW
+        pocI = array.indexof(pv, array.max(pv))
+        pocV = pLoW + (pocI + 0.5) * stW
+        if showWhVA
+            // value area of this range: grow from the POC row toward the bigger neighbour until vaPct of the volume
+            totW = array.sum(pv)
+            a0 = pocI
+            a1 = pocI
+            accW = array.get(pv, pocI)
+            while accW < vaPct * totW and (a0 > 0 or a1 < whRows - 1)
+                vU = a1 < whRows - 1 ? array.get(pv, a1 + 1) : -1.0
+                vD = a0 > 0 ? array.get(pv, a0 - 1) : -1.0
+                if vU >= vD
+                    a1 += 1
+                    accW += vU
+                else
+                    a0 -= 1
+                    accW += vD
+            vahW = pLoW + (a1 + 1) * stW
+            valW = pLoW + a0 * stW
+            array.push(whLines, line.new(t0, pocV, boxEnd, pocV, xloc=xloc.bar_time, extend=extend.right, color=cWhPoc, width=wWhVA + 1))
+            array.push(whLines, line.new(t0, vahW, boxEnd, vahW, xloc=xloc.bar_time, extend=extend.right, color=cWhVA, width=wWhVA))
+            array.push(whLines, line.new(t0, valW, boxEnd, valW, xloc=xloc.bar_time, extend=extend.right, color=cWhVA, width=wWhVA))
+            array.push(whLbls, label.new(t0, pocV, "POC " + str.tostring(pocV, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cWhPoc, 100), textcolor=cWhPoc, size=size.small))
+            array.push(whLbls, label.new(t0, vahW, "VAH " + str.tostring(vahW, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cWhVA, 100), textcolor=cWhVA, size=size.small))
+            array.push(whLbls, label.new(t0, valW, "VAL " + str.tostring(valW, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cWhVA, 100), textcolor=cWhVA, size=size.small))
         if array.size(cand) > 0
             ordW = array.sort_indices(candV, order.descending)
             for j = 0 to math.min(whPeaks, array.size(cand)) - 1
@@ -662,6 +700,9 @@ redrawAll(int liveT0) =>
     for bx in whBoxA
         box.delete(bx)
     array.clear(whBoxA)
+    for lb in whLbls
+        label.delete(lb)
+    array.clear(whLbls)
     array.clear(whLv)
     int k = 0
     while k < array.size(rgT0)
