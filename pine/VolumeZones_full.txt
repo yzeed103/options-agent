@@ -559,7 +559,8 @@ if lN > 0
             array.push(wsL, lj)
             array.push(wsV, nz(array.get(lV, j)))
             array.push(wsT, tj)
-else if not useLower and not na(uT) and (array.size(wsT) == 0 or uT != array.get(wsT, array.size(wsT) - 1))
+addSrc = not useLower and not na(uT) and (array.size(wsT) == 0 or uT != array.get(wsT, array.size(wsT) - 1))
+if addSrc
     array.push(wsH, uH)
     array.push(wsL, uL)
     array.push(wsV, nz(uV))
