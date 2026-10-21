@@ -563,7 +563,9 @@ while jj < lN
         array.push(wsV, vj)
         array.push(wsT, tj)
     jj += 1
-bool addSrc = not useLower and not na(uT) and (array.size(wsT) == 0 or uT != array.get(wsT, array.size(wsT) - 1))
+// `or` does not short-circuit in v5: never index an array inside the same condition that tests its size
+int lastSrcT = array.size(wsT) > 0 ? array.get(wsT, array.size(wsT) - 1) : na
+bool addSrc = not useLower and not na(uT) and (na(lastSrcT) or uT != lastSrcT)
 if addSrc
     array.push(wsH, uH)
     array.push(wsL, uL)
@@ -657,12 +659,14 @@ buildWhale(int t0, int t1) =>
             array.push(whBoxA, box.new(t0, pHiW, t1, pLoW, xloc=xloc.bar_time, border_color=cWhBoxB, border_style=line.style_dashed, bgcolor=cWhBoxF))
     nUsed
 
+int lastDayT = array.size(wdT) > 0 ? array.get(wdT, array.size(wdT) - 1) : na
 if whMode == "يدوي"
     // manual: rebuild once the source bars cover the chosen end time (and on the last bar for live data)
-    if (na(lastBuildT) and array.size(wsT) > 0 and array.get(wsT, array.size(wsT) - 1) >= whEndT) or (barstate.islast and na(lastBuildT))
+    int newestSrcT = array.size(wsT) > 0 ? array.get(wsT, array.size(wsT) - 1) : na
+    if na(lastBuildT) and ((not na(newestSrcT) and newestSrcT >= whEndT) or barstate.islast)
         if buildWhale(whStartT, whEndT) > 0
             lastBuildT := time
-else if not na(pdT) and (array.size(wdT) == 0 or pdT != array.get(wdT, array.size(wdT) - 1))
+else if not na(pdT) and (na(lastDayT) or pdT != lastDayT)
     array.push(wdH, pdHi)
     array.push(wdL, pdLo)
     array.push(wdC, pdCl)
