@@ -539,7 +539,7 @@ chartSec = timeframe.in_seconds()
 srcSec   = timeframe.in_seconds(whSrcTF)
 useLower = chartSec > srcSec                                   // chart (e.g. daily) is above the source TF
 lowerTF  = useLower ? whSrcTF : timeframe.period
-[lH, lL, lV, lT] = request.security_lower_tf(syminfo.tickerid, lowerTF, [high, low, volume, time])
+[lH, lL, lV, lT] = request.security_lower_tf(syminfo.tickerid, lowerTF, [high, low, volume, time], ignore_invalid_timeframe=true)
 [uH, uL, uV, uT] = request.security(syminfo.tickerid, whSrcTF, [high[1], low[1], volume[1], time[1]], lookahead=barmerge.lookahead_on)
 [pdHi, pdLo, pdCl, pdT] = request.security(syminfo.tickerid, "D", [high[1], low[1], close[1], time[1]], lookahead=barmerge.lookahead_on)
 
@@ -548,18 +548,22 @@ var float[] wsL = array.new_float()
 var float[] wsV = array.new_float()
 var int[]   wsT = array.new_int()
 SRC_MAX = 8000
+// copy the intrabars of this chart bar (no `if` around the loop: a `while` with a counter is the simplest form the compiler accepts)
 int lN = useLower ? math.min(array.size(lT), math.min(array.size(lH), math.min(array.size(lL), array.size(lV)))) : 0
-if lN > 0
-    for j = 0 to lN - 1
-        float hj = array.get(lH, j)
-        float lj = array.get(lL, j)
-        int   tj = array.get(lT, j)
-        if not na(hj) and not na(lj) and not na(tj)
-            array.push(wsH, hj)
-            array.push(wsL, lj)
-            array.push(wsV, nz(array.get(lV, j)))
-            array.push(wsT, tj)
-addSrc = not useLower and not na(uT) and (array.size(wsT) == 0 or uT != array.get(wsT, array.size(wsT) - 1))
+int jj = 0
+while jj < lN
+    float hj = array.get(lH, jj)
+    float lj = array.get(lL, jj)
+    float vj = nz(array.get(lV, jj))
+    int   tj = array.get(lT, jj)
+    bool okj = not na(hj) and not na(lj) and not na(tj)
+    if okj
+        array.push(wsH, hj)
+        array.push(wsL, lj)
+        array.push(wsV, vj)
+        array.push(wsT, tj)
+    jj += 1
+bool addSrc = not useLower and not na(uT) and (array.size(wsT) == 0 or uT != array.get(wsT, array.size(wsT) - 1))
 if addSrc
     array.push(wsH, uH)
     array.push(wsL, uL)
