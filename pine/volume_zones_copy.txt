@@ -35,10 +35,12 @@ cEarlyUp   = input.color(color.new(#00e676, 30), "لون الإنذار صعود
 cEarlyDn   = input.color(color.new(#ff5252, 30), "هبوط", inline="ea", group="الإنذار المبكر")
 
 showHeat   = input.bool(true, "إظهار الخريطة الحرارية", group="الخريطة الحرارية")
-heatStep   = input.int(3, "عرض عمود الخريطة (شموع)", minval=1, group="الخريطة الحرارية")
+heatMode   = input.string("لونان", "شكل الخريطة", options=["لونان", "تدرج خمسة ألوان"], group="الخريطة الحرارية")
+heatHigh   = input.float(0.70, "مستوى التداول العالي (0 إلى 1)", minval=0.05, maxval=1.0, group="الخريطة الحرارية")
+heatStep   = input.int(1, "عرض عمود الخريطة (شموع)", minval=1, group="الخريطة الحرارية")
 heatMin    = input.float(0.40, "إخفاء المستويات الأقل من (0 إلى 1)", minval=0.0, maxval=0.95, group="الخريطة الحرارية")
-heatAlpha  = input.int(35, "شفافية الخريطة", minval=0, maxval=95, group="الخريطة الحرارية")
-stripGap   = input.float(0.18, "المسافة بين الخطوط (0 إلى 0.45)", minval=0.0, maxval=0.45, group="الخريطة الحرارية")
+heatAlpha  = input.int(20, "شفافية الخريطة", minval=0, maxval=95, group="الخريطة الحرارية")
+stripGap   = input.float(0.12, "المسافة بين الخطوط (0 إلى 0.45)", minval=0.0, maxval=0.45, group="الخريطة الحرارية")
 showDelta  = input.bool(false, "طبقة الشراء والبيع", group="الخريطة الحرارية")
 deltaMin   = input.float(0.55, "طبقة الشراء والبيع: فقط المستويات الأعلى من", group="الخريطة الحرارية")
 deltaEdge  = input.float(0.12, "طبقة الشراء والبيع: أقل فرق مطلوب", group="الخريطة الحرارية")
@@ -95,7 +97,9 @@ cTblBlw  = input.color(#00bcd4, "المنطقة الأدنى", inline="tz", grou
 tblSize  = input.string("عادي", "حجم خط الجدول", options=["صغير جدا", "صغير", "عادي", "كبير"], group=G_TB)
 
 G_HM = "ألوان · الخريطة الحرارية"
-cH1 = input.color(#440154, "الأقل", inline="h", group=G_HM)
+cMed  = input.color(#4a5568, "تداول متوسط", inline="k", group=G_HM)
+cHigh = input.color(#ff4d4d, "تداول عالي", inline="k", group=G_HM)
+cH1 = input.color(#440154, "تدرج: الأقل", inline="h", group=G_HM)
 cH2 = input.color(#3b528b, "", inline="h", group=G_HM)
 cH3 = input.color(#21918c, "", inline="h", group=G_HM)
 cH4 = input.color(#5ec962, "", inline="h", group=G_HM)
@@ -446,13 +450,19 @@ if barstate.islast
     table.cell(tbl, 1, 9, ck(c4, "ترند قوي"), text_color=c4 ? cTblUp : cTblLbl, text_size=tSz, text_halign=text.align_right)
     table.cell(tbl, 0, 10, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=color.new(vdc, 85))
 
-// ═══════════════ Heatmap: Viridis strips, no smoothing ═══════════════
+// ═══════════════ Heatmap: two-colour or five-colour ribbons, no smoothing ═══════════════
 // colour = volume at that price over the last `lookback` bars, relative to the busiest row (0..1)
 viridis(float x) =>
     t = (x - heatMin) / math.max(1.0 - heatMin, 0.000001)
     t < 0.25 ? color.from_gradient(t, 0.00, 0.25, cH1, cH2) : t < 0.50 ? color.from_gradient(t, 0.25, 0.50, cH2, cH3) : t < 0.75 ? color.from_gradient(t, 0.50, 0.75, cH3, cH4) : color.from_gradient(t, 0.75, 1.00, cH4, cH5)
 
-var box[] heatBoxes = array.new_box()
+// Ribbons: a row that keeps the same colour level on consecutive bars is drawn as ONE
+// continuous box (extended to the right) instead of many small boxes.
+twoCol = heatMode == "لونان"
+var box[]   heatBoxes = array.new_box()
+var box[]   rowBox    = array.new_box(100, na)     // current ribbon per row
+var int[]   rowKey    = array.new_int(100, 0)      // colour key of that ribbon
+var float[] rowMid    = array.new_float(100, na)   // its mid price
 if showHeat and ready and bar_index % heatStep == 0
     mx = array.max(rowVol)
     gap = step * stripGap
@@ -460,29 +470,56 @@ if showHeat and ready and bar_index % heatStep == 0
         for r = 0 to rows - 1
             v = array.get(rowVol, r)
             x = v / mx
+            int key = 0
+            color c = na
             if x >= heatMin
-                c = color.new(viridis(x), heatAlpha)
+                if twoCol
+                    key := x >= heatHigh ? 2 : 1
+                    c := color.new(x >= heatHigh ? cHigh : cMed, heatAlpha)
+                else
+                    key := 10 + int(math.min(4, (x - heatMin) / math.max(1.0 - heatMin, 0.000001) * 5))
+                    c := color.new(viridis(x), heatAlpha)
                 if showDelta and x >= deltaMin and v > 0
                     share = array.get(rowBuy, r) / v - 0.5
                     if math.abs(share) >= deltaEdge
+                        key := share > 0 ? 3 : 4
                         c := color.new(share > 0 ? cBuy : cSell, math.max(heatAlpha, 100 - math.min(75, math.abs(share) * 200)))
-                array.push(heatBoxes, box.new(bar_index, pLo + (r + 1) * step - gap, bar_index + heatStep - 1, pLo + r * step + gap, border_color=color.new(color.black, 100), bgcolor=c))
+            mid = pLo + (r + 0.5) * step
+            bx = array.get(rowBox, r)
+            sameRun = key != 0 and not na(bx) and array.get(rowKey, r) == key and math.abs(mid - array.get(rowMid, r)) <= step * 0.6
+            if sameRun
+                box.set_right(bx, bar_index + heatStep - 1)
+            else if key != 0
+                nb = box.new(bar_index, mid + step / 2 - gap, bar_index + heatStep - 1, mid - step / 2 + gap, border_color=color.new(color.black, 100), bgcolor=c)
+                array.push(heatBoxes, nb)
+                array.set(rowBox, r, nb)
+                array.set(rowKey, r, key)
+                array.set(rowMid, r, mid)
+            else
+                array.set(rowBox, r, na)
+                array.set(rowKey, r, 0)
     while array.size(heatBoxes) > 400
         box.delete(array.shift(heatBoxes))
 
 // colour legend
 var table legend = table.new(position.bottom_center, 7, 2, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
 if showLegend and showHeat and barstate.islast
-    table.cell(legend, 0, 0, "أقل", text_color=cTblLbl, text_size=size.tiny)
-    stops = array.from(cH1, cH2, cH3, cH4, cH5)
-    for k = 0 to 4
-        table.cell(legend, k + 1, 0, "   ", bgcolor=array.get(stops, k), text_size=size.tiny)
-    table.cell(legend, 6, 0, "فوليوم أعلى", text_color=cTblLbl, text_size=size.tiny)
+    if twoCol
+        table.cell(legend, 0, 0, "   ", bgcolor=cMed, text_size=size.tiny)
+        table.cell(legend, 1, 0, "تداول متوسط", text_color=cTblLbl, text_size=size.tiny)
+        table.cell(legend, 2, 0, "   ", bgcolor=cHigh, text_size=size.tiny)
+        table.cell(legend, 3, 0, "تداول عالي", text_color=cTblLbl, text_size=size.tiny)
+    else
+        table.cell(legend, 0, 0, "أقل", text_color=cTblLbl, text_size=size.tiny)
+        stops = array.from(cH1, cH2, cH3, cH4, cH5)
+        for k = 0 to 4
+            table.cell(legend, k + 1, 0, "   ", bgcolor=array.get(stops, k), text_size=size.tiny)
+        table.cell(legend, 6, 0, "فوليوم أعلى", text_color=cTblLbl, text_size=size.tiny)
     if showDelta
         table.cell(legend, 0, 1, "   ", bgcolor=cBuy, text_size=size.tiny)
         table.cell(legend, 1, 1, "مشترون", text_color=cTblLbl, text_size=size.tiny)
-        table.cell(legend, 3, 1, "   ", bgcolor=cSell, text_size=size.tiny)
-        table.cell(legend, 4, 1, "بائعون", text_color=cTblLbl, text_size=size.tiny)
+        table.cell(legend, 2, 1, "   ", bgcolor=cSell, text_size=size.tiny)
+        table.cell(legend, 3, 1, "بائعون", text_color=cTblLbl, text_size=size.tiny)
 
 // ═══════════════ Up/Down split profile at the right edge ═══════════════
 var box[] splitBoxes = array.new_box()
