@@ -1,0 +1,44 @@
+
+===== SPY 1h 1998-2021
+                  levels  ranges  dist_atr  reached  days_to_reach  held_3d  bounce_atr
+tf kind                                                                                
+1D random          868.0   187.0      2.51    47.24            4.0    49.02        1.39
+   thin (valley)  1496.0   187.0      2.54    52.41            4.0    50.89        1.56
+   whale (peak)    868.0   187.0      2.35    47.24            5.0    46.59        1.42
+1W random          778.0   142.0      6.03    25.58           12.0    59.80        2.20
+   thin (valley)  1060.0   142.0      5.46    32.83            4.0    54.31        1.74
+   whale (peak)    778.0   142.0      4.97    30.21           10.0    59.57        2.02
+3D random          578.0   111.0      4.14    34.78            8.0    58.71        1.99
+   thin (valley)   788.0   111.0      5.29    34.01           13.0    61.57        2.28
+   whale (peak)    578.0   111.0      3.66    37.54           11.0    61.29        2.09
+
+===== 7 symbols 15m 2025-26
+                  levels  ranges  dist_atr  reached  days_to_reach  held_3d  bounce_atr
+tf kind                                                                                
+1D random          627.0   110.0      2.32    42.26            3.0    54.34        1.36
+   thin (valley)  1042.0   110.0      2.37    37.04            4.0    44.04        1.19
+   whale (peak)    627.0   110.0      2.06    45.93            5.0    59.03        1.43
+1W random          397.0    69.0      5.60    20.65            7.0    60.98        1.70
+   thin (valley)   722.0    69.0      6.06    30.61            7.0    52.04        1.46
+   whale (peak)    397.0    69.0      4.49    27.20            6.0    59.26        1.58
+3D random          330.0    58.0      3.78    31.52            7.0    49.04        1.45
+   thin (valley)   542.0    58.0      3.89    24.54            8.0    60.15        1.70
+   whale (peak)    330.0    58.0      3.27    33.64            8.0    56.76        1.58
+
+===== Reached % by distance from price at breakout (all sources, all TFs)
+kind     random  thin (valley)  whale (peak)
+dist_b                                      
+(0, 1]     76.8           80.9          74.5
+(1, 2]     56.4           51.3          54.8
+(2, 4]     32.1           29.7          34.4
+(4, 8]     13.6           17.1          16.8
+(8, 99]     6.3            8.5           9.7
+
+===== Held 3 days after first touch, by distance bucket
+kind     random  thin (valley)  whale (peak)
+dist_b                                      
+(0, 1]     49.2           50.9          48.7
+(1, 2]     55.5           47.8          55.9
+(2, 4]     56.0           50.3          58.0
+(4, 8]     59.5           68.4          62.6
+(8, 99]    78.6           53.1          90.5
