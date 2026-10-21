@@ -543,33 +543,33 @@ lowerTF  = useLower ? whSrcTF : timeframe.period
 [uH, uL, uV, uT] = request.security(syminfo.tickerid, whSrcTF, [high[1], low[1], volume[1], time[1]], lookahead=barmerge.lookahead_on)
 [pdHi, pdLo, pdCl, pdT] = request.security(syminfo.tickerid, "D", [high[1], low[1], close[1], time[1]], lookahead=barmerge.lookahead_on)
 
-var float[] sH = array.new_float()
-var float[] sL = array.new_float()
-var float[] sV = array.new_float()
-var int[]   sT = array.new_int()
+var float[] wsH = array.new_float()
+var float[] wsL = array.new_float()
+var float[] wsV = array.new_float()
+var int[]   wsT = array.new_int()
 SRC_MAX = 8000
 if useLower and barstate.isconfirmed and array.size(lT) > 0
     for j = 0 to array.size(lT) - 1
-        array.push(sH, array.get(lH, j))
-        array.push(sL, array.get(lL, j))
-        array.push(sV, nz(array.get(lV, j)))
-        array.push(sT, array.get(lT, j))
-else if not useLower and not na(uT) and (array.size(sT) == 0 or uT != array.get(sT, array.size(sT) - 1))
-    array.push(sH, uH)
-    array.push(sL, uL)
-    array.push(sV, nz(uV))
-    array.push(sT, uT)
-while array.size(sT) > SRC_MAX
-    array.shift(sH)
-    array.shift(sL)
-    array.shift(sV)
-    array.shift(sT)
+        array.push(wsH, array.get(lH, j))
+        array.push(wsL, array.get(lL, j))
+        array.push(wsV, nz(array.get(lV, j)))
+        array.push(wsT, array.get(lT, j))
+else if not useLower and not na(uT) and (array.size(wsT) == 0 or uT != array.get(wsT, array.size(wsT) - 1))
+    array.push(wsH, uH)
+    array.push(wsL, uL)
+    array.push(wsV, nz(uV))
+    array.push(wsT, uT)
+while array.size(wsT) > SRC_MAX
+    array.shift(wsH)
+    array.shift(wsL)
+    array.shift(wsV)
+    array.shift(wsT)
 
 // daily candles (completed days only)
-var float[] dH = array.new_float()
-var float[] dL = array.new_float()
-var float[] dC = array.new_float()
-var int[]   dT = array.new_int()
+var float[] wdH = array.new_float()
+var float[] wdL = array.new_float()
+var float[] wdC = array.new_float()
+var int[]   wdT = array.new_int()
 var float dATR = na
 var bool  inRange = false
 var int   rIdx = na
@@ -586,24 +586,24 @@ buildWhale(int t0, int t1) =>
     int nUsed = 0
     float pHiW = na
     float pLoW = na
-    nSrc = array.size(sT)
+    nSrc = array.size(wsT)
     for j = 0 to math.max(nSrc - 1, 0)
         if nSrc == 0
             break
-        tj = array.get(sT, j)
+        tj = array.get(wsT, j)
         if tj >= t0 and tj < t1
-            pHiW := na(pHiW) ? array.get(sH, j) : math.max(pHiW, array.get(sH, j))
-            pLoW := na(pLoW) ? array.get(sL, j) : math.min(pLoW, array.get(sL, j))
+            pHiW := na(pHiW) ? array.get(wsH, j) : math.max(pHiW, array.get(wsH, j))
+            pLoW := na(pLoW) ? array.get(wsL, j) : math.min(pLoW, array.get(wsL, j))
             nUsed += 1
     if nUsed > 10 and pHiW > pLoW
         stW = (pHiW - pLoW) / whRows
         pv = array.new_float(whRows, 0.0)
         for j = 0 to nSrc - 1
-            tj = array.get(sT, j)
+            tj = array.get(wsT, j)
             if tj >= t0 and tj < t1
-                bh = array.get(sH, j)
-                bl = array.get(sL, j)
-                bv = array.get(sV, j)
+                bh = array.get(wsH, j)
+                bl = array.get(wsL, j)
+                bv = array.get(wsV, j)
                 rg = math.max(bh - bl, syminfo.mintick)
                 q0 = math.max(0, math.min(whRows - 1, int((bl - pLoW) / stW)))
                 q1 = math.max(0, math.min(whRows - 1, int((bh - pLoW) / stW)))
@@ -649,16 +649,16 @@ buildWhale(int t0, int t1) =>
 
 if whMode == "يدوي"
     // manual: rebuild once the source bars cover the chosen end time (and on the last bar for live data)
-    if (na(lastBuildT) and array.size(sT) > 0 and array.get(sT, array.size(sT) - 1) >= whEndT) or (barstate.islast and na(lastBuildT))
+    if (na(lastBuildT) and array.size(wsT) > 0 and array.get(wsT, array.size(wsT) - 1) >= whEndT) or (barstate.islast and na(lastBuildT))
         if buildWhale(whStartT, whEndT) > 0
             lastBuildT := time
-else if not na(pdT) and (array.size(dT) == 0 or pdT != array.get(dT, array.size(dT) - 1))
-    array.push(dH, pdHi)
-    array.push(dL, pdLo)
-    array.push(dC, pdCl)
-    array.push(dT, pdT)
-    n = array.size(dC) - 1
-    pcD = n > 0 ? array.get(dC, n - 1) : pdCl
+else if not na(pdT) and (array.size(wdT) == 0 or pdT != array.get(wdT, array.size(wdT) - 1))
+    array.push(wdH, pdHi)
+    array.push(wdL, pdLo)
+    array.push(wdC, pdCl)
+    array.push(wdT, pdT)
+    n = array.size(wdC) - 1
+    pcD = n > 0 ? array.get(wdC, n - 1) : pdCl
     trD = math.max(pdHi - pdLo, math.max(math.abs(pdHi - pcD), math.abs(pdLo - pcD)))
     dATR := na(dATR) ? trD : dATR + (trD - dATR) / 14
     if inRange
@@ -667,15 +667,15 @@ else if not na(pdT) and (array.size(dT) == 0 or pdT != array.get(dT, array.size(
             rLo := math.min(rLo, pdLo)
         else
             // range completed on day n (breakout day excluded from the profile)
-            buildWhale(array.get(dT, rIdx), array.get(dT, n))
+            buildWhale(array.get(wdT, rIdx), array.get(wdT, n))
             inRange := false
     else if n + 1 >= whLen and not na(dATR)
         sI = n - whLen + 1
-        hiW = array.get(dH, sI)
-        loW = array.get(dL, sI)
+        hiW = array.get(wdH, sI)
+        loW = array.get(wdL, sI)
         for j = sI to n
-            hiW := math.max(hiW, array.get(dH, j))
-            loW := math.min(loW, array.get(dL, j))
+            hiW := math.max(hiW, array.get(wdH, j))
+            loW := math.min(loW, array.get(wdL, j))
         if hiW - loW <= whMult * dATR
             inRange := true
             rIdx := sI
