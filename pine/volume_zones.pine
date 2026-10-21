@@ -362,7 +362,18 @@ alertcondition(early != 0, "إنذار مبكر", "اختراق بفوليوم �
 int vaSig = 0
 float vaTgt = na
 float vaStp = na
-if not na(vah[1]) and not na(val) and atrV > 0
+// one idea at a time, exactly like the backtest: no new signal until target, stop or 20 bars
+var int   vaOpen = 0
+var float vaOT = na
+var float vaOS = na
+var int   vaOB = na
+vaFree = vaOpen == 0
+if vaOpen != 0
+    hitT = vaOpen > 0 ? high >= vaOT : low <= vaOT
+    hitS = vaOpen > 0 ? low <= vaOS : high >= vaOS
+    if hitT or hitS or bar_index - vaOB >= 20
+        vaOpen := 0
+if vaFree and not na(vah[1]) and not na(val) and atrV > 0
     if close[1] < val[1] and close > val and close < vah
         vaSig := 1
     else if close[1] > vah[1] and close < vah and close > val
@@ -384,6 +395,10 @@ if not na(vah[1]) and not na(val) and atrV > 0
         else
             vaTgt := math.abs(best - close) > varCap * atrV ? close + vaSig * varCap * atrV : best
             vaStp := close - vaSig * varStop * atrV
+            vaOpen := vaSig
+            vaOT := vaTgt
+            vaOS := vaStp
+            vaOB := bar_index
 plotshape(showVar and vaSig == 1 and hunt == 0, "عودة للقيمة صعود", shape.labelup, location.belowbar, cVarUp, text="عودة", textcolor=cLblTxt, size=size.tiny)
 plotshape(showVar and vaSig == -1 and hunt == 0, "عودة للقيمة هبوط", shape.labeldown, location.abovebar, cVarDn, text="عودة", textcolor=cLblTxt, size=size.tiny)
 if showVar and vaSig != 0 and hunt == 0
@@ -637,7 +652,17 @@ else if timeframe.isintraday
 int wbSig = 0
 float wbTgt = na
 float wbStp = na
-if showWB and array.size(whLv) > 0 and atrV > 0
+var int   wbOpen = 0
+var float wbOT = na
+var float wbOS = na
+var int   wbOB = na
+wbFree = wbOpen == 0
+if wbOpen != 0
+    hitT = wbOpen > 0 ? high >= wbOT : low <= wbOT
+    hitS = wbOpen > 0 ? low <= wbOS : high >= wbOS
+    if hitT or hitS or bar_index - wbOB >= 130
+        wbOpen := 0
+if wbFree and showWB and array.size(whLv) > 0 and atrV > 0
     for j = 0 to array.size(whLv) - 1
         L = array.get(whLv, j)
         if close[1] > L and low <= L and close > L
@@ -658,6 +683,10 @@ if showWB and array.size(whLv) > 0 and atrV > 0
         else
             wbTgt := best
             wbStp := close - wbSig * risk
+            wbOpen := wbSig
+            wbOT := wbTgt
+            wbOS := wbStp
+            wbOB := bar_index
 plotshape(wbSig == 1, "ارتداد حوت صعود", shape.labelup, location.belowbar, cWbUp, text="حوت ↑", textcolor=cLblTxt, size=size.small)
 plotshape(wbSig == -1, "ارتداد حوت هبوط", shape.labeldown, location.abovebar, cWbDn, text="حوت ↓", textcolor=cLblTxt, size=size.small)
 if wbSig != 0
