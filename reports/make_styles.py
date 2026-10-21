@@ -393,3 +393,107 @@ def recommended(with_delta, fname):
 recommended(False, "H_recommended.png")
 recommended(True, "H_recommended_delta.png")
 print("ok5")
+
+
+# ------------------------------------------------------------------ J: ten Pine-feasible heatmap shapes
+def ribbons(g, thr, nlev=5):
+    """Merge consecutive bars whose quantised level is equal -> (row, x0, x1, level)."""
+    q = np.where(g >= thr, np.minimum(nlev - 1, ((g - thr) / (1 - thr) * nlev).astype(int)), -1)
+    out = []
+    for k in range(q.shape[1]):
+        i = 0
+        while i < N:
+            if q[i, k] < 0:
+                i += 1; continue
+            j = i
+            while j + 1 < N and q[j + 1, k] == q[i, k]:
+                j += 1
+            out.append((k, i, j, q[i, k])); i = j + 1
+    return out
+
+
+def jstyle(key, title, draw, legend_colors, labels=("low volume", "high")):
+    fig, ax = base(f"Heatmap · {key.split('_')[0]} · {title}")
+    draw(ax)
+    for rank, (zl, zh, zv) in enumerate(zones, 1):
+        c = ["#e8432d", "#e8a33d", "#e8d547"][rank - 1]
+        ax.hlines([zl, zh], -.5, N + 8, color=c, lw=.8, alpha=.7, zorder=2)
+        ax.text(N + 7.5, zh, f"#{rank}  {zv / tot * 100:.0f}%", color=c, ha="right", va="bottom", fontsize=9, weight="bold", zorder=6)
+    candles(ax, regime_color); signals(ax, labels=False)
+    cm = LinearSegmentedColormap.from_list(key, legend_colors)
+    cax = fig.add_axes([0.06, 0.885, 0.18, 0.012]); cax.imshow(np.linspace(0, 1, 256)[None], aspect="auto", cmap=cm); cax.set_axis_off()
+    fig.text(0.06, 0.902, labels[0], color="#9598a1", fontsize=8); fig.text(0.24, 0.902, labels[1], color="#9598a1", fontsize=8, ha="right")
+    fig.savefig(OUT / f"{key}.png", dpi=100, facecolor=BG); plt.close(fig)
+
+
+def pal(cols): return LinearSegmentedColormap.from_list("p", cols)
+
+
+def draw_ribbons(cols, thr=.4, gap=.12, alpha=.75, nlev=5, outline=False):
+    cm = pal(cols)
+    def f(ax):
+        for k, i, j, lv in ribbons(gf, thr, nlev):
+            c = cm(lv / (nlev - 1))
+            if outline:
+                ax.add_patch(Rectangle((i - .5, edges_f[k] + hgt_f * gap), j - i + 1, hgt_f * (1 - 2 * gap), fill=False, ec=c, lw=.9, alpha=.9, zorder=1))
+            else:
+                ax.add_patch(Rectangle((i - .5, edges_f[k] + hgt_f * gap), j - i + 1, hgt_f * (1 - 2 * gap), color=c, alpha=alpha, lw=0, zorder=1))
+    return f
+
+
+def draw_focus(ax):
+    for k, i, j, lv in ribbons(gf, .35, 5):
+        hot = lv >= 3
+        ax.add_patch(Rectangle((i - .5, edges_f[k] + hgt_f * .1), j - i + 1, hgt_f * .8,
+                               color=("#ffb020" if lv == 3 else "#ff4d4d") if hot else "#9598a1", alpha=.8 if hot else .12, lw=0, zorder=1))
+
+
+def draw_glow(ax):
+    cm = pal(["#ffb347", "#ffd27f", "#fff3c4"])
+    for k, i, j, lv in ribbons(gf, .35, 6):
+        a = .08 + .14 * lv
+        ax.add_patch(Rectangle((i - .5, edges_f[k] - hgt_f * .3), j - i + 1, hgt_f * 1.6, color=cm(lv / 5), alpha=a * .5, lw=0, zorder=1))
+        if lv >= 4:
+            ax.plot([i - .5, j + .5], [edges_f[k] + hgt_f / 2] * 2, color="#fff3c4", lw=1.2, alpha=.9, zorder=1.5)
+
+
+def draw_neon_lines(ax):
+    cm = pal(["#00e5ff", "#7c4dff", "#ff00e5"])
+    for k, i, j, lv in ribbons(gf[:, ::2], .4, 5):
+        y = edges_f[2 * k] + hgt_f
+        ax.plot([i - .5, j + .5], [y, y], color=cm(lv / 4), lw=5, alpha=.15, solid_capstyle="butt", zorder=1)
+        ax.plot([i - .5, j + .5], [y, y], color=cm(lv / 4), lw=1 + .5 * lv, alpha=.9, solid_capstyle="butt", zorder=1.2)
+
+
+def draw_split(ax):
+    tot_ = hb + hs; mx = tot_.max(axis=1, keepdims=True); mx[mx == 0] = 1; inten = tot_ / mx
+    for i in range(0, N, 3):
+        for k in np.flatnonzero(inten[i] >= .45):
+            share = hb[i, k] / max(tot_[i, k], 1e-9); w = 2.7; a = .25 + .6 * (inten[i, k] - .45) / .55
+            ax.add_patch(Rectangle((i - .5, edges_f[k] + hgt_f * .12), w * share, hgt_f * .76, color="#2f7fd1", alpha=a, lw=0, zorder=1))
+            ax.add_patch(Rectangle((i - .5 + w * share, edges_f[k] + hgt_f * .12), w * (1 - share), hgt_f * .76, color="#e0a526", alpha=a, lw=0, zorder=1))
+
+
+J = [
+    ("J01_ribbons_tv",   "Ribbons: merged strips, TradingView teal → gold", draw_ribbons(["#1d4f5a", "#2b7a78", "#3aa59a", "#c9a227", "#f2d16b"]), ["#1d4f5a", "#3aa59a", "#f2d16b"]),
+    ("J02_ribbons_ocean", "Ribbons: Ocean (navy → cyan → white)", draw_ribbons(["#0b2545", "#13315c", "#1f7a8c", "#5fd3e8", "#e8fbff"]), ["#0b2545", "#1f7a8c", "#e8fbff"]),
+    ("J03_ribbons_sunset", "Ribbons: Sunset (purple → pink → orange)", draw_ribbons(["#2d0b4e", "#6a1b9a", "#d81b60", "#ff7043", "#ffd180"]), ["#2d0b4e", "#d81b60", "#ffd180"]),
+    ("J04_solid_mono",   "Solid mono blue, no gaps (TradingView VPVR blue)", draw_ribbons(["#0d1b3d", "#13306b", "#1e4fb3", "#2962ff", "#82a8ff"], gap=0, alpha=.6), ["#0d1b3d", "#2962ff", "#82a8ff"]),
+    ("J05_outline",      "Outline only: frames instead of fills", draw_ribbons(["#3b528b", "#21918c", "#5ec962", "#fde725", "#ff6b3d"], thr=.5, outline=True), ["#3b528b", "#5ec962", "#ff6b3d"]),
+    ("J06_focus",        "Focus: only strongest levels bright, rest faint gray", draw_focus, ["#3a3f4f", "#ffb020", "#ff4d4d"], ("faint = normal", "hot")),
+    ("J07_glow",         "Glow: soft amber haze + bright core line on the busiest rows", draw_glow, ["#2a1f10", "#ffb347", "#fff3c4"]),
+    ("J08_neon_lines",   "Neon lines: thin glowing lines, thicker = more volume", draw_neon_lines, ["#00e5ff", "#7c4dff", "#ff00e5"]),
+    ("J09_split_cells",  "Split cells: blue part = buy volume, gold part = sell volume", draw_split, ["#2f7fd1", "#888888", "#e0a526"], ("buyers", "sellers")),
+    ("J10_ribbons_mint", "Ribbons: Mint / gray minimal (5 steps)", draw_ribbons(["#2b2f3a", "#3f5d57", "#4f8f7f", "#6fd3b0", "#c9ffe9"], gap=.2, alpha=.8), ["#2b2f3a", "#4f8f7f", "#c9ffe9"]),
+]
+LBL = {"J06_focus": ("faint = normal", "hot"), "J09_split_cells": ("buyers", "sellers")}
+for key, title, fn, lc, *_ in J:
+    jstyle(key, title, fn, lc, LBL.get(key, ("low volume", "high")))
+for part, keys in (("J_sheet_1.png", [x[0] for x in J[:6]]), ("J_sheet_2.png", [x[0] for x in J[6:]])):
+    rows_n = (len(keys) + 1) // 2
+    fig, axs = plt.subplots(rows_n, 2, figsize=(16, 4.5 * rows_n), facecolor=BG)
+    for a in np.atleast_1d(axs).flat: a.set_axis_off()
+    for a, k in zip(np.atleast_1d(axs).flat, keys):
+        a.imshow(imread(OUT / f"{k}.png")[30:860, 40:1520]); a.set_title(k.split("_")[0] + " · " + dict((x[0], x[1]) for x in J)[k], color=TX, fontsize=11)
+    fig.tight_layout(); fig.savefig(OUT / part, dpi=90, facecolor=BG); plt.close(fig)
+print("ok6")
