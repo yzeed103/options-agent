@@ -516,6 +516,10 @@ showWhale = input.bool(true, "إظهار مستويات الحيتان", group=G
 whLen     = input.int(20, "طول المنطقة العرضية (أيام)", minval=5, maxval=60, group=G_WH)
 whMult    = input.float(6.0, "أقصى مدى للمنطقة (ATR يومي)", minval=1.0, maxval=20, step=0.5, group=G_WH)
 whRows    = input.int(200, "عدد صفوف البروفايل", minval=50, maxval=300, group=G_WH)
+whMode    = input.string("تلقائي", "طريقة تحديد المنطقة العرضية", options=["تلقائي", "يدوي"], tooltip="تلقائي: آخر منطقة عرضية على الشموع اليومية. يدوي: أنت تحدد بداية المنطقة ونهايتها", group=G_WH)
+whStartT  = input.time(timestamp("2026-05-01T00:00:00"), "بداية المنطقة (الوضع اليدوي)", group=G_WH)
+whEndT    = input.time(timestamp("2026-10-01T00:00:00"), "نهاية المنطقة (الوضع اليدوي)", group=G_WH)
+whSrcTF   = input.timeframe("60", "فريم بيانات البروفايل", tooltip="البروفايل يُبنى دائما من هذا الفريم، فتبقى الخطوط ثابتة عند تغيير فريم الشارت", group=G_WH)
 whPeaks   = input.int(8, "أقصى عدد للأعمدة الطويلة", minval=1, maxval=12, group=G_WH)
 cWhPoc    = input.color(#ff3b3b, "أعلى فوليوم POC", inline="wc", group=G_WH)
 cWhLv     = input.color(#9b5cff, "باقي الأعمدة", inline="wc", group=G_WH)
@@ -529,124 +533,154 @@ wbMinR    = input.float(3.0, "أقل مسافة للهدف (مضاعف المخ�
 cWbUp     = input.color(#00e5ff, "لون الإشارة صعود", inline="wb", group=G_WH)
 cWbDn     = input.color(#ff9100, "هبوط", inline="wb", group=G_WH)
 
-// daily candles built from the chart bars
-var float[] dO = array.new_float()
+// ---- fixed data source: profile always built from `whSrcTF` bars, ranges always from DAILY bars, so the
+// levels are identical on every chart timeframe. Lines are drawn with xloc.bar_time (time, not bar number).
+chartSec = timeframe.in_seconds()
+srcSec   = timeframe.in_seconds(whSrcTF)
+useLower = chartSec > srcSec                                   // chart (e.g. daily) is above the source TF
+lowerTF  = useLower ? whSrcTF : timeframe.period
+[lH, lL, lV, lT] = request.security_lower_tf(syminfo.tickerid, lowerTF, [high, low, volume, time])
+[uH, uL, uV, uT] = request.security(syminfo.tickerid, whSrcTF, [high[1], low[1], volume[1], time[1]], lookahead=barmerge.lookahead_on)
+[pdHi, pdLo, pdCl, pdT] = request.security(syminfo.tickerid, "D", [high[1], low[1], close[1], time[1]], lookahead=barmerge.lookahead_on)
+
+var float[] sH = array.new_float()
+var float[] sL = array.new_float()
+var float[] sV = array.new_float()
+var int[]   sT = array.new_int()
+SRC_MAX = 8000
+if useLower and barstate.isconfirmed and array.size(lT) > 0
+    for j = 0 to array.size(lT) - 1
+        array.push(sH, array.get(lH, j))
+        array.push(sL, array.get(lL, j))
+        array.push(sV, nz(array.get(lV, j)))
+        array.push(sT, array.get(lT, j))
+else if not useLower and not na(uT) and (array.size(sT) == 0 or uT != array.get(sT, array.size(sT) - 1))
+    array.push(sH, uH)
+    array.push(sL, uL)
+    array.push(sV, nz(uV))
+    array.push(sT, uT)
+while array.size(sT) > SRC_MAX
+    array.shift(sH)
+    array.shift(sL)
+    array.shift(sV)
+    array.shift(sT)
+
+// daily candles (completed days only)
 var float[] dH = array.new_float()
 var float[] dL = array.new_float()
 var float[] dC = array.new_float()
-var int[]   dS = array.new_int()
-var float curO = na
-var float curH = na
-var float curL = na
-var int   curS = na
+var int[]   dT = array.new_int()
 var float dATR = na
 var bool  inRange = false
 var int   rIdx = na
 var float rHi = na
 var float rLo = na
 var float[] whLv = array.new_float()
-var float whPoc = na
-var int   whFrom = na
+var float[] whPocA = array.new_float(1, na)
 var line[] whLines = array.new_line()
-var box   whBox = na
-if timeframe.isintraday and newSess
-    if not na(curS)
-        array.push(dO, curO)
-        array.push(dH, curH)
-        array.push(dL, curL)
-        array.push(dC, close[1])
-        array.push(dS, curS)
-        n = array.size(dC) - 1
-        pcD = n > 0 ? array.get(dC, n - 1) : array.get(dO, n)
-        trD = math.max(curH - curL, math.max(math.abs(curH - pcD), math.abs(curL - pcD)))
-        dATR := na(dATR) ? trD : dATR + (trD - dATR) / 14
-        cy = array.get(dC, n)
-        if inRange
-            if cy >= rLo and cy <= rHi
-                rHi := math.max(rHi, curH)
-                rLo := math.min(rLo, curL)
-            else
-                // range completed -> fixed-range profile over its bars (breakout day excluded)
-                b0 = array.get(dS, rIdx)
-                b1 = array.get(dS, n) - 1
-                if bar_index - b0 < 5000 and b1 > b0
-                    pHiW = 0.0
-                    pLoW = 1e12
-                    for b = b0 to b1
-                        pHiW := math.max(pHiW, high[bar_index - b])
-                        pLoW := math.min(pLoW, low[bar_index - b])
-                    stW = (pHiW - pLoW) / whRows
-                    if stW > 0
-                        pv = array.new_float(whRows, 0.0)
-                        for b = b0 to b1
-                            k = bar_index - b
-                            bh = high[k]
-                            bl = low[k]
-                            bv = nz(volume[k])
-                            rg = math.max(bh - bl, syminfo.mintick)
-                            q0 = math.max(0, math.min(whRows - 1, int((bl - pLoW) / stW)))
-                            q1 = math.max(0, math.min(whRows - 1, int((bh - pLoW) / stW)))
-                            for q = q0 to q1
-                                qLo = pLoW + q * stW
-                                ov = math.max(0.0, math.min(bh, qLo + stW) - math.max(bl, qLo))
-                                array.set(pv, q, array.get(pv, q) + (bh == bl ? bv : bv * ov / rg))
-                        sm = array.new_float(whRows, 0.0)
-                        for q = 0 to whRows - 1
-                            a0 = array.get(pv, math.max(0, q - 1))
-                            a1 = array.get(pv, q)
-                            a2 = array.get(pv, math.min(whRows - 1, q + 1))
-                            array.set(sm, q, (a0 + a1 + a2) / 3)
-                        mS = array.avg(sm)
-                        cand = array.new_float()
-                        candV = array.new_float()
-                        for q = 0 to whRows - 1
-                            isMax = true
-                            for z = math.max(0, q - 5) to math.min(whRows - 1, q + 5)
-                                if array.get(sm, z) > array.get(sm, q)
-                                    isMax := false
-                            if isMax and array.get(sm, q) >= 1.3 * mS
-                                array.push(cand, pLoW + (q + 0.5) * stW)
-                                array.push(candV, array.get(sm, q))
-                        array.clear(whLv)
-                        if array.size(cand) > 0
-                            ordW = array.sort_indices(candV, order.descending)
-                            for j = 0 to math.min(whPeaks, array.size(cand)) - 1
-                                array.push(whLv, array.get(cand, array.get(ordW, j)))
-                        pocQ = array.indexof(pv, array.max(pv))
-                        whPoc := pLoW + (pocQ + 0.5) * stW
-                        whFrom := b0
-                        // redraw lines
-                        for ln in whLines
-                            line.delete(ln)
-                        array.clear(whLines)
-                        if showWhale
-                            for j = 0 to array.size(whLv) - 1
-                                L = array.get(whLv, j)
-                                isPoc = math.abs(L - whPoc) <= 3 * stW
-                                array.push(whLines, line.new(b0, L, bar_index, L, extend=extend.right, color=isPoc ? cWhPoc : cWhLv, width=isPoc ? 2 : 1))
-                        if showWBox
-                            box.delete(whBox)
-                            whBox := box.new(b0, pHiW, b1, pLoW, border_color=cWhBoxB, border_style=line.style_dashed, bgcolor=cWhBoxF)
-                inRange := false
-        else if n + 1 >= whLen and not na(dATR)
-            sI = n - whLen + 1
-            hiW = array.get(dH, sI)
-            loW = array.get(dL, sI)
-            for j = sI to n
-                hiW := math.max(hiW, array.get(dH, j))
-                loW := math.min(loW, array.get(dL, j))
-            if hiW - loW <= whMult * dATR
-                inRange := true
-                rIdx := sI
-                rHi := hiW
-                rLo := loW
-    curO := open
-    curH := high
-    curL := low
-    curS := bar_index
-else if timeframe.isintraday
-    curH := math.max(nz(curH, high), high)
-    curL := math.min(nz(curL, low), low)
+var box[] whBoxA = array.new_box()
+var int   lastBuildT = na
+
+// build the profile of [t0, t1) from the source bars, pick peaks, redraw
+buildWhale(int t0, int t1) =>
+    int nUsed = 0
+    float pHiW = na
+    float pLoW = na
+    nSrc = array.size(sT)
+    for j = 0 to math.max(nSrc - 1, 0)
+        if nSrc == 0
+            break
+        tj = array.get(sT, j)
+        if tj >= t0 and tj < t1
+            pHiW := na(pHiW) ? array.get(sH, j) : math.max(pHiW, array.get(sH, j))
+            pLoW := na(pLoW) ? array.get(sL, j) : math.min(pLoW, array.get(sL, j))
+            nUsed += 1
+    if nUsed > 10 and pHiW > pLoW
+        stW = (pHiW - pLoW) / whRows
+        pv = array.new_float(whRows, 0.0)
+        for j = 0 to nSrc - 1
+            tj = array.get(sT, j)
+            if tj >= t0 and tj < t1
+                bh = array.get(sH, j)
+                bl = array.get(sL, j)
+                bv = array.get(sV, j)
+                rg = math.max(bh - bl, syminfo.mintick)
+                q0 = math.max(0, math.min(whRows - 1, int((bl - pLoW) / stW)))
+                q1 = math.max(0, math.min(whRows - 1, int((bh - pLoW) / stW)))
+                for q = q0 to q1
+                    qLo = pLoW + q * stW
+                    ov = math.max(0.0, math.min(bh, qLo + stW) - math.max(bl, qLo))
+                    array.set(pv, q, array.get(pv, q) + (bh == bl ? bv : bv * ov / rg))
+        sm = array.new_float(whRows, 0.0)
+        for q = 0 to whRows - 1
+            array.set(sm, q, (array.get(pv, math.max(0, q - 1)) + array.get(pv, q) + array.get(pv, math.min(whRows - 1, q + 1))) / 3)
+        mS = array.avg(sm)
+        cand = array.new_float()
+        candV = array.new_float()
+        for q = 0 to whRows - 1
+            isMax = true
+            for z = math.max(0, q - 5) to math.min(whRows - 1, q + 5)
+                if array.get(sm, z) > array.get(sm, q)
+                    isMax := false
+            if isMax and array.get(sm, q) >= 1.3 * mS
+                array.push(cand, pLoW + (q + 0.5) * stW)
+                array.push(candV, array.get(sm, q))
+        array.clear(whLv)
+        if array.size(cand) > 0
+            ordW = array.sort_indices(candV, order.descending)
+            for j = 0 to math.min(whPeaks, array.size(cand)) - 1
+                array.push(whLv, array.get(cand, array.get(ordW, j)))
+        pocV = pLoW + (array.indexof(pv, array.max(pv)) + 0.5) * stW
+        array.set(whPocA, 0, pocV)
+        for ln in whLines
+            line.delete(ln)
+        array.clear(whLines)
+        if showWhale
+            for j = 0 to array.size(whLv) - 1
+                L = array.get(whLv, j)
+                isPoc = math.abs(L - pocV) <= 3 * stW
+                array.push(whLines, line.new(t0, L, t1, L, xloc=xloc.bar_time, extend=extend.right, color=isPoc ? cWhPoc : cWhLv, width=isPoc ? 2 : 1))
+        for bx in whBoxA
+            box.delete(bx)
+        array.clear(whBoxA)
+        if showWBox
+            array.push(whBoxA, box.new(t0, pHiW, t1, pLoW, xloc=xloc.bar_time, border_color=cWhBoxB, border_style=line.style_dashed, bgcolor=cWhBoxF))
+    nUsed
+
+if whMode == "يدوي"
+    // manual: rebuild once the source bars cover the chosen end time (and on the last bar for live data)
+    if (na(lastBuildT) and array.size(sT) > 0 and array.get(sT, array.size(sT) - 1) >= whEndT) or (barstate.islast and na(lastBuildT))
+        if buildWhale(whStartT, whEndT) > 0
+            lastBuildT := time
+else if not na(pdT) and (array.size(dT) == 0 or pdT != array.get(dT, array.size(dT) - 1))
+    array.push(dH, pdHi)
+    array.push(dL, pdLo)
+    array.push(dC, pdCl)
+    array.push(dT, pdT)
+    n = array.size(dC) - 1
+    pcD = n > 0 ? array.get(dC, n - 1) : pdCl
+    trD = math.max(pdHi - pdLo, math.max(math.abs(pdHi - pcD), math.abs(pdLo - pcD)))
+    dATR := na(dATR) ? trD : dATR + (trD - dATR) / 14
+    if inRange
+        if pdCl >= rLo and pdCl <= rHi
+            rHi := math.max(rHi, pdHi)
+            rLo := math.min(rLo, pdLo)
+        else
+            // range completed on day n (breakout day excluded from the profile)
+            buildWhale(array.get(dT, rIdx), array.get(dT, n))
+            inRange := false
+    else if n + 1 >= whLen and not na(dATR)
+        sI = n - whLen + 1
+        hiW = array.get(dH, sI)
+        loW = array.get(dL, sI)
+        for j = sI to n
+            hiW := math.max(hiW, array.get(dH, j))
+            loW := math.min(loW, array.get(dL, j))
+        if hiW - loW <= whMult * dATR
+            inRange := true
+            rIdx := sI
+            rHi := hiW
+            rLo := loW
 
 // whale bounce signal
 int wbSig = 0
