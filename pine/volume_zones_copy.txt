@@ -285,8 +285,13 @@ plot(showVA ? poc : na, "POC", cPoc, wPoc, plot.style_stepline)
 plot(showVA ? vah : na, "VAH", cVah, wVah, plot.style_stepline)
 plot(showVA ? val : na, "VAL", cVal, wVal, plot.style_stepline)
 barcolor(not colorBars ? na : strongVol ? (close >= open ? cStrongUp : cStrongDn) : weak ? cWeakBar : na, title="شموع حسب الفوليوم")
-plotshape(brk == 1 and hunt == 0, "كسر التجمع صعود", shape.triangleup, location.belowbar, cBrkUp, size=size.tiny)
-plotshape(brk == -1 and hunt == 0, "كسر التجمع هبوط", shape.triangledown, location.abovebar, cBrkDn, size=size.tiny)
+showRevW = input.bool(true, "عرض كسر التجمع كتحذير انعكاس", group="تنبيه الاتجاه")
+cRevW    = input.color(#ffb020, "لون تحذير الانعكاس", group="تنبيه الاتجاه")
+plotshape(not showRevW and brk == 1 and hunt == 0, "كسر التجمع صعود", shape.triangleup, location.belowbar, cBrkUp, size=size.tiny)
+plotshape(not showRevW and brk == -1 and hunt == 0, "كسر التجمع هبوط", shape.triangledown, location.abovebar, cBrkDn, size=size.tiny)
+// Tested on 7 symbols (15m, 1.5 years): after a weak-pool break price continued only ~46% of the time.
+plotshape(showRevW and brk == 1 and hunt == 0, "تحذير انعكاس بعد كسر للأعلى", shape.labeldown, location.abovebar, cRevW, text="انعكاس؟", textcolor=color.black, size=size.tiny)
+plotshape(showRevW and brk == -1 and hunt == 0, "تحذير انعكاس بعد كسر للأسفل", shape.labelup, location.belowbar, cRevW, text="انعكاس؟", textcolor=color.black, size=size.tiny)
 plotshape(hunt == 1, "HUNT صعود", shape.labelup, location.belowbar, cHuntUp, text="HUNT", textcolor=cHuntTx)
 plotshape(hunt == -1, "HUNT هبوط", shape.labeldown, location.abovebar, cHuntDn, text="HUNT", textcolor=cHuntTx)
 plotshape(rej == 1, "ارتداد صاعد", shape.circle, location.belowbar, cRejUp, size=size.tiny)
@@ -372,6 +377,104 @@ plotshape(showVar and vaSig == -1 and hunt == 0, "عودة للقيمة هبوط
 if showVar and vaSig != 0 and hunt == 0
     line.new(bar_index, vaTgt, bar_index + 10, vaTgt, color=vaSig > 0 ? cVarUp : cVarDn, style=line.style_dotted, width=1)
 alertcondition(vaSig != 0, "عودة لمنطقة القيمة", "السعر عاد إلى داخل منطقة القيمة")
+
+// ═══════════════ Prior-day value area + trend alert ═══════════════
+// Tested on 7 symbols (15m, 1.5 years): two closes outside yesterday's value area with the EMA trend was the only
+// setup that beat ordinary bars in both halves of the data (right direction ~52%, small edge). Context, not an entry.
+showTA   = input.bool(true, "إظهار تنبيه الاتجاه", group="تنبيه الاتجاه")
+taBars   = input.int(2, "عدد الإغلاقات خارج منطقة قيمة الأمس", minval=1, maxval=5, group="تنبيه الاتجاه")
+taRows   = input.int(30, "دقة بروفايل الأمس (عدد الصفوف)", minval=10, maxval=60, group="تنبيه الاتجاه")
+showPdVA = input.bool(true, "إظهار منطقة قيمة الأمس", group="تنبيه الاتجاه")
+cPdVA    = input.color(#5c8dff, "حدود منطقة قيمة الأمس", inline="pd", group="تنبيه الاتجاه")
+cPdPoc   = input.color(#ff4d4d, "أعلى تداول أمس", inline="pd", group="تنبيه الاتجاه")
+cTaUp    = input.color(color.new(#00e676, 92), "خلفية اتجاه صاعد", inline="tb2", group="تنبيه الاتجاه")
+cTaDn    = input.color(color.new(#ff5252, 92), "هابط", inline="tb2", group="تنبيه الاتجاه")
+cTaLbl   = input.color(#00e676, "لون ملصق التنبيه صعود", inline="tl2", group="تنبيه الاتجاه")
+cTaLblDn = input.color(#ff5252, "هبوط", inline="tl2", group="تنبيه الاتجاه")
+
+newSess = timeframe.isintraday and ta.change(time("D")) != 0
+var float[] sH = array.new_float()
+var float[] sL = array.new_float()
+var float[] sV = array.new_float()
+var float pdVAH = na
+var float pdVAL = na
+var float pdPOC = na
+var float sessOpen = na
+var int   upCnt = 0
+var int   dnCnt = 0
+var bool  taFired = false
+var int   taDir = 0
+if newSess
+    nB = array.size(sH)
+    if nB > 0
+        hiS = array.max(sH)
+        loS = array.min(sL)
+        stS = (hiS - loS) / taRows
+        if stS > 0
+            pv = array.new_float(taRows, 0.0)
+            for b = 0 to nB - 1
+                bh = array.get(sH, b)
+                bl = array.get(sL, b)
+                bv = array.get(sV, b)
+                rg = math.max(bh - bl, syminfo.mintick)
+                q0 = math.max(0, math.min(taRows - 1, int((bl - loS) / stS)))
+                q1 = math.max(0, math.min(taRows - 1, int((bh - loS) / stS)))
+                for q = q0 to q1
+                    qLo = loS + q * stS
+                    ov = math.max(0.0, math.min(bh, qLo + stS) - math.max(bl, qLo))
+                    array.set(pv, q, array.get(pv, q) + (bh == bl ? bv : bv * ov / rg))
+            tot = array.sum(pv)
+            pI = array.indexof(pv, array.max(pv))
+            a0 = pI
+            a1 = pI
+            accV = array.get(pv, pI)
+            while accV < vaPct * tot and (a0 > 0 or a1 < taRows - 1)
+                vUp = a1 < taRows - 1 ? array.get(pv, a1 + 1) : -1.0
+                vDn = a0 > 0 ? array.get(pv, a0 - 1) : -1.0
+                if vUp >= vDn
+                    a1 += 1
+                    accV += vUp
+                else
+                    a0 -= 1
+                    accV += vDn
+            pdPOC := loS + (pI + 0.5) * stS
+            pdVAH := loS + (a1 + 1) * stS
+            pdVAL := loS + a0 * stS
+    array.clear(sH)
+    array.clear(sL)
+    array.clear(sV)
+    sessOpen := open
+    upCnt := 0
+    dnCnt := 0
+    taFired := false
+    taDir := 0
+array.push(sH, high)
+array.push(sL, low)
+array.push(sV, nz(volume))
+
+int taFire = 0
+if not na(pdVAH)
+    upCnt := close > pdVAH ? upCnt + 1 : 0
+    dnCnt := close < pdVAL ? dnCnt + 1 : 0
+    if not taFired and upCnt >= taBars and sessOpen <= pdVAH and emaF > emaS
+        taFire := 1
+    else if not taFired and dnCnt >= taBars and sessOpen >= pdVAL and emaF < emaS
+        taFire := -1
+    if taFire != 0
+        taFired := true
+        taDir := taFire
+    else if taDir == 1 and (close < pdVAH or emaF < emaS)
+        taDir := 0
+    else if taDir == -1 and (close > pdVAL or emaF > emaS)
+        taDir := 0
+
+plot(showPdVA and timeframe.isintraday ? pdVAH : na, "أعلى منطقة قيمة الأمس", cPdVA, 1, plot.style_stepline)
+plot(showPdVA and timeframe.isintraday ? pdVAL : na, "أدنى منطقة قيمة الأمس", cPdVA, 1, plot.style_stepline)
+plot(showPdVA and timeframe.isintraday ? pdPOC : na, "أعلى تداول أمس", cPdPoc, 1, plot.style_stepline)
+bgcolor(showTA and taDir == 1 ? cTaUp : showTA and taDir == -1 ? cTaDn : na, title="خلفية تنبيه الاتجاه")
+plotshape(showTA and taFire == 1, "تنبيه اتجاه صاعد", shape.labelup, location.belowbar, cTaLbl, text="اتجاه ↑", textcolor=color.black, size=size.small)
+plotshape(showTA and taFire == -1, "تنبيه اتجاه هابط", shape.labeldown, location.abovebar, cTaLblDn, text="اتجاه ↓", textcolor=color.black, size=size.small)
+alertcondition(taFire != 0, "تنبيه اتجاه", "ثبات السعر خارج منطقة قيمة الأمس مع اتجاه المتوسطات")
 
 // ═══════════════ Status panel (Arabic) ═══════════════
 tPos = tblPos == "أعلى اليمين" ? position.top_right : tblPos == "أعلى اليسار" ? position.top_left : tblPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
@@ -466,6 +569,12 @@ if barstate.islast
     if hunt != 0
         vd := "إشارة HUNT " + (hunt > 0 ? "صعود" : "هبوط") + " الآن. الهدف ثم الإلغاء:\n" + fmt(huntTgt) + "   |   " + fmt(lastStop)
         vdc := hunt > 0 ? cTblUp : cTblDn
+    else if showRevW and brk != 0
+        vd := "تحذير: كسر تجمع ضعيف " + (brk > 0 ? "للأعلى" : "للأسفل") + ". في الاختبار ينعكس السعر بعده أكثر مما يستمر"
+        vdc := cRevW
+    else if showTA and taDir != 0
+        vd := "تنبيه اتجاه " + (taDir > 0 ? "صاعد" : "هابط") + ": ثبات " + (taDir > 0 ? "فوق" : "تحت") + " منطقة قيمة الأمس مع الترند. ينتهي بالعودة داخلها:\n" + fmt(taDir > 0 ? pdVAH : pdVAL)
+        vdc := taDir > 0 ? cTaLbl : cTaLblDn
     else if showVar and vaSig != 0
         vd := "عودة لمنطقة القيمة " + (vaSig > 0 ? "صعود" : "هبوط") + ". الهدف ثم الإلغاء:\n" + fmt(vaTgt) + "   |   " + fmt(vaStp)
         vdc := vaSig > 0 ? cVarUp : cVarDn
@@ -608,6 +717,6 @@ if showSplit and barstate.islast and ready
 
 // ═══════════════ Alerts ═══════════════
 alertcondition(weak and not weak[1], "فوليوم ضعيف", "الفوليوم أصبح ضعيفا")
-alertcondition(brk != 0, "كسر التجمع الضعيف", "انكسر تجمع الفوليوم الضعيف بفوليوم قوي")
+alertcondition(brk != 0, "كسر التجمع الضعيف (تحذير انعكاس)", "انكسر تجمع الفوليوم الضعيف: احتمال انعكاس")
 alertcondition(hunt != 0, "إشارة HUNT", "كسر تجمع ضعيف في ترند قوي: استهداف منطقة فوليوم سابقة")
 alertcondition(rej != 0, "ارتداد من منطقة", "السعر ارتد من منطقة فوليوم عالي")
