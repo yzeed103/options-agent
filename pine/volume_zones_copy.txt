@@ -65,6 +65,11 @@ cHuntUpL = input.color(color.lime, "خط الهدف صعود", inline="tl", grou
 cHuntDnL = input.color(color.red, "هبوط", inline="tl", group=G_LN)
 wHunt    = input.int(2, "سماكة خط الهدف", minval=1, maxval=5, inline="tw", group=G_LN)
 lenHunt  = input.int(20, "الطول (شموع)", minval=5, maxval=200, inline="tw", group=G_LN)
+wVarL    = input.int(1, "سماكة خط هدف العودة للقيمة", minval=1, maxval=5, group=G_LN)
+wPoolB   = input.int(1, "سماكة حدود مربع التجمع الضعيف", minval=1, maxval=5, group=G_LN)
+wZoneB   = input.int(1, "سماكة حدود أقوى 3 مناطق", minval=1, maxval=5, group=G_LN)
+wPdVA    = input.int(1, "سماكة خطوط منطقة قيمة الأمس", minval=1, maxval=5, inline="pdw", group=G_LN)
+wPdPoc   = input.int(1, "أعلى تداول أمس", minval=1, maxval=5, inline="pdw", group=G_LN)
 
 G_CD = "ألوان · الشموع"
 colorBars = input.bool(true, "تلوين الشموع حسب الفوليوم", group=G_CD)
@@ -327,7 +332,7 @@ if hunt != 0
 var box poolBox = na
 if not na(poolStart) and not na(poolH)
     if na(poolBox)
-        poolBox := box.new(poolStart, math.max(poolH, high), bar_index, math.min(poolL, low), border_color=cPool, border_style=line.style_dotted, bgcolor=cPoolBg, text="تجمع ضعيف", text_color=cPool, text_size=size.tiny, text_valign=text.align_top, text_halign=text.align_left)
+        poolBox := box.new(poolStart, math.max(poolH, high), bar_index, math.min(poolL, low), border_color=cPool, border_width=wPoolB, border_style=line.style_dotted, bgcolor=cPoolBg, text="تجمع ضعيف", text_color=cPool, text_size=size.tiny, text_valign=text.align_top, text_halign=text.align_left)
     else
         box.set_right(poolBox, bar_index)
         box.set_top(poolBox, math.max(poolH, high))
@@ -357,7 +362,7 @@ if showTop and barstate.islast and nZones > 0
         c = array.get(cols, j)
         pct = totZ > 0 ? math.round(100 * array.get(zv, k) / totZ) : 0
         txt = "#" + str.tostring(j + 1) + "  " + str.tostring(pct) + "%  " + str.tostring(array.get(hvnLo, k), format.mintick) + "-" + str.tostring(array.get(hvnHi, k), format.mintick)
-        array.push(topBoxes, box.new(bar_index - lookback, array.get(hvnHi, k), bar_index + 15, array.get(hvnLo, k), border_color=fade(c, zoneBord), bgcolor=fade(c, zoneFill), text=txt, text_color=c, text_size=size.small, text_halign=text.align_right, text_valign=text.align_top))
+        array.push(topBoxes, box.new(bar_index - lookback, array.get(hvnHi, k), bar_index + 15, array.get(hvnLo, k), border_color=fade(c, zoneBord), border_width=wZoneB, bgcolor=fade(c, zoneFill), text=txt, text_color=c, text_size=size.small, text_halign=text.align_right, text_valign=text.align_top))
 
 // ═══════════════ Early warning (optional, no proven edge alone) ═══════════════
 eHH = ta.highest(high, earlyN)[1]
@@ -412,7 +417,7 @@ if vaFree and not na(vah[1]) and not na(val) and atrV > 0
 plotshape(showVar and vaSig == 1 and hunt == 0, "عودة للقيمة صعود", shape.labelup, location.belowbar, cVarUp, text="عودة", textcolor=cLblTxt, size=size.tiny)
 plotshape(showVar and vaSig == -1 and hunt == 0, "عودة للقيمة هبوط", shape.labeldown, location.abovebar, cVarDn, text="عودة", textcolor=cLblTxt, size=size.tiny)
 if showVar and vaSig != 0 and hunt == 0
-    line.new(bar_index, vaTgt, bar_index + 10, vaTgt, color=vaSig > 0 ? cVarUp : cVarDn, style=line.style_dotted, width=1)
+    line.new(bar_index, vaTgt, bar_index + 10, vaTgt, color=vaSig > 0 ? cVarUp : cVarDn, style=line.style_dotted, width=wVarL)
 alertcondition(vaSig != 0, "عودة لمنطقة القيمة", "السعر عاد إلى داخل منطقة القيمة")
 
 // ═══════════════ Prior-day value area + trend alert ═══════════════
@@ -506,9 +511,9 @@ if not na(pdVAH)
     else if taDir == -1 and (close > pdVAL or emaF > emaS)
         taDir := 0
 
-plot(showPdVA and timeframe.isintraday ? pdVAH : na, "أعلى منطقة قيمة الأمس", cPdVA, 1, plot.style_stepline)
-plot(showPdVA and timeframe.isintraday ? pdVAL : na, "أدنى منطقة قيمة الأمس", cPdVA, 1, plot.style_stepline)
-plot(showPdVA and timeframe.isintraday ? pdPOC : na, "أعلى تداول أمس", cPdPoc, 1, plot.style_stepline)
+plot(showPdVA and timeframe.isintraday ? pdVAH : na, "أعلى منطقة قيمة الأمس", cPdVA, wPdVA, plot.style_stepline)
+plot(showPdVA and timeframe.isintraday ? pdVAL : na, "أدنى منطقة قيمة الأمس", cPdVA, wPdVA, plot.style_stepline)
+plot(showPdVA and timeframe.isintraday ? pdPOC : na, "أعلى تداول أمس", cPdPoc, wPdPoc, plot.style_stepline)
 bgcolor(showTA and taDir == 1 ? cTaUp : showTA and taDir == -1 ? cTaDn : na, title="خلفية تنبيه الاتجاه")
 plotshape(showTA and taFire == 1, "تنبيه اتجاه صاعد", shape.labelup, location.belowbar, cTaLbl, text="اتجاه ↑", textcolor=cLblTxt, size=size.small)
 plotshape(showTA and taFire == -1, "تنبيه اتجاه هابط", shape.labeldown, location.abovebar, cTaLblDn, text="اتجاه ↓", textcolor=cLblTxt, size=size.small)
@@ -536,6 +541,12 @@ whPeaks   = input.int(8, "أقصى عدد للأعمدة الطويلة", minval
 showWhVA  = input.bool(true, "إظهار POC و VAH و VAL لكل منطقة عرضية", group=G_WH)
 cWhVA     = input.color(#ffb020, "لون VAH و VAL للمنطقة", inline="wva", group=G_WH)
 wWhVA     = input.int(2, "السماكة", minval=1, maxval=5, inline="wva", group=G_WH)
+wWhPocL   = input.int(3, "سماكة خط POC للمنطقة", minval=1, maxval=5, group=G_WH)
+wWhLv     = input.int(1, "سماكة الأعمدة الطويلة", minval=1, maxval=5, inline="wlw", group=G_WH)
+wWhPk     = input.int(2, "العمود الأعلى", minval=1, maxval=5, inline="wlw", group=G_WH)
+wWhBox    = input.int(1, "سماكة حدود مستطيل المنطقة", minval=1, maxval=5, group=G_WH)
+wWbT      = input.int(2, "سماكة خط هدف الحوت", minval=1, maxval=5, inline="wbw", group=G_WH)
+wWbS      = input.int(1, "خط الوقف", minval=1, maxval=5, inline="wbw", group=G_WH)
 cWhPoc    = input.color(#ff3b3b, "أعلى فوليوم POC", inline="wc", group=G_WH)
 cWhLv     = input.color(#9b5cff, "باقي الأعمدة", inline="wc", group=G_WH)
 showWBox  = input.bool(true, "إظهار مستطيل المنطقة العرضية", group=G_WH)
@@ -674,7 +685,7 @@ drawRange(int t0, int t1, int boxEnd, bool live) =>
                     accW += vD
             vahW = pLoW + (a1 + 1) * stW
             valW = pLoW + a0 * stW
-            array.push(whLines, line.new(t0, pocV, boxEnd, pocV, xloc=xloc.bar_time, extend=extend.right, color=cWhPoc, width=wWhVA + 1))
+            array.push(whLines, line.new(t0, pocV, boxEnd, pocV, xloc=xloc.bar_time, extend=extend.right, color=cWhPoc, width=wWhPocL))
             array.push(whLines, line.new(t0, vahW, boxEnd, vahW, xloc=xloc.bar_time, extend=extend.right, color=cWhVA, width=wWhVA))
             array.push(whLines, line.new(t0, valW, boxEnd, valW, xloc=xloc.bar_time, extend=extend.right, color=cWhVA, width=wWhVA))
             array.push(whLbls, label.new(t0, pocV, "POC " + str.tostring(pocV, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cWhPoc, 100), textcolor=cWhPoc, size=size.small))
@@ -687,9 +698,9 @@ drawRange(int t0, int t1, int boxEnd, bool live) =>
                 array.push(whLv, L)
                 if showWhale
                     isPoc = math.abs(L - pocV) <= 3 * stW
-                    array.push(whLines, line.new(t0, L, boxEnd, L, xloc=xloc.bar_time, extend=extend.right, color=isPoc ? cWhPoc : cWhLv, width=isPoc ? 2 : 1))
+                    array.push(whLines, line.new(t0, L, boxEnd, L, xloc=xloc.bar_time, extend=extend.right, color=isPoc ? cWhPoc : cWhLv, width=isPoc ? wWhPk : wWhLv))
         if showWBox
-            array.push(whBoxA, box.new(t0, pHiW, boxEnd, pLoW, xloc=xloc.bar_time, border_color=cWhBoxB, border_style=line.style_dashed, bgcolor=cWhBoxF, text=live ? "منطقة قيد التكوين" : "", text_color=cWhBoxB, text_size=size.small, text_valign=text.align_top, text_halign=text.align_left))
+            array.push(whBoxA, box.new(t0, pHiW, boxEnd, pLoW, xloc=xloc.bar_time, border_color=cWhBoxB, border_width=wWhBox, border_style=line.style_dashed, bgcolor=cWhBoxF, text=live ? "منطقة قيد التكوين" : "", text_color=cWhBoxB, text_size=size.small, text_valign=text.align_top, text_halign=text.align_left))
     nUsed
 
 // delete everything and redraw the completed ranges (+ the live one if liveT0 is not na)
@@ -808,8 +819,8 @@ if wbFree and showWB and array.size(whLv) > 0 and atrV > 0
 plotshape(wbSig == 1, "ارتداد حوت صعود", shape.labelup, location.belowbar, cWbUp, text="حوت ↑", textcolor=cLblTxt, size=size.small)
 plotshape(wbSig == -1, "ارتداد حوت هبوط", shape.labeldown, location.abovebar, cWbDn, text="حوت ↓", textcolor=cLblTxt, size=size.small)
 if wbSig != 0
-    line.new(bar_index, wbTgt, bar_index + 30, wbTgt, color=wbSig > 0 ? cWbUp : cWbDn, style=line.style_dashed, width=2)
-    line.new(bar_index, wbStp, bar_index + 30, wbStp, color=cWbStopC, style=line.style_dotted, width=1)
+    line.new(bar_index, wbTgt, bar_index + 30, wbTgt, color=wbSig > 0 ? cWbUp : cWbDn, style=line.style_dashed, width=wWbT)
+    line.new(bar_index, wbStp, bar_index + 30, wbStp, color=cWbStopC, style=line.style_dotted, width=wWbS)
     label.new(bar_index + 30, wbTgt, "هدف الحوت " + str.tostring(wbTgt, format.mintick), style=label.style_none, textcolor=wbSig > 0 ? cWbUp : cWbDn, size=size.small)
 alertcondition(wbSig != 0, "ارتداد حوت", "ارتداد من مستوى حوت باتجاه المستوى التالي (تحت الاختبار)")
 
