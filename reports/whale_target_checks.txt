@@ -1,0 +1,12 @@
+WHALE levels (peaks): {'trades': 418, 'win': np.float64(0.206), 'pf': np.float64(1.18), 'exp_r': np.float64(0.174)}
+  longs : {'trades': 193, 'win': np.float64(0.212), 'pf': np.float64(1.26), 'exp_r': np.float64(0.248)} 
+  shorts: {'trades': 225, 'win': np.float64(0.2), 'pf': np.float64(1.11), 'exp_r': np.float64(0.111)}
+  by stock: {'COST': np.float64(-0.242), 'HOOD': np.float64(0.461), 'INTU': np.float64(0.334), 'JNJ': np.float64(0.034), 'UNH': np.float64(0.37)}
+THIN levels (valleys, same profiles): {'trades': 362, 'win': np.float64(0.207), 'pf': np.float64(1.39), 'exp_r': np.float64(0.418)}
+RANDOM levels (10 draws) expectancy R: [np.float64(0.025), np.float64(-0.06), np.float64(0.188), np.float64(0.072), np.float64(-0.061), np.float64(-0.427), np.float64(0.146), np.float64(-0.287), np.float64(0.081), np.float64(0.025)] mean -0.03
+PERMUTATION (signal times shuffled within the day, 60x): mean -0.044  p = 0.066
+
+=== Independent check on the DEV period (2025-04-01 .. 2026-03-09); thin levels were never used there
+peak    {'trades': 289, 'win': np.float64(0.225), 'pf': np.float64(1.44), 'exp_r': np.float64(0.37)} {'COST': np.float64(-0.23), 'HOOD': np.float64(0.438), 'INTU': np.float64(0.382), 'JNJ': np.float64(0.012), 'UNH': np.float64(0.862)}
+valley  {'trades': 329, 'win': np.float64(0.179), 'pf': np.float64(0.97), 'exp_r': np.float64(-0.032)} {'COST': np.float64(0.13), 'HOOD': np.float64(0.656), 'INTU': np.float64(0.515), 'JNJ': np.float64(-0.233), 'UNH': np.float64(-0.794)}
+random  (10 draws): [np.float64(-0.163), np.float64(-0.185), np.float64(0.203), np.float64(-0.277), np.float64(0.058), np.float64(0.054), np.float64(0.247), np.float64(-0.205), np.float64(-0.022), np.float64(-0.054)] mean -0.034

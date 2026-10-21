@@ -1,0 +1,23 @@
+coverage: share of bars with >=1 active whale level: {'COST': np.float64(0.94), 'INTU': np.float64(0.93), 'JNJ': np.float64(0.81), 'UNH': np.float64(0.84), 'HOOD': np.float64(0.93)}
+dev 2025-04-01..2026-03-09  test 2026-03-10..2026-10-21
+configs tested: 1296   eligible: 18
+          setup trend  window  rvol_min  stop  min_r  overnight  trades  per_week_per_stock   win    pf  exp_r  avg_win  pos_stocks
+   whale_bounce   any     all       0.0  1.00    3.0       True     289               1.180 0.225 1.442  0.370    5.366           4
+   whale_bounce   any     all       0.0  1.00    1.5       True     342               1.396 0.284 1.427  0.332    3.906           4
+   whale_bounce   any     all       1.2  0.75    3.0       True     139               0.567 0.194 1.338  0.297    6.052           4
+   whale_bounce   any     all       0.0  1.50    2.0       True     237               0.967 0.287 1.327  0.245    3.458           4
+   whale_bounce   any     all       0.0  1.50    1.5       True     260               1.061 0.327 1.340  0.241    2.908           4
+squeeze_release   any first2h       0.0  1.00    2.0       True     240               0.980 0.217 1.257  0.222    5.012           4
+squeeze_release   any first2h       0.0  1.00    1.5       True     248               1.012 0.230 1.249  0.211    4.612           4
+   whale_bounce   any first2h       0.0  1.50    2.0       True     161               0.657 0.280 1.257  0.194    3.386           4
+   whale_bounce   any     all       0.0  1.50    3.0       True     206               0.841 0.228 1.220  0.180    4.370           4
+       ib_break   any first2h       0.0  0.75    2.0      False     219               0.894 0.301 1.226  0.167    2.999           4
+
+FROZEN TOP 3 -> TEST (once)
+                                                                        rule cost  trades   win   pf  exp_r  avg_win  COST  INTU   JNJ   UNH  HOOD
+ whale_bounce | any all rvol0.0 | stop 1.0 | target >= 3.0R | overnight True   1x     418 0.206 1.18  0.174     5.54 -0.24  0.33  0.03  0.37  0.46
+ whale_bounce | any all rvol0.0 | stop 1.0 | target >= 3.0R | overnight True   2x     418 0.206 1.13  0.130     5.50 -0.31  0.31 -0.02  0.32  0.44
+ whale_bounce | any all rvol0.0 | stop 1.0 | target >= 1.5R | overnight True   1x     481 0.249 1.17  0.155     4.37 -0.28  0.43 -0.19  0.36  0.55
+ whale_bounce | any all rvol0.0 | stop 1.0 | target >= 1.5R | overnight True   2x     481 0.249 1.11  0.111     4.32 -0.34  0.40 -0.25  0.32  0.53
+whale_bounce | any all rvol1.2 | stop 0.75 | target >= 3.0R | overnight True   1x     208 0.183 1.17  0.178     6.64  0.02  0.90 -0.71 -0.08  0.48
+whale_bounce | any all rvol1.2 | stop 0.75 | target >= 3.0R | overnight True   2x     208 0.183 1.11  0.124     6.58 -0.06  0.87 -0.79 -0.14  0.46

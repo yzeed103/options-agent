@@ -25,6 +25,7 @@ class Exec:
     overnight: bool = False
     level_cols: tuple = ("pd_poc", "pd_vah", "pd_val", "pd_high", "pd_low", "vwap_up2", "vwap_dn2")
     min_target_r: float = 2.0      # for target="levels": nearest level at least this many R away
+    max_bars: int | None = None    # time stop in bars (used with overnight=True)
 
 
 def run(d: pd.DataFrame, sig: np.ndarray, ex: Exec) -> pd.DataFrame:
@@ -67,7 +68,7 @@ def run(d: pd.DataFrame, sig: np.ndarray, ex: Exec) -> pd.DataFrame:
                 best = max(best, h[j]) if s > 0 else min(best, l[j])
                 ns = best - s * ex.trail_atr * atr[j]
                 stop = max(stop, ns) if s > 0 else min(stop, ns)
-            if (not ex.overnight and last_bar[j]) or j == n - 1:
+            if (not ex.overnight and last_bar[j]) or j == n - 1 or (ex.max_bars and j - e + 1 >= ex.max_bars):
                 exit_px = c[j]; break
             j += 1
         pnl_r += size_left * s * (exit_px - entry) / risk
