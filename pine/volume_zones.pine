@@ -635,7 +635,7 @@ buildWhale(int t0, int t1) =>
         for ln in whLines
             line.delete(ln)
         array.clear(whLines)
-        if showWhale
+        if showWhale and array.size(whLv) > 0
             for j = 0 to array.size(whLv) - 1
                 L = array.get(whLv, j)
                 isPoc = math.abs(L - pocV) <= 3 * stW
