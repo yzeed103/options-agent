@@ -10,47 +10,47 @@ indicator("Volume Zones", overlay=true, max_bars_back=5000, max_lines_count=100,
 // ═══════════════ Inputs ═══════════════
 lookback   = input.int(120, "فترة البروفايل (عدد الشموع)", minval=20, maxval=400, group="البروفايل")
 rows       = input.int(40, "عدد صفوف البروفايل", minval=10, maxval=100, group="البروفايل")
-vaPct      = input.float(0.70, "نسبة منطقة القيمة", group="البروفايل")
-hvnMult    = input.float(1.5, "منطقة فوليوم عالي = أكبر من المتوسط بـ", group="البروفايل")
+vaPct      = input.float(0.70, "نسبة منطقة القيمة", minval=0.5, maxval=0.95, step=0.05, tooltip="نسبة الفوليوم داخل منطقة القيمة. المعتاد 0.70", group="البروفايل")
+hvnMult    = input.float(1.5, "منطقة فوليوم عالي = أكبر من المتوسط بـ", minval=1.0, maxval=3.0, step=0.1, group="البروفايل")
 
 volMaLen   = input.int(20, "متوسط الفوليوم (عدد الشموع)", group="الإشارات")
-weakRatio  = input.float(0.80, "فوليوم ضعيف إذا أقل من المتوسط بنسبة", group="الإشارات")
+weakRatio  = input.float(0.80, "فوليوم ضعيف إذا أقل من المتوسط بنسبة", minval=0.3, maxval=1.0, step=0.05, tooltip="0.80 = أقل من 80% من المتوسط", group="الإشارات")
 weakBars   = input.int(4, "عدد الشموع لتكوين تجمع ضعيف", minval=2, group="الإشارات")
-poolMaxAtr = input.float(2.5, "أقصى مدى للتجمع (بوحدات ATR)", group="الإشارات")
-breakRatio = input.float(1.5, "فوليوم الكسر: أكبر من المتوسط بنسبة", group="الإشارات")
+poolMaxAtr = input.float(2.5, "أقصى مدى للتجمع (بوحدات ATR)", minval=0.5, maxval=10, step=0.5, group="الإشارات")
+breakRatio = input.float(1.5, "فوليوم الكسر: أكبر من المتوسط بنسبة", minval=1.0, maxval=5.0, step=0.1, tooltip="1.5 = مرة ونصف المتوسط", group="الإشارات")
 adxLen     = input.int(14, "فترة ADX", group="الإشارات")
-adxStrong  = input.float(25, "ترند قوي إذا ADX أكبر من", group="الإشارات")
-minTgtAtr  = input.float(1.0, "أقل مسافة للهدف (ATR)", group="الإشارات")
-maxTgtAtr  = input.float(12.0, "أقصى مسافة للهدف (ATR)", group="الإشارات")
-wickPct    = input.float(0.5, "نسبة الذيل لإشارة الارتداد", group="الإشارات")
+adxStrong  = input.float(25, "ترند قوي إذا ADX أكبر من", minval=10, maxval=50, step=1, group="الإشارات")
+minTgtAtr  = input.float(1.0, "أقل مسافة للهدف (ATR)", minval=0.25, maxval=5, step=0.25, group="الإشارات")
+maxTgtAtr  = input.float(12.0, "أقصى مسافة للهدف (ATR)", minval=2, maxval=30, step=1, group="الإشارات")
+wickPct    = input.float(0.5, "نسبة الذيل لإشارة الارتداد", minval=0.1, maxval=0.9, step=0.05, tooltip="0.5 = الذيل نصف طول الشمعة", group="الإشارات")
 
 showTop    = input.bool(true, "إظهار أقوى 3 مناطق", group="المناطق")
 tblPos     = input.string("أسفل اليمين", "موقع الجدول", options=["أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "أسفل اليسار"], group="المناطق")
 showVA     = input.bool(true, "إظهار POC و VAH و VAL", group="المناطق")
 
 showVar    = input.bool(true, "إظهار إشارة العودة للقيمة (كثيرة، ميزة ضعيفة)", group="العودة لمنطقة القيمة")
-varCap     = input.float(2.0, "أقصى مسافة للهدف (ATR)", minval=0.5, group="العودة لمنطقة القيمة")
-varStop    = input.float(1.5, "وقف الخسارة (ATR)", minval=0.3, group="العودة لمنطقة القيمة")
+varCap     = input.float(2.0, "أقصى مسافة للهدف (ATR)", minval=0.5, maxval=10, step=0.25, group="العودة لمنطقة القيمة")
+varStop    = input.float(1.5, "وقف الخسارة (ATR)", minval=0.25, maxval=5, step=0.25, group="العودة لمنطقة القيمة")
 cVarUp     = input.color(#40c4ff, "لون الإشارة صعود", inline="va", group="العودة لمنطقة القيمة")
 cVarDn     = input.color(#ffab40, "هبوط", inline="va", group="العودة لمنطقة القيمة")
 
 showEarly  = input.bool(false, "إظهار الإنذار المبكر (بدون ميزة مثبتة)", group="الإنذار المبكر")
 earlyN     = input.int(5, "اختراق أعلى أو أدنى سعر لعدد شموع", minval=2, maxval=50, group="الإنذار المبكر")
-earlyVol   = input.float(1.2, "فوليوم الإنذار: أكبر من المتوسط بنسبة", group="الإنذار المبكر")
+earlyVol   = input.float(1.2, "فوليوم الإنذار: أكبر من المتوسط بنسبة", minval=1.0, maxval=3.0, step=0.1, group="الإنذار المبكر")
 cEarlyUp   = input.color(color.new(#00e676, 30), "لون الإنذار صعود", inline="ea", group="الإنذار المبكر")
 cEarlyDn   = input.color(color.new(#ff5252, 30), "هبوط", inline="ea", group="الإنذار المبكر")
 
 showHeat   = input.bool(true, "إظهار الخريطة الحرارية", group="الخريطة الحرارية")
 heatMode   = input.string("ثلاثة ألوان", "شكل الخريطة", options=["ثلاثة ألوان", "لونان", "تدرج خمسة ألوان"], group="الخريطة الحرارية")
-heatMid    = input.float(0.60, "بداية التداول المتوسط (0 إلى 1)", minval=0.05, maxval=1.0, group="الخريطة الحرارية")
-heatHigh   = input.float(0.80, "بداية التداول العالي (0 إلى 1)", minval=0.05, maxval=1.0, group="الخريطة الحرارية")
+heatMid    = input.float(0.60, "بداية التداول المتوسط (0 إلى 1)", minval=0.05, maxval=1.0, step=0.05, tooltip="قيمة بين 0 و 1: نسبة من أعلى مستوى تداول. 0.5 = نصف أعلى مستوى", group="الخريطة الحرارية")
+heatHigh   = input.float(0.80, "بداية التداول العالي (0 إلى 1)", minval=0.05, maxval=1.0, step=0.05, tooltip="قيمة بين 0 و 1: نسبة من أعلى مستوى تداول. 0.5 = نصف أعلى مستوى", group="الخريطة الحرارية")
 heatStep   = input.int(1, "عرض عمود الخريطة (شموع)", minval=1, group="الخريطة الحرارية")
-heatMin    = input.float(0.40, "إخفاء المستويات الأقل من (0 إلى 1)", minval=0.0, maxval=0.95, group="الخريطة الحرارية")
-heatAlpha  = input.int(20, "شفافية الخريطة", minval=0, maxval=95, group="الخريطة الحرارية")
-stripGap   = input.float(0.12, "المسافة بين الخطوط (0 إلى 0.45)", minval=0.0, maxval=0.45, group="الخريطة الحرارية")
+heatMin    = input.float(0.40, "إخفاء المستويات الأقل من (0 إلى 1)", minval=0.0, maxval=0.95, step=0.05, tooltip="قيمة بين 0 و 1: نسبة من أعلى مستوى تداول. 0.5 = نصف أعلى مستوى", group="الخريطة الحرارية")
+heatAlpha  = input.int(20, "شفافية الخريطة (0 إلى 95)", minval=0, maxval=95, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان ولا تلغيها. 0 = بدون شفافية إضافية", group="الخريطة الحرارية")
+stripGap   = input.float(0.12, "المسافة بين الخطوط (0 إلى 0.45)", minval=0.0, maxval=0.45, step=0.03, tooltip="جزء من ارتفاع الصف يُترك فارغا فوق وتحت كل خط. 0 = خطوط ملتصقة", group="الخريطة الحرارية")
 showDelta  = input.bool(false, "طبقة الشراء والبيع", group="الخريطة الحرارية")
-deltaMin   = input.float(0.55, "طبقة الشراء والبيع: فقط المستويات الأعلى من", group="الخريطة الحرارية")
-deltaEdge  = input.float(0.12, "طبقة الشراء والبيع: أقل فرق مطلوب", group="الخريطة الحرارية")
+deltaMin   = input.float(0.55, "طبقة الشراء والبيع: فقط المستويات الأعلى من (0 إلى 1)", minval=0.0, maxval=1.0, step=0.05, tooltip="قيمة بين 0 و 1: نسبة من أعلى مستوى تداول. 0.5 = نصف أعلى مستوى", group="الخريطة الحرارية")
+deltaEdge  = input.float(0.12, "طبقة الشراء والبيع: أقل فرق مطلوب (0 إلى 0.5)", minval=0.0, maxval=0.5, step=0.02, tooltip="0.12 = أحد الطرفين يملك 62% على الأقل", group="الخريطة الحرارية")
 showLegend = input.bool(true, "إظهار مفتاح الألوان", group="الخريطة الحرارية")
 showSplit  = input.bool(true, "إظهار البروفايل على اليمين", group="الخريطة الحرارية")
 
@@ -88,8 +88,8 @@ G_ZN = "ألوان · أقوى 3 مناطق"
 cZone1   = input.color(#e8432d, "#1", inline="z", group=G_ZN)
 cZone2   = input.color(#e8a33d, "#2", inline="z", group=G_ZN)
 cZone3   = input.color(#e8d547, "#3", inline="z", group=G_ZN)
-zoneFill = input.int(90, "شفافية تعبئة المنطقة", minval=0, maxval=100, group=G_ZN)
-zoneBord = input.int(20, "شفافية حدود المنطقة", minval=0, maxval=100, group=G_ZN)
+zoneFill = input.int(90, "شفافية تعبئة المنطقة", minval=0, maxval=100, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان", group=G_ZN)
+zoneBord = input.int(20, "شفافية حدود المنطقة", minval=0, maxval=100, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان", group=G_ZN)
 
 G_TB = "ألوان · الجدول"
 cTblBg   = input.color(#1e222d, "الخلفية", inline="tb", group=G_TB)
@@ -101,6 +101,8 @@ cTblDn   = input.color(#ff5252, "هبوط", inline="tc", group=G_TB)
 cTblWeak = input.color(#f0c419, "ضعيف", inline="tc", group=G_TB)
 cTblAbv  = input.color(#ff9800, "المنطقة الأعلى", inline="tz", group=G_TB)
 cTblBlw  = input.color(#00bcd4, "المنطقة الأدنى", inline="tz", group=G_TB)
+cVdBgT   = input.int(85, "شفافية خلفية سطر الخلاصة", minval=0, maxval=100, step=5, group=G_TB)
+cLblTxt  = input.color(color.black, "لون نص الملصقات", group=G_SG)
 tblSize  = input.string("عادي", "حجم خط الجدول", options=["صغير جدا", "صغير", "عادي", "كبير"], group=G_TB)
 
 G_HM = "ألوان · الخريطة الحرارية"
@@ -120,11 +122,21 @@ cSell = input.color(#ff1744, "البائعون", inline="d", group=G_HM)
 G_VP = "ألوان · فوليوم بروفايل"
 cVpUp    = input.color(#2f7fd1, "فوليوم الشراء", inline="vp", group=G_VP)
 cVpDn    = input.color(#c9a227, "فوليوم البيع", inline="vp", group=G_VP)
-vpAlpha  = input.int(20, "شفافية البروفايل", minval=0, maxval=95, group=G_VP)
+vpAlpha  = input.int(20, "شفافية البروفايل", minval=0, maxval=95, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان", group=G_VP)
 vpWidth  = input.int(40, "أقصى عرض للبروفايل (شموع)", minval=5, maxval=200, group=G_VP)
 vpOffset = input.int(8, "بُعد البروفايل عن آخر شمعة", minval=0, maxval=100, group=G_VP)
 cVpPoc   = input.color(#ff4d4d, "لون صف POC", inline="vpp", group=G_VP)
 vpHighlightPoc = input.bool(true, "تمييز", inline="vpp", group=G_VP)
+
+// ═══════════════ Colour helper ═══════════════
+// The colour pickers already carry their own transparency. Older code used color.new(c, X), which REPLACES that
+// transparency, so the picker's opacity slider had no effect. fade() multiplies the two opacities instead:
+// picker 50% + setting 20% -> 60% transparent. Either control can fade a colour and neither overrides the other.
+fade(color c, float extraT) => color.new(c, 100 - (100 - color.t(c)) * (100 - math.max(0, math.min(100, extraT))) / 100)
+
+// Keep the heat-map thresholds in order even if the user sets them crossed: hidden < medium <= high.
+heatMidE  = math.max(heatMid, heatMin)
+heatHighE = math.max(heatHigh, heatMidE)
 
 // ═══════════════ Volume / trend ═══════════════
 atrV  = ta.atr(14)
@@ -290,8 +302,8 @@ cRevW    = input.color(#ffb020, "لون تحذير الانعكاس", group="ت�
 plotshape(not showRevW and brk == 1 and hunt == 0, "كسر التجمع صعود", shape.triangleup, location.belowbar, cBrkUp, size=size.tiny)
 plotshape(not showRevW and brk == -1 and hunt == 0, "كسر التجمع هبوط", shape.triangledown, location.abovebar, cBrkDn, size=size.tiny)
 // Tested on 7 symbols (15m, 1.5 years): after a weak-pool break price continued only ~46% of the time.
-plotshape(showRevW and brk == 1 and hunt == 0, "تحذير انعكاس بعد كسر للأعلى", shape.labeldown, location.abovebar, cRevW, text="انعكاس؟", textcolor=color.black, size=size.tiny)
-plotshape(showRevW and brk == -1 and hunt == 0, "تحذير انعكاس بعد كسر للأسفل", shape.labelup, location.belowbar, cRevW, text="انعكاس؟", textcolor=color.black, size=size.tiny)
+plotshape(showRevW and brk == 1 and hunt == 0, "تحذير انعكاس بعد كسر للأعلى", shape.labeldown, location.abovebar, cRevW, text="انعكاس؟", textcolor=cLblTxt, size=size.tiny)
+plotshape(showRevW and brk == -1 and hunt == 0, "تحذير انعكاس بعد كسر للأسفل", shape.labelup, location.belowbar, cRevW, text="انعكاس؟", textcolor=cLblTxt, size=size.tiny)
 plotshape(hunt == 1, "HUNT صعود", shape.labelup, location.belowbar, cHuntUp, text="HUNT", textcolor=cHuntTx)
 plotshape(hunt == -1, "HUNT هبوط", shape.labeldown, location.abovebar, cHuntDn, text="HUNT", textcolor=cHuntTx)
 plotshape(rej == 1, "ارتداد صاعد", shape.circle, location.belowbar, cRejUp, size=size.tiny)
@@ -335,7 +347,7 @@ if showTop and barstate.islast and nZones > 0
         c = array.get(cols, j)
         pct = totZ > 0 ? math.round(100 * array.get(zv, k) / totZ) : 0
         txt = "#" + str.tostring(j + 1) + "  " + str.tostring(pct) + "%  " + str.tostring(array.get(hvnLo, k), format.mintick) + "-" + str.tostring(array.get(hvnHi, k), format.mintick)
-        array.push(topBoxes, box.new(bar_index - lookback, array.get(hvnHi, k), bar_index + 15, array.get(hvnLo, k), border_color=color.new(c, zoneBord), bgcolor=color.new(c, zoneFill), text=txt, text_color=c, text_size=size.small, text_halign=text.align_right, text_valign=text.align_top))
+        array.push(topBoxes, box.new(bar_index - lookback, array.get(hvnHi, k), bar_index + 15, array.get(hvnLo, k), border_color=fade(c, zoneBord), bgcolor=fade(c, zoneFill), text=txt, text_color=c, text_size=size.small, text_halign=text.align_right, text_valign=text.align_top))
 
 // ═══════════════ Early warning (optional, no proven edge alone) ═══════════════
 eHH = ta.highest(high, earlyN)[1]
@@ -372,8 +384,8 @@ if not na(vah[1]) and not na(val) and atrV > 0
         else
             vaTgt := math.abs(best - close) > varCap * atrV ? close + vaSig * varCap * atrV : best
             vaStp := close - vaSig * varStop * atrV
-plotshape(showVar and vaSig == 1 and hunt == 0, "عودة للقيمة صعود", shape.labelup, location.belowbar, cVarUp, text="عودة", textcolor=color.black, size=size.tiny)
-plotshape(showVar and vaSig == -1 and hunt == 0, "عودة للقيمة هبوط", shape.labeldown, location.abovebar, cVarDn, text="عودة", textcolor=color.black, size=size.tiny)
+plotshape(showVar and vaSig == 1 and hunt == 0, "عودة للقيمة صعود", shape.labelup, location.belowbar, cVarUp, text="عودة", textcolor=cLblTxt, size=size.tiny)
+plotshape(showVar and vaSig == -1 and hunt == 0, "عودة للقيمة هبوط", shape.labeldown, location.abovebar, cVarDn, text="عودة", textcolor=cLblTxt, size=size.tiny)
 if showVar and vaSig != 0 and hunt == 0
     line.new(bar_index, vaTgt, bar_index + 10, vaTgt, color=vaSig > 0 ? cVarUp : cVarDn, style=line.style_dotted, width=1)
 alertcondition(vaSig != 0, "عودة لمنطقة القيمة", "السعر عاد إلى داخل منطقة القيمة")
@@ -473,8 +485,8 @@ plot(showPdVA and timeframe.isintraday ? pdVAH : na, "أعلى منطقة قيم
 plot(showPdVA and timeframe.isintraday ? pdVAL : na, "أدنى منطقة قيمة الأمس", cPdVA, 1, plot.style_stepline)
 plot(showPdVA and timeframe.isintraday ? pdPOC : na, "أعلى تداول أمس", cPdPoc, 1, plot.style_stepline)
 bgcolor(showTA and taDir == 1 ? cTaUp : showTA and taDir == -1 ? cTaDn : na, title="خلفية تنبيه الاتجاه")
-plotshape(showTA and taFire == 1, "تنبيه اتجاه صاعد", shape.labelup, location.belowbar, cTaLbl, text="اتجاه ↑", textcolor=color.black, size=size.small)
-plotshape(showTA and taFire == -1, "تنبيه اتجاه هابط", shape.labeldown, location.abovebar, cTaLblDn, text="اتجاه ↓", textcolor=color.black, size=size.small)
+plotshape(showTA and taFire == 1, "تنبيه اتجاه صاعد", shape.labelup, location.belowbar, cTaLbl, text="اتجاه ↑", textcolor=cLblTxt, size=size.small)
+plotshape(showTA and taFire == -1, "تنبيه اتجاه هابط", shape.labeldown, location.abovebar, cTaLblDn, text="اتجاه ↓", textcolor=cLblTxt, size=size.small)
 alertcondition(taFire != 0, "تنبيه اتجاه", "ثبات السعر خارج منطقة قيمة الأمس مع اتجاه المتوسطات")
 
 // ═══════════════ Whale levels + whale bounce (UNDER TEST) ═══════════════
@@ -487,15 +499,18 @@ alertcondition(taFire != 0, "تنبيه اتجاه", "ثبات السعر خار
 G_WH = "مستويات الحيتان (تحت الاختبار)"
 showWhale = input.bool(true, "إظهار مستويات الحيتان", group=G_WH)
 whLen     = input.int(20, "طول المنطقة العرضية (أيام)", minval=5, maxval=60, group=G_WH)
-whMult    = input.float(6.0, "أقصى مدى للمنطقة (ATR يومي)", minval=1.0, group=G_WH)
+whMult    = input.float(6.0, "أقصى مدى للمنطقة (ATR يومي)", minval=1.0, maxval=20, step=0.5, group=G_WH)
 whRows    = input.int(200, "عدد صفوف البروفايل", minval=50, maxval=300, group=G_WH)
 whPeaks   = input.int(8, "أقصى عدد للأعمدة الطويلة", minval=1, maxval=12, group=G_WH)
 cWhPoc    = input.color(#ff3b3b, "أعلى فوليوم POC", inline="wc", group=G_WH)
 cWhLv     = input.color(#9b5cff, "باقي الأعمدة", inline="wc", group=G_WH)
 showWBox  = input.bool(true, "إظهار مستطيل المنطقة العرضية", group=G_WH)
+cWhBoxB   = input.color(color.new(#ffb020, 30), "حدود المستطيل", inline="wbx", group=G_WH)
+cWhBoxF   = input.color(color.new(#ffb020, 96), "تعبئته", inline="wbx", group=G_WH)
+cWbStopC  = input.color(color.new(color.gray, 20), "لون خط الوقف", group=G_WH)
 showWB    = input.bool(true, "إظهار إشارة ارتداد الحوت (تحت الاختبار)", group=G_WH)
-wbStop    = input.float(1.0, "وقف الخسارة (ATR الفريم)", minval=0.25, group=G_WH)
-wbMinR    = input.float(3.0, "أقل مسافة للهدف (مضاعف المخاطرة)", minval=1.0, group=G_WH)
+wbStop    = input.float(1.0, "وقف الخسارة (ATR الفريم)", minval=0.25, maxval=5, step=0.25, group=G_WH)
+wbMinR    = input.float(3.0, "أقل مسافة للهدف (مضاعف المخاطرة)", minval=1.0, maxval=10, step=0.5, group=G_WH)
 cWbUp     = input.color(#00e5ff, "لون الإشارة صعود", inline="wb", group=G_WH)
 cWbDn     = input.color(#ff9100, "هبوط", inline="wb", group=G_WH)
 
@@ -596,7 +611,7 @@ if timeframe.isintraday and newSess
                                 array.push(whLines, line.new(b0, L, bar_index, L, extend=extend.right, color=isPoc ? cWhPoc : cWhLv, width=isPoc ? 2 : 1))
                         if showWBox
                             box.delete(whBox)
-                            whBox := box.new(b0, pHiW, b1, pLoW, border_color=color.new(#ffb020, 30), border_style=line.style_dashed, bgcolor=color.new(#ffb020, 96))
+                            whBox := box.new(b0, pHiW, b1, pLoW, border_color=cWhBoxB, border_style=line.style_dashed, bgcolor=cWhBoxF)
                 inRange := false
         else if n + 1 >= whLen and not na(dATR)
             sI = n - whLen + 1
@@ -643,11 +658,11 @@ if showWB and array.size(whLv) > 0 and atrV > 0
         else
             wbTgt := best
             wbStp := close - wbSig * risk
-plotshape(wbSig == 1, "ارتداد حوت صعود", shape.labelup, location.belowbar, cWbUp, text="حوت ↑", textcolor=color.black, size=size.small)
-plotshape(wbSig == -1, "ارتداد حوت هبوط", shape.labeldown, location.abovebar, cWbDn, text="حوت ↓", textcolor=color.black, size=size.small)
+plotshape(wbSig == 1, "ارتداد حوت صعود", shape.labelup, location.belowbar, cWbUp, text="حوت ↑", textcolor=cLblTxt, size=size.small)
+plotshape(wbSig == -1, "ارتداد حوت هبوط", shape.labeldown, location.abovebar, cWbDn, text="حوت ↓", textcolor=cLblTxt, size=size.small)
 if wbSig != 0
     line.new(bar_index, wbTgt, bar_index + 30, wbTgt, color=wbSig > 0 ? cWbUp : cWbDn, style=line.style_dashed, width=2)
-    line.new(bar_index, wbStp, bar_index + 30, wbStp, color=color.new(color.gray, 20), style=line.style_dotted, width=1)
+    line.new(bar_index, wbStp, bar_index + 30, wbStp, color=cWbStopC, style=line.style_dotted, width=1)
     label.new(bar_index + 30, wbTgt, "هدف الحوت " + str.tostring(wbTgt, format.mintick), style=label.style_none, textcolor=wbSig > 0 ? cWbUp : cWbDn, size=size.small)
 alertcondition(wbSig != 0, "ارتداد حوت", "ارتداد من مستوى حوت باتجاه المستوى التالي (تحت الاختبار)")
 
@@ -786,7 +801,7 @@ if barstate.islast
     table.cell(tbl, 2, 9, ck(c3, "كسر بفوليوم قوي"), text_color=c3 ? cTblUp : cTblLbl, text_size=tSz, text_halign=text.align_right)
     table.cell(tbl, 0, 9, "", text_size=tSz)
     table.cell(tbl, 1, 9, ck(c4, "ترند قوي"), text_color=c4 ? cTblUp : cTblLbl, text_size=tSz, text_halign=text.align_right)
-    table.cell(tbl, 0, 10, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=color.new(vdc, 85))
+    table.cell(tbl, 0, 10, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
 
 // ═══════════════ Heatmap: two-colour or five-colour ribbons, no smoothing ═══════════════
 // colour = volume at that price over the last `lookback` bars, relative to the busiest row (0..1)
@@ -813,19 +828,19 @@ if showHeat and ready and bar_index % heatStep == 0
             color c = na
             if x >= heatMin
                 if threeCol
-                    key := x >= heatHigh ? 7 : x >= heatMid ? 6 : 5
-                    c := color.new(x >= heatHigh ? cTop3 : x >= heatMid ? cMid3 : cLow3, heatAlpha)
+                    key := x >= heatHighE ? 7 : x >= heatMidE ? 6 : 5
+                    c := fade(x >= heatHighE ? cTop3 : x >= heatMidE ? cMid3 : cLow3, heatAlpha)
                 else if twoCol
-                    key := x >= heatHigh ? 2 : 1
-                    c := color.new(x >= heatHigh ? cHigh : cMed, heatAlpha)
+                    key := x >= heatHighE ? 2 : 1
+                    c := fade(x >= heatHighE ? cHigh : cMed, heatAlpha)
                 else
                     key := 10 + int(math.min(4, (x - heatMin) / math.max(1.0 - heatMin, 0.000001) * 5))
-                    c := color.new(viridis(x), heatAlpha)
+                    c := fade(viridis(x), heatAlpha)
                 if showDelta and x >= deltaMin and v > 0
                     share = array.get(rowBuy, r) / v - 0.5
                     if math.abs(share) >= deltaEdge
                         key := share > 0 ? 3 : 4
-                        c := color.new(share > 0 ? cBuy : cSell, math.max(heatAlpha, 100 - math.min(75, math.abs(share) * 200)))
+                        c := fade(share > 0 ? cBuy : cSell, math.max(heatAlpha, 100 - math.min(75, math.abs(share) * 200)))
             mid = pLo + (r + 0.5) * step
             bx = array.get(rowBox, r)
             sameRun = key != 0 and not na(bx) and array.get(rowKey, r) == key and math.abs(mid - array.get(rowMid, r)) <= step * 0.6
@@ -889,9 +904,9 @@ if showSplit and barstate.islast and ready
             cu = isPoc ? cVpPoc : cVpUp
             cdn = isPoc ? cVpPoc : cVpDn
             if u > 0
-                array.push(splitBoxes, box.new(x0, pLo + (r + 1) * step, x0 + u, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=color.new(cu, vpAlpha)))
+                array.push(splitBoxes, box.new(x0, pLo + (r + 1) * step, x0 + u, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=fade(cu, vpAlpha)))
             if d > 0
-                array.push(splitBoxes, box.new(x0 + u, pLo + (r + 1) * step, x0 + u + d, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=color.new(cdn, vpAlpha)))
+                array.push(splitBoxes, box.new(x0 + u, pLo + (r + 1) * step, x0 + u + d, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=fade(cdn, vpAlpha)))
 
 // ═══════════════ Alerts ═══════════════
 alertcondition(weak and not weak[1], "فوليوم ضعيف", "الفوليوم أصبح ضعيفا")
