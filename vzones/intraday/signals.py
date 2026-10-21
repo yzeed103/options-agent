@@ -40,4 +40,66 @@ def vwap_reclaim(d: pd.DataFrame, trend: bool = True) -> np.ndarray:
     return np.where(up, 1, np.where(dn, -1, 0))
 
 
-SETUPS = {"orb": orb, "va_reentry": va_reentry, "vwap_reclaim": vwap_reclaim}
+def _first_per_session(d, up, dn):
+    sig = np.zeros(len(d), int); seen = set(); sess = d.session.to_numpy()
+    for i in np.flatnonzero(up | dn):
+        if sess[i] in seen: continue
+        sig[i] = 1 if up[i] else -1; seen.add(sess[i])
+    return sig
+
+
+def va_accept(d: pd.DataFrame, n: int = 2) -> np.ndarray:
+    """Acceptance outside prior-day value: n consecutive closes above VAH (or below VAL) -> continuation."""
+    c = d.close
+    up = (c > d.pd_vah).rolling(n).sum().eq(n).to_numpy() & (d.open.groupby(d.session).transform("first") <= d.pd_vah).to_numpy()
+    dn = (c < d.pd_val).rolling(n).sum().eq(n).to_numpy() & (d.open.groupby(d.session).transform("first") >= d.pd_val).to_numpy()
+    return _first_per_session(d, up, dn)
+
+
+def ib_break(d: pd.DataFrame) -> np.ndarray:
+    c, pc = d.close.to_numpy(), d.close.shift(1).to_numpy()
+    up = (c > d.ib_high.to_numpy()) & (pc <= d.ib_high.to_numpy())
+    dn = (c < d.ib_low.to_numpy()) & (pc >= d.ib_low.to_numpy())
+    return _first_per_session(d, up, dn)
+
+
+def poc_reclaim(d: pd.DataFrame) -> np.ndarray:
+    c, pc, poc = d.close.to_numpy(), d.close.shift(1).to_numpy(), d.pd_poc.to_numpy()
+    up = (c > poc) & (pc <= poc) & (d.ema_f > d.ema_s).to_numpy()
+    dn = (c < poc) & (pc >= poc) & (d.ema_f < d.ema_s).to_numpy()
+    return np.where(up, 1, np.where(dn, -1, 0))
+
+
+def failed_break(d: pd.DataFrame, k: int = 3) -> np.ndarray:
+    """Trap: price trades beyond prior-day high/low then closes back inside within k bars -> fade."""
+    h, l, c = d.high, d.low, d.close
+    poke_up = (h > d.pd_high).rolling(k).max().astype(bool)
+    poke_dn = (l < d.pd_low).rolling(k).max().astype(bool)
+    dn = (poke_up & (c < d.pd_high) & (c.shift(1) >= d.pd_high.shift(1)) | poke_up & (c < d.pd_high) & (h > d.pd_high)).to_numpy()
+    up = (poke_dn & (c > d.pd_low) & (c.shift(1) <= d.pd_low.shift(1)) | poke_dn & (c > d.pd_low) & (l < d.pd_low)).to_numpy()
+    return _first_per_session(d, up, dn)
+
+
+def squeeze_release(d: pd.DataFrame) -> np.ndarray:
+    was = d["sqz"].shift(1, fill_value=False).to_numpy().astype(bool)
+    up = was & (d.close > d.bb_up).to_numpy(); dn = was & (d.close < d.bb_dn).to_numpy()
+    return np.where(up, 1, np.where(dn, -1, 0))
+
+
+SETUPS = {"orb": orb, "va_reentry": va_reentry, "vwap_reclaim": vwap_reclaim, "va_accept": va_accept,
+          "ib_break": ib_break, "poc_reclaim": poc_reclaim, "failed_break": failed_break, "squeeze_release": squeeze_release}
+
+
+def apply_filters(d: pd.DataFrame, sig: np.ndarray, trend: str = "any", window: str = "all", rvol_min: float = 0.0) -> np.ndarray:
+    s = sig.copy()
+    if trend == "with":
+        tu = (d.ema_f > d.ema_s).to_numpy(); s = np.where(((s > 0) & tu) | ((s < 0) & ~tu), s, 0)
+    elif trend == "against":
+        tu = (d.ema_f > d.ema_s).to_numpy(); s = np.where(((s > 0) & ~tu) | ((s < 0) & tu), s, 0)
+    m = d.minute_of_session.to_numpy()
+    if window == "first2h": s = np.where(m < 120, s, 0)
+    elif window == "after11": s = np.where((m >= 90) & (m < 360), s, 0)
+    elif window == "nolast30": s = np.where(m < 360, s, 0)
+    if rvol_min > 0:
+        rv = d.rvol.fillna(0).to_numpy(); s = np.where(rv >= rvol_min, s, 0)
+    return s

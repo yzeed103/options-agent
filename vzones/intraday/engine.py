@@ -23,6 +23,8 @@ class Exec:
     cost: float = 0.0001           # per side, fraction of price (0.0001 = 0.01%, i.e. 0.02% round trip)
     cost_points: float = 0.0       # per side, absolute (futures tick)
     overnight: bool = False
+    level_cols: tuple = ("pd_poc", "pd_vah", "pd_val", "pd_high", "pd_low", "vwap_up2", "vwap_dn2")
+    min_target_r: float = 2.0      # for target="levels": nearest level at least this many R away
 
 
 def run(d: pd.DataFrame, sig: np.ndarray, ex: Exec) -> pd.DataFrame:
@@ -35,7 +37,14 @@ def run(d: pd.DataFrame, sig: np.ndarray, ex: Exec) -> pd.DataFrame:
             i += 1; continue
         e = i + 1; entry = o[e]; risk = ex.stop_atr * atr[i]
         stop = entry - s * risk
-        tgt = entry + s * ex.target_atr * atr[i] if ex.target == "atr" else d[ex.target].iat[i]
+        if ex.target == "atr":
+            tgt = entry + s * ex.target_atr * atr[i]
+        elif ex.target == "levels":
+            lv = np.array([d[k].iat[i] for k in ex.level_cols], float)
+            lv = lv[np.isfinite(lv) & ((lv - entry) * s >= ex.min_target_r * risk)]
+            tgt = lv[np.argmin(np.abs(lv - entry))] if len(lv) else np.nan
+        else:
+            tgt = d[ex.target].iat[i]
         if not np.isfinite(tgt) or (tgt - entry) * s <= 0:
             i += 1; continue
         size_left, pnl_r, part_done, j, best = 1.0, 0.0, False, e, entry

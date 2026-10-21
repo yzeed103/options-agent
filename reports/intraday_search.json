@@ -1,0 +1,133 @@
+{
+  "5m": {
+    "dev_sessions": 107,
+    "hold_sessions": 27,
+    "configs_tested": 2208,
+    "walk_forward": {
+      "trades": 25,
+      "win_rate": 0.2,
+      "pf": 1.1,
+      "expectancy_r": 0.093,
+      "avg_win_r": 5.32,
+      "avg_loss_r": -1.22,
+      "max_dd_r": -10.27,
+      "total_r": 2.3,
+      "per_week": 1.8,
+      "worst_year_pf": 1.1
+    },
+    "frozen": {
+      "setup": "ib_break",
+      "trend": "any",
+      "window": "first2h",
+      "rvol_min": 0.0,
+      "stop_atr": 1.0,
+      "target": "atr",
+      "target_atr": 6.0
+    },
+    "frozen_dev": {
+      "trades": 80,
+      "per_week": 3.64,
+      "win_rate": 0.3,
+      "pf": 1.11,
+      "expectancy_r": 0.093,
+      "avg_win_r": 3.1,
+      "avg_loss_r": -1.2,
+      "max_dd_r": -16.66
+    },
+    "permutation_dev": {
+      "real_expectancy_r": 0.093,
+      "p_value": 0.4179,
+      "permutations": 200
+    },
+    "holdout": {
+      "trades": 20,
+      "win_rate": 0.2,
+      "pf": 0.86,
+      "expectancy_r": -0.137,
+      "avg_win_r": 4.24,
+      "avg_loss_r": -1.23,
+      "max_dd_r": -12.65,
+      "total_r": -2.7,
+      "per_week": 3.89,
+      "worst_year_pf": 0.86
+    },
+    "holdout_2x_cost": {
+      "trades": 20,
+      "win_rate": 0.2,
+      "pf": 0.69,
+      "expectancy_r": -0.365,
+      "avg_win_r": 4.02,
+      "avg_loss_r": -1.46,
+      "max_dd_r": -15.66,
+      "total_r": -7.3,
+      "per_week": 3.89,
+      "worst_year_pf": 0.69
+    }
+  },
+  "15m": {
+    "dev_sessions": 107,
+    "hold_sessions": 27,
+    "configs_tested": 2280,
+    "walk_forward": {
+      "trades": 17,
+      "win_rate": 0.176,
+      "pf": 0.67,
+      "expectancy_r": -0.3,
+      "avg_win_r": 3.42,
+      "avg_loss_r": -1.1,
+      "max_dd_r": -9.79,
+      "total_r": -5.1,
+      "per_week": 1.23,
+      "worst_year_pf": 0.67
+    },
+    "frozen": {
+      "setup": "poc_reclaim",
+      "trend": "with",
+      "window": "all",
+      "rvol_min": 0.0,
+      "stop_atr": 0.75,
+      "target": "atr",
+      "target_atr": 10.0,
+      "trail_atr": 2.0
+    },
+    "frozen_dev": {
+      "trades": 69,
+      "per_week": 3.14,
+      "win_rate": 0.29,
+      "pf": 1.18,
+      "expectancy_r": 0.14,
+      "avg_win_r": 3.15,
+      "avg_loss_r": -1.09,
+      "max_dd_r": -18.16
+    },
+    "permutation_dev": {
+      "real_expectancy_r": 0.14,
+      "p_value": 0.1791,
+      "permutations": 200
+    },
+    "holdout": {
+      "trades": 17,
+      "win_rate": 0.118,
+      "pf": 0.05,
+      "expectancy_r": -0.945,
+      "avg_win_r": 0.42,
+      "avg_loss_r": -1.13,
+      "max_dd_r": -15.13,
+      "total_r": -16.1,
+      "per_week": 3.31,
+      "worst_year_pf": 0.05
+    },
+    "holdout_2x_cost": {
+      "trades": 17,
+      "win_rate": 0.118,
+      "pf": 0.02,
+      "expectancy_r": -1.168,
+      "avg_win_r": 0.25,
+      "avg_loss_r": -1.36,
+      "max_dd_r": -18.63,
+      "total_r": -19.9,
+      "per_week": 3.31,
+      "worst_year_pf": 0.02
+    }
+  }
+}

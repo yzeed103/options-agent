@@ -53,6 +53,14 @@ def add_features(df: pd.DataFrame, or_minutes: int = 15, atr_len: int = 14, ema_
     # relative volume vs the same time-of-day over the previous `rvol_days` sessions
     slot = d.index.hour * 60 + d.index.minute
     d["rvol"] = d.volume / d.volume.groupby(slot).transform(lambda x: x.shift(1).rolling(rvol_days, min_periods=5).mean())
+    # initial balance (first 60 min), known once complete
+    in_ib = mins < 60
+    d["ib_high"] = d.high.where(in_ib).groupby(d.session).transform("max").where(mins >= 60)
+    d["ib_low"] = d.low.where(in_ib).groupby(d.session).transform("min").where(mins >= 60)
+    # squeeze: Bollinger(20,2) inside Keltner(20,1.5 ATR)
+    ma = d.close.rolling(20).mean(); sd20 = d.close.rolling(20).std()
+    d["bb_up"], d["bb_dn"] = ma + 2 * sd20, ma - 2 * sd20
+    d["sqz"] = ((ma + 2 * sd20) < (ma + 1.5 * d.atr)) & ((ma - 2 * sd20) > (ma - 1.5 * d.atr))
     d["minute_of_session"] = mins
     d["bar_minutes"] = bar_min
     return d

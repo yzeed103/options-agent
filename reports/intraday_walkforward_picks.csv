@@ -1,0 +1,9 @@
+tf,train_from,test_from,test_to,setup,trend,window,rvol_min,stop_atr,target,target_atr,train_expectancy,test_trades,test_r,trail_atr,min_target_r
+5m,2026-04-13,2026-06-09,2026-07-08,squeeze_release,any,first2h,0.0,1.0,atr,6.0,0.701,11,2.07,,
+5m,2026-05-11,2026-07-09,2026-08-05,squeeze_release,any,first2h,0.0,0.75,atr,6.0,0.621,8,7.46,,
+5m,2026-06-09,2026-08-06,2026-09-02,ib_break,with,first2h,1.2,0.75,atr,10.0,1.094,1,-1.33,3.0,
+5m,2026-07-09,2026-09-03,2026-09-14,orb,with,first2h,0.0,0.75,atr,10.0,0.988,5,-5.89,2.0,
+15m,2026-04-13,2026-06-09,2026-07-08,vwap_reclaim,any,after11,0.0,0.75,levels,,0.606,9,-6.87,,2.0
+15m,2026-05-11,2026-07-09,2026-08-05,ib_break,any,first2h,1.2,0.75,atr,10.0,1.073,6,4.13,2.0,
+15m,2026-06-09,2026-08-06,2026-09-02,orb,any,all,1.2,0.75,atr,10.0,1.59,2,-2.35,2.0,
+15m,2026-07-09,2026-09-03,2026-09-14,poc_reclaim,any,after11,0.0,0.75,atr,10.0,0.71,0,0.0,2.0,
