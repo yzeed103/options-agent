@@ -497,3 +497,50 @@ for part, keys in (("J_sheet_1.png", [x[0] for x in J[:6]]), ("J_sheet_2.png", [
         a.imshow(imread(OUT / f"{k}.png")[30:860, 40:1520]); a.set_title(k.split("_")[0] + " · " + dict((x[0], x[1]) for x in J)[k], color=TX, fontsize=11)
     fig.tight_layout(); fig.savefig(OUT / part, dpi=90, facecolor=BG); plt.close(fig)
 print("ok6")
+
+
+# ------------------------------------------------------------------ K: discrete 2- and 3-colour palettes
+def draw_discrete(colors, thr=.4, gap=.12, alpha=.8):
+    n = len(colors)
+    def f(ax):
+        for k, i, j, lv in ribbons(gf, thr, n):
+            ax.add_patch(Rectangle((i - .5, edges_f[k] + hgt_f * gap), j - i + 1, hgt_f * (1 - 2 * gap),
+                                   color=colors[lv], alpha=alpha, lw=0, zorder=1))
+    return f
+
+
+def kstyle(key, title, colors, names):
+    fig, ax = base(f"Heatmap · {key.split('_')[0]} · {title}")
+    draw_discrete(colors)(ax)
+    for rank, (zl, zh, zv) in enumerate(zones, 1):
+        c = ["#e8432d", "#e8a33d", "#e8d547"][rank - 1]
+        ax.hlines([zl, zh], -.5, N + 8, color=c, lw=.8, alpha=.6, zorder=2)
+    candles(ax, regime_color); signals(ax, labels=False)
+    for m, (c, nm) in enumerate(zip(colors, names)):
+        x = .06 + m * .1
+        fig.add_artist(Rectangle((x, .888), .02, .014, transform=fig.transFigure, color=c))
+        fig.text(x + .024, .889, nm, color="#b2b5be", fontsize=9)
+    fig.savefig(OUT / f"{key}.png", dpi=100, facecolor=BG); plt.close(fig)
+
+
+K = [
+    ("K01_gray_orange",  "2 colours: gray / orange", ["#5d6270", "#ff9800"], ["medium", "high"]),
+    ("K02_navy_cyan",    "2 colours: navy / cyan", ["#1e3a6e", "#36d6ff"], ["medium", "high"]),
+    ("K03_slate_red",    "2 colours: slate / red", ["#4a5568", "#ff4d4d"], ["medium", "high"]),
+    ("K04_teal_gold",    "2 colours: teal / gold", ["#1f6f6f", "#f2c14e"], ["medium", "high"]),
+    ("K05_purple_yellow", "2 colours: purple / yellow", ["#5b3a9a", "#ffe14d"], ["medium", "high"]),
+    ("K06_blue_yellow_red", "3 colours: blue / yellow / red", ["#2962ff", "#f2c14e", "#ff3b3b"], ["low", "medium", "high"]),
+    ("K07_gray_teal_white", "3 colours: gray / teal / white", ["#3f4554", "#26a69a", "#e8f5f3"], ["low", "medium", "high"]),
+    ("K08_traffic",      "3 colours: green / yellow / red", ["#2e7d32", "#f9a825", "#e53935"], ["low", "medium", "high"]),
+    ("K09_navy_purple_pink", "3 colours: navy / purple / pink", ["#1a2a6c", "#7b3fbf", "#ff4fa3"], ["low", "medium", "high"]),
+    ("K10_teal_gold_white", "3 colours: teal / gold / white", ["#1d4f5a", "#c9a227", "#fff6d5"], ["low", "medium", "high"]),
+]
+for key, title, cols_, names in K:
+    kstyle(key, title, cols_, names)
+for part, keys in (("K_sheet_2colours.png", [x[0] for x in K[:5]]), ("K_sheet_3colours.png", [x[0] for x in K[5:]])):
+    fig, axs = plt.subplots(3, 2, figsize=(16, 13.5), facecolor=BG)
+    for a in axs.flat: a.set_axis_off()
+    for a, k in zip(axs.flat, keys):
+        a.imshow(imread(OUT / f"{k}.png")[30:860, 40:1520]); a.set_title(k.split("_")[0] + " · " + dict((x[0], x[1]) for x in K)[k], color=TX, fontsize=12)
+    fig.tight_layout(); fig.savefig(OUT / part, dpi=90, facecolor=BG); plt.close(fig)
+print("ok7")
