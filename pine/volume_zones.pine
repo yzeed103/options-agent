@@ -52,7 +52,6 @@ showDelta  = input.bool(false, "طبقة الشراء والبيع", group="ال
 deltaMin   = input.float(0.55, "طبقة الشراء والبيع: فقط المستويات الأعلى من (0 إلى 1)", minval=0.0, maxval=1.0, step=0.05, tooltip="قيمة بين 0 و 1: نسبة من أعلى مستوى تداول. 0.5 = نصف أعلى مستوى", group="الخريطة الحرارية")
 deltaEdge  = input.float(0.12, "طبقة الشراء والبيع: أقل فرق مطلوب (0 إلى 0.5)", minval=0.0, maxval=0.5, step=0.02, tooltip="0.12 = أحد الطرفين يملك 62% على الأقل", group="الخريطة الحرارية")
 showLegend = input.bool(true, "إظهار مفتاح الألوان", group="الخريطة الحرارية")
-showSplit  = input.bool(false, "إظهار البروفايل على اليمين", group="الخريطة الحرارية")
 
 // ═══════════════ Colours & styles ═══════════════
 G_LN = "ألوان · الخطوط"
@@ -120,6 +119,7 @@ cBuy  = input.color(#00e676, "المشترون", inline="d", group=G_HM)
 cSell = input.color(#ff1744, "البائعون", inline="d", group=G_HM)
 
 G_VP = "ألوان · فوليوم بروفايل"
+showSplit = input.bool(true, "إظهار الفوليوم بروفايل على اليمين", group=G_VP)
 cVpUp    = input.color(#2f7fd1, "فوليوم الشراء", inline="vp", group=G_VP)
 cVpDn    = input.color(#c9a227, "فوليوم البيع", inline="vp", group=G_VP)
 vpAlpha  = input.int(20, "شفافية البروفايل", minval=0, maxval=95, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان", group=G_VP)
