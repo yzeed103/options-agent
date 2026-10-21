@@ -44,18 +44,10 @@ for L in lv:
     isp = abs(L - poc) <= (cen[1] - cen[0]) * 3
     ax.hlines(L, -.5, len(w) + 40, color="#ff3b3b" if isp else "#9b5cff", lw=2 if isp else 1, zorder=2)
     ax.text(len(w) + 41, L, f"{L:.2f}" + (" POC" if isp else ""), color="#ff3b3b" if isp else "#9b5cff", fontsize=9, va="center")
-dr = int(t.dir); col = "#00e5ff" if dr > 0 else "#ff9100"
-y0 = w.low.iat[si] if dr > 0 else w.high.iat[si]; yr = w.high.max() - w.low.min()
-ax.annotate("حوت ↑" if dr > 0 else "حوت ↓", xy=(si, y0), xytext=(si, y0 + (-1 if dr > 0 else 1) * .07 * yr), ha="center",
-            va="top" if dr > 0 else "bottom", fontsize=11, weight="bold", color="black", bbox=dict(boxstyle="round,pad=.35", fc=col, ec=col),
-            arrowprops=dict(arrowstyle="-|>", color=col), zorder=7)
-stop = t.entry - dr * 1.0 * d.atr.iat[s_i]; tgt = t.exit
-ax.hlines(tgt, si, si + 30, color=col, lw=2.2, ls="--", zorder=5); ax.text(si - 2, tgt + .015 * yr, f"هدف الحوت {tgt:.2f} ", color=col, fontsize=11, va="bottom", ha="right", weight="bold", bbox=dict(fc=BG, ec="none", pad=1))
-ax.hlines(stop, si, si + 30, color="#9aa0ad", lw=1.2, ls=":", zorder=5); ax.text(si + 31, stop, f" الوقف {stop:.2f}", color="#9aa0ad", fontsize=9, va="center")
-ax.scatter(xi, tgt, s=90, color=col, zorder=8, marker="*"); ax.text(xi + 2, tgt + (.05 if dr > 0 else -.05) * yr, "وصل الهدف", color=col, fontsize=10, ha="center")
+yr = w.high.max() - w.low.min()
 ax.set_xlim(-2, len(w) + 52); ax.set_ylim(w.low.min() - .12 * yr, w.high.max() + .1 * yr)
 ticks = [0, bi, si, len(w) - 1]; ax.set_xticks(ticks); ax.set_xticklabels([f"{w.index[k]:%m-%d}" for k in ticks], color=MUT)
-ax.set_title(f"{sym} · 15m · مستويات الحيتان وإشارة ارتداد الحوت", color=TX, fontsize=14, loc="right")
-ax.text(.01, .97, "الأحمر = أعلى فوليوم POC    البنفسجي = باقي الأعمدة الطويلة    الخط المتقطع = الهدف    المنقط = الوقف",
+ax.set_title(f"{sym} · 15m · مستويات الحيتان", color=TX, fontsize=14, loc="right")
+ax.text(.01, .97, "الأحمر = أعلى فوليوم POC    البنفسجي = باقي الأعمدة الطويلة",
         transform=ax.transAxes, color=MUT, fontsize=10, va="top")
 fig.savefig(ROOT / "reports/styles/P_whale_bounce_preview.png", dpi=100, facecolor=BG); print("ok", sym, t.entry_time, round(t.r, 2))
