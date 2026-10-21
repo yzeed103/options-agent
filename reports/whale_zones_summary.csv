@@ -1,0 +1,5 @@
+group,zones,revisited_5d,hold_1h,break_1h,bounce_atr,pierce_atr,zone_width_atr
+ordinary (RVOL 0.8-1.2),19687.0,87.17,50.87,23.72,1.53,0.38,0.98
+whale RVOL>=2,4894.0,87.37,50.75,21.28,1.33,-0.01,1.27
+whale RVOL>=3,1590.0,88.17,50.65,19.98,1.23,-0.22,1.41
+whale RVOL>=5,393.0,86.26,56.42,15.54,1.21,-0.56,1.57
