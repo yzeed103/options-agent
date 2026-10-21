@@ -5,6 +5,8 @@ with columns `time,open,high,low,close,volume`. Times are New York local time un
 At least 2 years of regular-trading-hours bars are needed. Record the source, date range and adjustments here.
 
 ## Files
+- `QQQ_5m.csv`: TradingView export, BATS:QQQ, 5-minute, regular hours, 2026-04-20 to 2026-10-21 (129 sessions).
+  The first 5 exported sessions (2026-04-13..17) had no volume and were dropped. BATS-only volume.
 - `SPY_5m.csv`: TradingView export, symbol BATS:SPY, 5-minute bars, regular trading hours only,
   2026-04-13 09:30 to 2026-10-21 10:35 New York, 134 sessions, 10,388 bars. Volume is BATS-only volume
   (a fraction of consolidated volume), so only RELATIVE volume is meaningful. Prices as exported (not adjusted).

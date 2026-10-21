@@ -1,0 +1,163 @@
+{
+  "5m": {
+    "dev_sessions": 103,
+    "hold_sessions": 26,
+    "configs_tested": 2280,
+    "walk_forward": {
+      "trades": 20,
+      "win_rate": 0.05,
+      "pf": 0.22,
+      "expectancy_r": -0.854,
+      "avg_win_r": 4.94,
+      "avg_loss_r": -1.16,
+      "max_dd_r": -15.94,
+      "total_r": -17.1,
+      "per_week": 1.54,
+      "worst_year_pf": 0.22
+    },
+    "frozen": {
+      "setup": "poc_reclaim",
+      "trend": "any",
+      "window": "first2h",
+      "rvol_min": 0.0,
+      "stop_atr": 0.75,
+      "target": "atr",
+      "target_atr": 10.0,
+      "trail_atr": 3.0
+    },
+    "frozen_dev": {
+      "trades": 69,
+      "per_week": 3.26,
+      "win_rate": 0.203,
+      "pf": 1.14,
+      "expectancy_r": 0.122,
+      "avg_win_r": 4.97,
+      "avg_loss_r": -1.11,
+      "max_dd_r": -13.96
+    },
+    "permutation_dev": {
+      "real_expectancy_r": 0.122,
+      "p_value": 0.2886,
+      "permutations": 200
+    },
+    "holdout": {
+      "trades": 13,
+      "win_rate": 0.077,
+      "pf": 0.09,
+      "expectancy_r": -0.962,
+      "avg_win_r": 1.25,
+      "avg_loss_r": -1.15,
+      "max_dd_r": -11.25,
+      "total_r": -12.5,
+      "per_week": 2.6,
+      "worst_year_pf": 0.09
+    },
+    "holdout_2x_cost": {
+      "trades": 13,
+      "win_rate": 0.077,
+      "pf": 0.06,
+      "expectancy_r": -1.156,
+      "avg_win_r": 0.95,
+      "avg_loss_r": -1.33,
+      "max_dd_r": -13.52,
+      "total_r": -15.0,
+      "per_week": 2.6,
+      "worst_year_pf": 0.06
+    }
+  },
+  "15m": {
+    "dev_sessions": 103,
+    "hold_sessions": 26,
+    "configs_tested": 2280,
+    "walk_forward": {
+      "trades": 16,
+      "win_rate": 0.438,
+      "pf": 1.08,
+      "expectancy_r": 0.044,
+      "avg_win_r": 1.43,
+      "avg_loss_r": -1.04,
+      "max_dd_r": -4.47,
+      "total_r": 0.7,
+      "per_week": 1.23,
+      "worst_year_pf": 1.08
+    },
+    "frozen": {
+      "setup": "vwap_reclaim",
+      "trend": "any",
+      "window": "first2h",
+      "rvol_min": 0.0,
+      "stop_atr": 0.75,
+      "target": "atr",
+      "target_atr": 10.0,
+      "trail_atr": 2.0
+    },
+    "frozen_dev": {
+      "trades": 89,
+      "per_week": 4.21,
+      "win_rate": 0.348,
+      "pf": 1.49,
+      "expectancy_r": 0.31,
+      "avg_win_r": 2.71,
+      "avg_loss_r": -0.97,
+      "max_dd_r": -19.97
+    },
+    "permutation_dev": {
+      "real_expectancy_r": 0.31,
+      "p_value": 0.0398,
+      "permutations": 200
+    },
+    "holdout": {
+      "trades": 22,
+      "win_rate": 0.227,
+      "pf": 0.74,
+      "expectancy_r": -0.226,
+      "avg_win_r": 2.79,
+      "avg_loss_r": -1.11,
+      "max_dd_r": -15.36,
+      "total_r": -5.0,
+      "per_week": 4.4,
+      "worst_year_pf": 0.74
+    },
+    "holdout_2x_cost": {
+      "trades": 22,
+      "win_rate": 0.227,
+      "pf": 0.64,
+      "expectancy_r": -0.346,
+      "avg_win_r": 2.67,
+      "avg_loss_r": -1.23,
+      "max_dd_r": -17.6,
+      "total_r": -7.6,
+      "per_week": 4.4,
+      "worst_year_pf": 0.64
+    }
+  }
+}
+
+Top in-sample dev configs (>=30 trades) - NOT validated:
+  tf        setup trend  window  rvol_min  x_stop_atr x_target  x_target_atr  x_min_target_r  x_trail_atr  x_partial_r  trades  per_week  win_rate   pf  expectancy_r  avg_win_r
+15m     ib_break  with first2h       0.0        0.75      atr          10.0             NaN          2.0          NaN      41      1.94     0.439 1.83         0.497       2.50
+15m          orb  with first2h       0.0        0.75      atr          10.0             NaN          2.0          NaN      31      1.47     0.258 1.69         0.486       4.60
+ 5m  poc_reclaim  with     all       1.2        0.75      atr          10.0             NaN          3.0          NaN      34      1.61     0.235 1.54         0.471       5.70
+ 5m  poc_reclaim   any     all       1.2        0.75      atr          10.0             NaN          3.0          NaN      34      1.61     0.235 1.54         0.471       5.70
+15m vwap_reclaim  with     all       1.2        0.75      atr          10.0             NaN          2.0          NaN      32      1.51     0.406 1.78         0.468       2.62
+15m vwap_reclaim   any     all       1.2        0.75      atr          10.0             NaN          2.0          NaN      32      1.51     0.406 1.78         0.468       2.62
+15m vwap_reclaim   any     all       1.2        0.75      atr          10.0             NaN          3.0          NaN      32      1.51     0.438 1.74         0.462       2.48
+15m vwap_reclaim  with     all       1.2        0.75      atr          10.0             NaN          3.0          NaN      32      1.51     0.438 1.74         0.462       2.48
+15m vwap_reclaim  with     all       1.2        1.00      atr          10.0             NaN          3.0          NaN      30      1.42     0.533 1.86         0.414       1.68
+15m vwap_reclaim   any     all       1.2        1.00      atr          10.0             NaN          3.0          NaN      30      1.42     0.533 1.86         0.414       1.68
+15m     ib_break  with first2h       0.0        0.75      atr           6.0             NaN          NaN          NaN      41      1.94     0.390 1.64         0.414       2.71
+15m vwap_reclaim  with     all       1.2        1.00      atr          10.0             NaN          2.0          NaN      31      1.47     0.516 1.93         0.411       1.66
+15m vwap_reclaim   any     all       1.2        1.00      atr          10.0             NaN          2.0          NaN      31      1.47     0.516 1.93         0.411       1.66
+15m          orb  with     all       0.0        0.75      atr          10.0             NaN          2.0          NaN      33      1.56     0.242 1.58         0.408       4.60
+15m     ib_break   any     all       1.2        0.75      atr          10.0             NaN          2.0          NaN      36      1.70     0.389 1.60         0.389       2.67
+
+Walk-forward picks:
+  tf train_from  test_from    test_to       setup trend  window  rvol_min  stop_atr target  target_atr  trail_atr  train_expectancy  test_trades  test_r  min_target_r
+ 5m 2026-04-20 2026-06-16 2026-07-15    ib_break   any     all       1.2      0.75    atr        10.0        3.0             1.563            6   -6.80           NaN
+ 5m 2026-05-18 2026-07-16 2026-08-12    ib_break  with     all       1.2      1.00    atr        10.0        3.0             1.541            6   -0.61           NaN
+ 5m 2026-06-16 2026-08-13 2026-09-10 poc_reclaim   any after11       0.0      1.00    atr         6.0        NaN             1.376            8   -9.67           NaN
+ 5m 2026-07-16 2026-09-11 2026-09-15  va_reentry   any     all       0.0      0.75 levels         NaN        NaN             0.696            0    0.00           2.0
+15m 2026-04-20 2026-06-16 2026-07-15    ib_break   any     all       1.2      0.75    atr        10.0        2.0             1.189            5   -0.06           NaN
+15m 2026-05-18 2026-07-16 2026-08-12    ib_break  with     all       1.2      0.75    atr        10.0        2.0             1.222            7    0.93           NaN
+15m 2026-06-16 2026-08-13 2026-09-10 poc_reclaim   any after11       0.0      0.75    atr         2.5        NaN             1.064            4   -0.15           NaN
+15m 2026-07-16 2026-09-11 2026-09-15 poc_reclaim   any     all       0.0      0.75    atr        10.0        2.0             0.314            0    0.00           NaN

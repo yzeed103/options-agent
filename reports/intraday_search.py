@@ -16,7 +16,9 @@ from vzones.intraday.engine import Exec, run, metrics
 from vzones.intraday.validate import holdout_split, permutation_test
 
 OUT = pathlib.Path(__file__).resolve().parent
-raw = rth(load_csv(OUT.parent / "data" / "intraday" / "SPY_5m.csv"))
+SYM = sys.argv[1] if len(sys.argv) > 1 else "SPY"
+SUF = "" if SYM == "SPY" else f"_{SYM}"
+raw = rth(load_csv(OUT.parent / "data" / "intraday" / f"{SYM}_5m.csv"))
 FILTERS = [dict(trend=t, window=w, rvol_min=r) for t in ("any", "with") for w in ("all", "first2h", "after11") for r in (0.0, 1.2)]
 EXECS = []
 for st in (0.75, 1.0, 1.5):
@@ -96,9 +98,9 @@ for tag, mins in (("5m", 5), ("15m", 15)):
                        configs_tested=int(len(g)), walk_forward=wf,
                        frozen=dict(setup=frozen.setup, **f, **e), frozen_dev=json.loads(frozen[["trades", "per_week", "win_rate", "pf", "expectancy_r", "avg_win_r", "avg_loss_r", "max_dd_r"]].to_json()),
                        permutation_dev=perm, holdout=hold_m, holdout_2x_cost=hold_2x)
-G = pd.concat(all_grid); G.to_csv(OUT / "intraday_grid.csv", index=False)
-P = pd.concat(all_picks); P.to_csv(OUT / "intraday_walkforward_picks.csv", index=False)
-(OUT / "intraday_search.json").write_text(json.dumps(report, indent=2, default=str))
+G = pd.concat(all_grid); G.to_csv(OUT / f"intraday_grid{SUF}.csv", index=False)
+P = pd.concat(all_picks); P.to_csv(OUT / f"intraday_walkforward_picks{SUF}.csv", index=False)
+(OUT / f"intraday_search{SUF}.json").write_text(json.dumps(report, indent=2, default=str))
 pd.set_option("display.width", 250)
 print(json.dumps(report, indent=2, default=str))
 top = G[G.trades >= 30].sort_values("expectancy_r", ascending=False).head(15)
