@@ -711,14 +711,80 @@ if wbSig != 0
     label.new(bar_index + 30, wbTgt, "هدف الحوت " + str.tostring(wbTgt, format.mintick), style=label.style_none, textcolor=wbSig > 0 ? cWbUp : cWbDn, size=size.small)
 alertcondition(wbSig != 0, "ارتداد حوت", "ارتداد من مستوى حوت باتجاه المستوى التالي (تحت الاختبار)")
 
+// ═══════════════ Whale targets of the day, the level price is heading to, trend hold ═══════════════
+G_TG = "أهداف الحيتان واتجاه السعر"
+showHead = input.bool(true, "تسميك خط الحوت الذي يتجه له السعر", group=G_TG)
+cHead    = input.color(#ffeb3b, "لونه", inline="hd", group=G_TG)
+wHead    = input.int(4, "السماكة", minval=1, maxval=10, inline="hd", group=G_TG)
+stLen    = input.int(10, "صمود الترند: فترة Supertrend", minval=2, maxval=100, inline="st", group=G_TG)
+stMult   = input.float(3.0, "المضاعف", minval=0.5, maxval=10, step=0.5, inline="st", group=G_TG)
+showSt   = input.bool(false, "رسم خط كسر الترند على الشارت", group=G_TG)
+cStUp    = input.color(color.new(#00e676, 30), "لونه صاعد", inline="stc", group=G_TG)
+cStDn    = input.color(color.new(#ff5252, 30), "هابط", inline="stc", group=G_TG)
+wSt      = input.int(1, "السماكة", minval=1, maxval=5, inline="stc", group=G_TG)
+
+// all whale levels currently drawn: tall columns + POC / VAH / VAL of the last drawn range
+lvNow = array.copy(whLv)
+for k = 0 to 2
+    if not na(array.get(curVA, k))
+        array.push(lvNow, array.get(curVA, k))
+
+// session open / high / low (a new session = a new trading day)
+newDay = ta.change(time("D")) != 0
+var float dOpen = na
+var float dHigh = na
+var float dLow  = na
+if newDay or na(dOpen)
+    dOpen := open
+    dHigh := high
+    dLow  := low
+else
+    dHigh := math.max(dHigh, high)
+    dLow  := math.min(dLow, low)
+
+// the whale level price is heading to: chosen in the instant-trend direction, kept until price closes through it
+// (broken) or the instant trend turns the other way (reversed)
+var int    hDir = 0
+var float  hLvl = na
+var string hLast = ""
+if hDir != 0
+    if (hDir > 0 and close > hLvl) or (hDir < 0 and close < hLvl)
+        hLast := "اخترق " + str.tostring(hLvl, format.mintick)
+        hDir := 0
+    else if nowDir == -hDir
+        hLast := ((hDir > 0 and high >= hLvl) or (hDir < 0 and low <= hLvl) ? "لمس ثم انعكس عند " : "انعكس قبل ") + str.tostring(hLvl, format.mintick)
+        hDir := 0
+if hDir == 0 and nowDir != 0 and array.size(lvNow) > 0
+    float best = na
+    for x in lvNow
+        if (x - close) * nowDir > 0 and (na(best) or math.abs(x - close) < math.abs(best - close))
+            best := x
+    if not na(best)
+        hDir := nowDir
+        hLvl := best
+var line headLine = na
+var label headLbl = na
+if barstate.islast
+    line.delete(headLine)
+    label.delete(headLbl)
+    if showHead and hDir != 0
+        headLine := line.new(bar_index - 1, hLvl, bar_index, hLvl, extend=extend.both, color=cHead, width=wHead)
+        headLbl := label.new(bar_index + 3, hLvl, (hDir > 0 ? "▲ " : "▼ ") + "متجه إلى " + str.tostring(hLvl, format.mintick), style=label.style_label_left, color=color.new(cHead, 100), textcolor=cHead, size=size.small)
+
+// trend hold: Supertrend on the chart timeframe (direction < 0 = up in Pine)
+[stLine, stD] = ta.supertrend(stMult, stLen)
+stUp = stD < 0
+stFlipBars = ta.barssince(stD != stD[1])
+plot(showSt ? stLine : na, "خط كسر الترند", stUp ? cStUp : cStDn, wSt, plot.style_linebr)
+
 // ═══════════════ Status panel (Arabic) ═══════════════
 // Only the readings that survived testing: trend, volume, the sideways range and its whale levels, and the two
 // signals kept on the chart (whale bounce, trend alert).
 tPos = tblPos == "أعلى اليمين" ? position.top_right : tblPos == "أعلى اليسار" ? position.top_left : tblPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
-var table tbl = table.new(tPos, 3, 9, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
+var table tbl = table.new(tPos, 3, 12, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
 if barstate.isfirst
     table.merge_cells(tbl, 0, 0, 1, 0)
-    table.merge_cells(tbl, 0, 8, 2, 8)
+    table.merge_cells(tbl, 0, 11, 2, 11)
 tSz = tblSize == "صغير جدا" ? size.tiny : tblSize == "صغير" ? size.small : tblSize == "كبير" ? size.large : size.normal
 
 // last kept signal: 1 whale bounce, 2 trend alert; status 0 active, 1 target reached, -1 stopped / ended
@@ -830,19 +896,44 @@ if barstate.islast
     else
         vd := "لا توجد إشارة. أقرب خط حوت فوق وتحت السعر:\n▲ " + (na(wUp) ? "-" : fmt(wUp)) + "   |   ▼ " + (na(wDn) ? "-" : fmt(wDn))
 
+    // --- whale targets reached today (call = levels above the open, put = below)
+    int cTot = 0
+    int cHit = 0
+    int pTot = 0
+    int pHit = 0
+    for x in lvNow
+        if x > dOpen
+            cTot += 1
+            cHit += dHigh >= x ? 1 : 0
+        else if x < dOpen
+            pTot += 1
+            pHit += dLow <= x ? 1 : 0
+    gTxt = "كول " + str.tostring(cHit) + " من " + str.tostring(cTot) + "   |   بوت " + str.tostring(pHit) + " من " + str.tostring(pTot)
+    gSub = "من الافتتاح " + fmt(dOpen) + "   |   أعلى " + fmt(dHigh) + "   أدنى " + fmt(dLow)
+    gCol = cHit > pHit ? cTblUp : pHit > cHit ? cTblDn : cTblTxt
+    // --- level price is heading to
+    hTxt = hDir == 0 ? "لا يوجد" : (hDir > 0 ? "▲ صاعد إلى " : "▼ هابط إلى ") + fmt(hLvl)
+    hSub = (hDir == 0 ? "" : dist(hLvl)) + (hLast == "" ? "" : (hDir == 0 ? "" : "\n") + "السابق: " + hLast)
+    hCol = hDir > 0 ? cTblUp : hDir < 0 ? cTblDn : cTblLbl
+    // --- trend hold
+    kTxt = stUp ? "الترند الصاعد صامد" : "الترند الهابط صامد"
+    kTxt := stFlipBars <= 2 ? (stUp ? "انكسر الهابط، بدأ صعود" : "انكسر الصاعد، بدأ هبوط") : kTxt
+    kSub = "ينكسر إذا أغلق " + (stUp ? "تحت " : "فوق ") + fmt(stLine) + "   |   منذ " + str.tostring(stFlipBars) + " شمعة"
+    kCol = stUp ? cTblUp : cTblDn
+
     // --- draw (column 2 = label on the right, column 1 = value, column 0 = meter)
     table.cell(tbl, 2, 0, "مناطق الفوليوم", text_color=cTblTxt, text_size=tSz, text_halign=text.align_right)
     table.cell(tbl, 0, 0, syminfo.ticker + " · " + timeframe.period + " · " + fmt(close), text_color=cTblLbl, text_size=tSz, text_halign=text.align_left)
-    rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة")
-    vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub)
-    cols  = array.from(tCol, vCol, rCol, cWhLv, cWhLv, pCol, sCol)
-    for i = 0 to 6
+    rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة", "أهداف الحيتان اليوم", "متجه إلى", "صمود الترند")
+    vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub, gTxt + "\n" + gSub, hTxt + "\n" + hSub, kTxt + "\n" + kSub)
+    cols  = array.from(tCol, vCol, rCol, cWhLv, cWhLv, pCol, sCol, gCol, hCol, kCol)
+    for i = 0 to 9
         table.cell(tbl, 2, i + 1, array.get(rowsL, i), text_color=cTblLbl, text_size=tSz, text_halign=text.align_right)
         table.cell(tbl, 1, i + 1, array.get(vals, i), text_color=array.get(cols, i), text_size=tSz, text_halign=text.align_right)
         table.cell(tbl, 0, i + 1, "", text_size=tSz)
     table.cell(tbl, 0, 1, meter(tMet, 5), text_color=tCol, text_size=tSz)
     table.cell(tbl, 0, 2, meter(vMet, 5), text_color=vCol, text_size=tSz)
-    table.cell(tbl, 0, 8, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
+    table.cell(tbl, 0, 11, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
 
 // ═══════════════ Heatmap: two-colour or five-colour ribbons, no smoothing ═══════════════
 // colour = volume at that price over the last `lookback` bars, relative to the busiest row (0..1)
