@@ -1129,7 +1129,9 @@ if barstate.islast
                 conf := conf + (conf == "" ? "" : "، ") + array.get(gxKeys, i)
         dtB = array.get(gxInfo, 0)
         dtNow = str.format_time(time, "yyyy-MM-dd", syminfo.timezone)
-        xSub := "CW " + (na(gxCW) ? "-" : fmt(gxCW)) + "   |   PW " + (na(gxPW) ? "-" : fmt(gxPW)) + "\nFLIP " + (na(gxFl) ? "-" : fmt(gxFl)) + "   |   PIN " + (na(gxPin) ? "-" : fmt(gxPin)) + (na(array.get(gxV, 5)) ? "" : "\nأعلى فائدة مفتوحة " + fmt(array.get(gxV, 5))) + (na(array.get(gxV, 6)) and na(array.get(gxV, 7)) ? "" : "\nالجداران الثابتان: كول " + (na(array.get(gxV, 6)) ? "-" : fmt(array.get(gxV, 6))) + "   |   بوت " + (na(array.get(gxV, 7)) ? "-" : fmt(array.get(gxV, 7)))) + (conf == "" ? "" : "\nتلاقي مع خط حوت ★ " + conf) + (dtB == "" ? "" : dtB == dtNow ? "\nكتلة اليوم " + dtB : "\nتنبيه: الكتلة بتاريخ " + dtB)
+        // warn only when the block is OLDER than the chart's last bar (a newer block = pre-market or weekend: fine)
+        dtOld = str.tonumber(str.replace_all(dtB, "-", "")) < str.tonumber(str.replace_all(dtNow, "-", ""))
+        xSub := "CW " + (na(gxCW) ? "-" : fmt(gxCW)) + "   |   PW " + (na(gxPW) ? "-" : fmt(gxPW)) + "\nFLIP " + (na(gxFl) ? "-" : fmt(gxFl)) + "   |   PIN " + (na(gxPin) ? "-" : fmt(gxPin)) + (na(array.get(gxV, 5)) ? "" : "\nأعلى فائدة مفتوحة " + fmt(array.get(gxV, 5))) + (na(array.get(gxV, 6)) and na(array.get(gxV, 7)) ? "" : "\nالجداران الثابتان: كول " + (na(array.get(gxV, 6)) ? "-" : fmt(array.get(gxV, 6))) + "   |   بوت " + (na(array.get(gxV, 7)) ? "-" : fmt(array.get(gxV, 7)))) + (conf == "" ? "" : "\nتلاقي مع خط حوت ★ " + conf) + (dtB == "" ? "" : dtOld ? "\nتنبيه: الكتلة قديمة " + dtB : "\nالكتلة " + dtB)
     else if str.length(gexText) > 0
         xTxt := "لا يوجد سطر لـ " + gxSym(syminfo.ticker)
         xCol := cTblWeak
