@@ -13,6 +13,11 @@ hvnMult    = input.float(1.5, "منطقة فوليوم عالي = أكبر من 
 
 volMaLen   = input.int(20, "متوسط الفوليوم (عدد الشموع)", group="الإشارات")
 udLen      = input.int(50, "فوليوم الاتجاه: عدد الشموع", minval=10, maxval=200, tooltip="فوليوم الشموع الصاعدة ÷ فوليوم الشموع الهابطة. أكبر من 1 = الشراء أقوى", group="الإشارات")
+G_NOW = "الجدول: الاتجاه والفوليوم اللحظي"
+nowEmaF    = input.int(9, "متوسط سريع", minval=2, maxval=100, inline="ne", group=G_NOW)
+nowEmaS    = input.int(21, "متوسط بطيء", minval=3, maxval=200, inline="ne", group=G_NOW)
+nowAdxLen  = input.int(7, "فترة ADX اللحظي", minval=2, maxval=50, group=G_NOW)
+nowUdLen   = input.int(10, "فوليوم لحظي: عدد الشموع", minval=3, maxval=100, tooltip="الجدول فقط. إشارة الاتجاه على الشارت تبقى على الحساب المختبر (50 شمعة)", group=G_NOW)
 udBand     = input.float(0.05, "فوليوم الاتجاه: هامش الحياد", minval=0.0, maxval=0.5, step=0.05, tooltip="0.05 = بين 0.95 و 1.05 يعتبر محايد", group="الإشارات")
 weakRatio  = input.float(0.80, "فوليوم ضعيف إذا أقل من المتوسط بنسبة", minval=0.3, maxval=1.0, step=0.05, tooltip="0.80 = أقل من 80% من المتوسط", group="الإشارات")
 breakRatio = input.float(1.5, "فوليوم قوي إذا أكبر من المتوسط بنسبة", minval=1.0, maxval=5.0, step=0.1, tooltip="1.5 = مرة ونصف المتوسط", group="الإشارات")
@@ -131,6 +136,15 @@ upVol = math.sum(close > open ? volume : 0.0, udLen)
 dnVol = math.sum(close < open ? volume : 0.0, udLen)
 udR   = dnVol > 0 ? upVol / dnVol : na
 udDir = na(udR) ? 0 : udR > 1 + udBand ? 1 : udR < 1 / (1 + udBand) ? -1 : 0
+// instant readings for the panel (faster than the tested signal settings)
+nowF = ta.ema(close, nowEmaF)
+nowS = ta.ema(close, nowEmaS)
+[nDiP, nDiM, nAdx] = ta.dmi(nowAdxLen, nowAdxLen)
+nowDir = nowF > nowS and nDiP > nDiM ? 1 : nowF < nowS and nDiM > nDiP ? -1 : 0
+nUp = math.sum(close > open ? volume : 0.0, nowUdLen)
+nDn = math.sum(close < open ? volume : 0.0, nowUdLen)
+nowUd = nDn > 0 ? nUp / nDn : na
+nowUdDir = na(nowUd) ? 0 : nowUd > 1 + udBand ? 1 : nowUd < 1 / (1 + udBand) ? -1 : 0
 trendDir = emaF > emaS and diP > diM ? 1 : emaF < emaS and diM > diP ? -1 : 0
 
 // ═══════════════ Rolling volume profile (bars 1..lookback, past only) ═══════════════
@@ -747,19 +761,19 @@ meter(int k, int n) =>
 
 if barstate.islast
     // --- trend
-    strongT = adxV >= adxStrong
-    tTxt = trendDir > 0 ? (strongT ? "صاعد قوي" : "صاعد") : trendDir < 0 ? (strongT ? "هابط قوي" : "هابط") : "عرضي"
-    tCol = trendDir > 0 ? cTblUp : trendDir < 0 ? cTblDn : cTblLbl
-    tSub = (adxV < 20 ? "قوة ضعيفة" : adxV < adxStrong ? "قوة متوسطة" : "قوة عالية") + "\nADX " + str.tostring(adxV, "#")
-    tMet = int(math.min(5, math.max(1, math.ceil(adxV / 10))))
+    strongT = nAdx >= adxStrong
+    tTxt = nowDir > 0 ? (strongT ? "صاعد قوي" : "صاعد") : nowDir < 0 ? (strongT ? "هابط قوي" : "هابط") : "عرضي"
+    tCol = nowDir > 0 ? cTblUp : nowDir < 0 ? cTblDn : cTblLbl
+    tSub = (nAdx < 20 ? "قوة ضعيفة" : nAdx < adxStrong ? "قوة متوسطة" : "قوة عالية") + "\nADX " + str.tostring(nAdx, "#") + "   |   متوسط " + str.tostring(nowEmaF) + " و " + str.tostring(nowEmaS)
+    tMet = int(math.min(5, math.max(1, math.ceil(nAdx / 10))))
     // --- volume
     // completed bars only, so the half-built current candle does not distort it
-    udP = udR[1]
-    udD = udDir[1]
+    udP = nowUd[1]
+    udD = nowUdDir[1]
     vTxt = udD > 0 ? "داعم للصعود" : udD < 0 ? "داعم للهبوط" : "محايد"
     vCol = udD > 0 ? cTblUp : udD < 0 ? cTblDn : cTblLbl
     vMet = na(udP) ? 1 : int(math.min(5, math.max(1, math.round(math.abs(math.log(udP)) * 10) + 1)))
-    vSub = "شراء ÷ بيع " + (na(udP) ? "-" : str.tostring(udP, "#.00")) + "   |   آخر " + str.tostring(udLen) + " شمعة" + (trendDir != 0 and udD == -trendDir ? "\nعكس الترند" : "")
+    vSub = "شراء ÷ بيع " + (na(udP) ? "-" : str.tostring(udP, "#.00")) + "   |   آخر " + str.tostring(nowUdLen) + " شمعة" + (nowDir != 0 and udD == -nowDir ? "\nعكس الترند" : "")
     // --- sideways range (daily)
     string rTxt = "لا توجد منطقة"
     string rSub = "-"
@@ -811,7 +825,7 @@ if barstate.islast
     else if showTA and taDir != 0
         vd := "اتجاه " + (taDir > 0 ? "صاعد" : "هابط") + ": ثبات " + (taDir > 0 ? "فوق" : "تحت") + " منطقة قيمة الأمس مع الترند. ينتهي بالعودة داخلها:\n" + fmt(taDir > 0 ? pdVAH : pdVAL)
         vdc := taDir > 0 ? cTaLbl : cTaLblDn
-        if udD == -taDir
+        if udDir == -taDir
             vd := vd + "\nتنبيه: الفوليوم لا يدعمها"
     else
         vd := "لا توجد إشارة. أقرب خط حوت فوق وتحت السعر:\n▲ " + (na(wUp) ? "-" : fmt(wUp)) + "   |   ▼ " + (na(wDn) ? "-" : fmt(wDn))
