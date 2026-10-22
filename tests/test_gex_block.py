@@ -33,6 +33,18 @@ def test_maxoi_key():
     assert parse_block(BLOCK, "INTU")["MAXOI"] is None
 
 
+def test_oi_walls():
+    from vzones.gex_block import oi_walls
+    st = [{"strike": 98, "call_oi": 9, "put_oi": 500}, {"strike": 100, "call_oi": 900, "put_oi": 900},
+          {"strike": 105, "call_oi": 300, "put_oi": 1}, {"strike": 110, "call_oi": 300, "put_oi": 0},
+          {"strike": 90, "call_oi": 0, "put_oi": 400}]
+    # 100 sits inside the 0.6% buffer (spot 100.2) and is skipped; ties go to the strike nearer price
+    assert oi_walls(st, 100.2) == (105, 98)
+    assert oi_walls([], 100.0) == (None, None)
+    lv = parse_block("SPY: CWOI=800 PWOI=750", "SPY")
+    assert (lv["CWOI"], lv["PWOI"]) == (800, 750)
+
+
 def test_round_trip():
     rows = {"^SPX": {"CW": 6800.0, "PW": 6700.0, "FLIP": 6755.5012, "PIN": 6750.0, "DFLIP": None}}
     text = format_block("2026-10-22", rows)

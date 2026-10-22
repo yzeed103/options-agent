@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 
-KEYS = ("CW", "PW", "FLIP", "PIN", "DFLIP", "MAXOI")
+KEYS = ("CW", "PW", "FLIP", "PIN", "DFLIP", "MAXOI", "CWOI", "PWOI")
 _NUM = re.compile(r"[-+]?[0-9]*\.?[0-9]+")
 
 
@@ -59,6 +59,26 @@ def parse_block(text: str, ticker: str) -> dict | None:
         return None
     found["DATE"] = date
     return found
+
+
+WALL_BUFFER = 0.006   # same 0.6% buffer around price that GEXRadar uses for its gamma walls
+
+
+def oi_walls(strikes: list[dict], spot: float, buffer: float = WALL_BUFFER) -> tuple[float | None, float | None]:
+    """Open-interest walls: the strike with the most call OI above price and the most put OI below it.
+
+    Unlike GEXRadar's gamma walls they do not weigh strikes by gamma at the current price, so they drift much less
+    (measured on 140 symbol-days of GEXRadar strike tables: fixed all session on ~65% of days vs ~30% for the gamma
+    walls; most remaining changes coincide with a change in the OI table itself). Strikes inside +-buffer of price are
+    skipped, like the gamma walls; if nothing is left on a side, the buffer is dropped for that side.
+    """
+    def pick(side_ok, key):
+        pool = [s for s in strikes if side_ok(s["strike"], spot * buffer) and (s.get(key) or 0) > 0]
+        pool = pool or [s for s in strikes if side_ok(s["strike"], 0.0) and (s.get(key) or 0) > 0]
+        return max(pool, key=lambda s: (s[key], -abs(s["strike"] - spot)))["strike"] if pool else None
+    cw = pick(lambda k, b: k >= spot + b, "call_oi")
+    pw = pick(lambda k, b: k <= spot - b, "put_oi")
+    return cw, pw
 
 
 def _fmt(x: float) -> str:

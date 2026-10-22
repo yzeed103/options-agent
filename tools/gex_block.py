@@ -19,7 +19,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from vzones.gex_block import format_block  # noqa: E402
+from vzones.gex_block import format_block, oi_walls  # noqa: E402
 
 NY = ZoneInfo("America/New_York")
 FIELDS = {"CW": "call_wall", "PW": "put_wall", "FLIP": "gamma_flip", "PIN": "pin", "DFLIP": "delta_flip", "MAXOI": "max_oi_strike"}
@@ -36,12 +36,19 @@ def build(base: str, symbols: list[str] | None, basis: str) -> tuple[str, list[s
     rows, notes, dates = {}, [], set()
     for sym in symbols:
         try:
-            d = get(f"{base}/api/gex/{urllib.parse.quote(sym)}?basis={basis}&strikes=1")
+            # 200 = the most the API returns (strikes with the largest |GEX|); enough for the OI walls, checked below
+            d = get(f"{base}/api/gex/{urllib.parse.quote(sym)}?basis={basis}&strikes=200")
         except Exception as e:  # noqa: BLE001 - one bad symbol must not stop the block
             notes.append(f"{sym}: failed ({type(e).__name__})")
             continue
         lv = d.get("levels") or {}
         rows[sym] = {k: lv.get(f) for k, f in FIELDS.items()}
+        st = d.get("strikes") or []
+        rows[sym]["CWOI"], rows[sym]["PWOI"] = oi_walls(st, d.get("spot") or 0.0)
+        # coverage check: the highest-OI strike GEXRadar reports must be among the strikes we received
+        best = max(st, key=lambda s: (s.get("call_oi") or 0) + (s.get("put_oi") or 0), default=None)
+        if lv.get("max_oi_strike") is not None and (best is None or best["strike"] != lv["max_oi_strike"]):
+            notes.append(f"{sym}: the 200 strikes returned miss the max-OI strike, OI walls may be off")
         if d.get("updated_at"):
             dates.add(datetime.fromisoformat(d["updated_at"]).astimezone(NY).date().isoformat())
         if d.get("oi_stale"):
