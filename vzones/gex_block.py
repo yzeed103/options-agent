@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 
-KEYS = ("CW", "PW", "FLIP", "PIN", "DFLIP")
+KEYS = ("CW", "PW", "FLIP", "PIN", "DFLIP", "MAXOI")
 _NUM = re.compile(r"[-+]?[0-9]*\.?[0-9]+")
 
 

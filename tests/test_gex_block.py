@@ -27,6 +27,12 @@ def test_missing_symbol_and_garbage():
     assert lv["CW"] == 360 and lv["PW"] is None and lv["DATE"] == ""
 
 
+def test_maxoi_key():
+    lv = parse_block("SPY: CW=770 PW=750 FLIP=774.57 PIN=760 DFLIP=771.36 MAXOI=750", "SPY")
+    assert lv["MAXOI"] == 750
+    assert parse_block(BLOCK, "INTU")["MAXOI"] is None
+
+
 def test_round_trip():
     rows = {"^SPX": {"CW": 6800.0, "PW": 6700.0, "FLIP": 6755.5012, "PIN": 6750.0, "DFLIP": None}}
     text = format_block("2026-10-22", rows)

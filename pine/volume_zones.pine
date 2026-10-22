@@ -778,12 +778,12 @@ stFlipBars = ta.barssince(stD != stD[1])
 plot(showSt ? stLine : na, "خط كسر الترند", stUp ? cStUp : cStDn, wSt, plot.style_linebr)
 
 // ═══════════════ Options levels (GEX) pasted from GEXRadar ═══════════════
-// One daily block for all symbols, e.g. "INTU: CW=360 PW=340 FLIP=355 PIN=350" (DFLIP optional, "DATE=..." line
+// One daily block for all symbols, e.g. "INTU: CW=360 PW=340 FLIP=355 PIN=350" (DFLIP / MAXOI optional, "DATE=..." line
 // optional). Only the line of the current ticker is used. Same rules as vzones/gex_block.py (tests/test_gex_block.py).
 // These are levels for TODAY, so they are drawn from today's open only. No tested edge yet: context, not a signal.
 G_GX = "مستويات الخيارات (GEX)"
 showGex = input.bool(true, "إظهار مستويات الخيارات", group=G_GX)
-gexText = input.text_area("", "الصق كتلة اليوم من GEXRadar", tooltip="سطر لكل سهم، مثال:\nDATE=2026-10-22\nINTU: CW=360 PW=340 FLIP=355 PIN=350\nيُقرأ سطر السهم الحالي فقط. DFLIP اختياري", group=G_GX)
+gexText = input.text_area("", "الصق كتلة اليوم من GEXRadar", tooltip="سطر لكل سهم، مثال:\nDATE=2026-10-22\nINTU: CW=360 PW=340 FLIP=355 PIN=350\nيُقرأ سطر السهم الحالي فقط. DFLIP و MAXOI اختياريان", group=G_GX)
 gexTol  = input.float(0.25, "تلاقي مع خط حوت إذا المسافة أقل من (ATR يومي)", minval=0.0, maxval=2.0, step=0.05, group=G_GX)
 // one colour per line, so each concept keeps its own (i) explanation
 GX_NOTE = "\nتقدير من GEXRadar (يفترض أن صناع السوق يشترون الكول ويبيعون البوت)، وليس مراكزهم الحقيقية. غير مختبر بعد"
@@ -792,14 +792,15 @@ cGxPW   = input.color(#ff1744, "جدار البوت", tooltip="PW في الكت�
 cGxFl   = input.color(#ffd600, "انقلاب القاما", tooltip="FLIP في الكتلة. السعر اللي يتغيّر عنده سلوك صنّاع السوق:\nفوقه: غالبا يبيعون مع الصعود ويشترون مع النزول، فالحركة تهدأ.\nتحته: يبيعون مع النزول ويشترون مع الصعود، فالحركة تتسارع." + GX_NOTE, group=G_GX)
 cGxPin  = input.color(#e0e0e0, "نقطة التثبيت", tooltip="PIN في الكتلة. أكبر تجمّع خيارات (كول وبوت مع بعض) عند سعر واحد. السعر أحيانا ينجذب له، خصوصا قرب انتهاء العقود." + GX_NOTE, group=G_GX)
 cGxDf   = input.color(#80d8ff, "انقلاب الدلتا", tooltip="DFLIP في الكتلة. السعر اللي تتوازن عنده كفّة الكول مع كفّة البوت. فوقه تميل الكفّة للكول، وتحته للبوت." + GX_NOTE, group=G_GX)
-wGx     = input.int(2, "السماكة", minval=1, maxval=5, group=G_GX)
+cGxMoi  = input.color(#1de9b6, "أعلى فائدة مفتوحة", tooltip="MAXOI في الكتلة. السترايك اللي عليه أكبر عدد عقود مفتوحة (كول وبوت). يُحسب مرة باليوم من بيانات OCC، فيبقى ثابتا ولا يتبع السعر.\nقياس على 560 يوم: ثابت طول اليوم في 85% من الأيام، بينما نقطة التثبيت تتحرك مع السعر." + GX_NOTE, group=G_GX)
+wGx    = input.int(2, "السماكة", minval=1, maxval=5, group=G_GX)
 gexShape = input.string("صناديق", "شكل المستويات", options=["صناديق", "خطوط"], tooltip="صناديق: منطقة شفافة حول كل مستوى مثل الخريطة الحرارية. الجداران CW و PW بالعرض الكامل، والباقي بنصفه", group=G_GX)
 gexBand  = input.float(0.10, "عرض الصندوق (ATR يومي)", minval=0.02, maxval=1.0, step=0.02, tooltip="0.10 = عُشر حركة يوم. إذا لم يتوفر ATR اليومي يُستخدم 0.4% من السعر", group=G_GX)
 gexFill  = input.int(75, "شفافية تعبئة الصندوق", minval=0, maxval=100, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان", group=G_GX)
 gexBord  = input.int(30, "شفافية حدود الصندوق", minval=0, maxval=100, step=5, group=G_GX)
 
-gxKeys = array.from("CW", "PW", "FLIP", "PIN", "DFLIP")
-var float[]  gxV    = array.new_float(5, na)
+gxKeys = array.from("CW", "PW", "FLIP", "PIN", "DFLIP", "MAXOI")
+var float[]  gxV    = array.new_float(6, na)
 var string[] gxInfo = array.new_string(2, "")      // 0 = date of the block, 1 = "1" when the ticker line was found
 gxNum(string s) =>
     m = str.match(s, "[-+]?[0-9]*\\.?[0-9]+")
@@ -819,7 +820,7 @@ if barstate.isfirst and showGex and str.length(gexText) > 0
     for gl in gxRows
         string sym = ""
         string dt = ""
-        got = array.new_float(5, na)
+        got = array.new_float(6, na)
         gxToks = str.split(str.replace_all(gl, ",", " "), " ")
         for tk in gxToks
             // separate ifs, not an if / else chain (branches ending differently can fail the type check)
@@ -840,7 +841,7 @@ if barstate.isfirst and showGex and str.length(gexText) > 0
         if sym == "" and dt != ""
             array.set(gxInfo, 0, dt)
         if sym != "" and sym == me
-            for i = 0 to 4
+            for i = 0 to 5
                 array.set(gxV, i, array.get(got, i))
             array.set(gxInfo, 1, "1")
             if dt != ""
@@ -877,14 +878,14 @@ if barstate.islast
         label.delete(gb)
     array.clear(gxLbls)
     if gxOn
-        gxCols = array.from(cGxCW, cGxPW, cGxFl, cGxPin, cGxDf)
-        gxSty  = array.from(line.style_solid, line.style_solid, line.style_dashed, line.style_dotted, line.style_dotted)
+        gxCols = array.from(cGxCW, cGxPW, cGxFl, cGxPin, cGxDf, cGxMoi)
+        gxSty  = array.from(line.style_solid, line.style_solid, line.style_dashed, line.style_dotted, line.style_dotted, line.style_dashed)
         gxH    = na(dATR) ? c_ * 0.004 : gexBand * dATR
-        for i = 0 to 4
+        for i = 0 to 5
             x = array.get(gxV, i)
             if not na(x)
                 gc = array.get(gxCols, i)
-                // walls (CW / PW) full height, FLIP / PIN / DFLIP half, so overlapping levels stay apart
+                // walls (CW / PW) full height, FLIP / PIN / DFLIP / MAXOI half, so overlapping levels stay apart
                 hb = (i < 2 ? 0.5 : 0.25) * gxH
                 if gexShape == "صناديق"
                     array.push(gxBoxA, box.new(gxT0, x + hb, time, x - hb, xloc=xloc.bar_time, extend=extend.right, border_color=fade(gc, gexBord), border_width=1, border_style=array.get(gxSty, i), bgcolor=fade(gc, gexFill)))
@@ -893,7 +894,7 @@ if barstate.islast
                 // levels at the same price (e.g. CW = PIN) share one label: "CW · PIN 340"
                 bool gxDup = false
                 string gxNm = array.get(gxKeys, i)
-                for j = 0 to 4
+                for j = 0 to 5
                     y = array.get(gxV, j)
                     if j != i and not na(y) and math.abs(y - x) <= 0.25 * gxH
                         if j < i
@@ -1120,12 +1121,12 @@ if barstate.islast
         xTxt := xTxt == "" ? "مستويات ناقصة" : xTxt
         xCol := na(gxFl) ? cTblTxt : c_ >= gxFl ? cTblUp : cTblDn
         string conf = ""
-        for i = 0 to 4
+        for i = 0 to 5
             if gxNear(array.get(gxV, i))
                 conf := conf + (conf == "" ? "" : "، ") + array.get(gxKeys, i)
         dtB = array.get(gxInfo, 0)
         dtNow = str.format_time(time, "yyyy-MM-dd", syminfo.timezone)
-        xSub := "CW " + (na(gxCW) ? "-" : fmt(gxCW)) + "   |   PW " + (na(gxPW) ? "-" : fmt(gxPW)) + "\nFLIP " + (na(gxFl) ? "-" : fmt(gxFl)) + "   |   PIN " + (na(gxPin) ? "-" : fmt(gxPin)) + (conf == "" ? "" : "\nتلاقي مع خط حوت ★ " + conf) + (dtB == "" ? "" : dtB == dtNow ? "\nكتلة اليوم " + dtB : "\nتنبيه: الكتلة بتاريخ " + dtB)
+        xSub := "CW " + (na(gxCW) ? "-" : fmt(gxCW)) + "   |   PW " + (na(gxPW) ? "-" : fmt(gxPW)) + "\nFLIP " + (na(gxFl) ? "-" : fmt(gxFl)) + "   |   PIN " + (na(gxPin) ? "-" : fmt(gxPin)) + (na(array.get(gxV, 5)) ? "" : "\nأعلى فائدة مفتوحة " + fmt(array.get(gxV, 5))) + (conf == "" ? "" : "\nتلاقي مع خط حوت ★ " + conf) + (dtB == "" ? "" : dtB == dtNow ? "\nكتلة اليوم " + dtB : "\nتنبيه: الكتلة بتاريخ " + dtB)
     else if str.length(gexText) > 0
         xTxt := "لا يوجد سطر لـ " + gxSym(syminfo.ticker)
         xCol := cTblWeak
