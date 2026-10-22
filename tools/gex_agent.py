@@ -176,7 +176,7 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=9222, help="TradingView Desktop debug port")
     ap.add_argument("--basis", default="oi", choices=["oi", "volume"])
     ap.add_argument("--every", type=int, default=300, help="seconds between polls in session (04:00-20:00 ET)")
-    ap.add_argument("--idle", type=int, default=1800, help="seconds between polls outside the session")
+    ap.add_argument("--idle", type=int, default=600, help="seconds between polls outside the session")
     ap.add_argument("--confirm", type=int, default=2, help="polls an open-interest change must survive")
     ap.add_argument("--live-gamma", action="store_true",
                     help="also update the gamma levels during the day (measured: ~67 pushes a day)")
