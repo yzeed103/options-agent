@@ -785,11 +785,13 @@ G_GX = "مستويات الخيارات (GEX)"
 showGex = input.bool(true, "إظهار مستويات الخيارات", group=G_GX)
 gexText = input.text_area("", "الصق كتلة اليوم من GEXRadar", tooltip="سطر لكل سهم، مثال:\nDATE=2026-10-22\nINTU: CW=360 PW=340 FLIP=355 PIN=350\nيُقرأ سطر السهم الحالي فقط. DFLIP اختياري", group=G_GX)
 gexTol  = input.float(0.25, "تلاقي مع خط حوت إذا المسافة أقل من (ATR يومي)", minval=0.0, maxval=2.0, step=0.05, group=G_GX)
-cGxCW   = input.color(#00c853, "CW جدار الكول", inline="gx1", group=G_GX)
-cGxPW   = input.color(#ff1744, "PW جدار البوت", inline="gx1", group=G_GX)
-cGxFl   = input.color(#ffd600, "FLIP", inline="gx2", group=G_GX)
-cGxPin  = input.color(#e0e0e0, "PIN", inline="gx2", group=G_GX)
-cGxDf   = input.color(#80d8ff, "DFLIP", inline="gx2", group=G_GX)
+// one colour per line, so each concept keeps its own (i) explanation
+GX_NOTE = "\nتقدير من GEXRadar (يفترض أن صناع السوق يشترون الكول ويبيعون البوت)، وليس مراكزهم الحقيقية. غير مختبر بعد"
+cGxCW   = input.color(#00c853, "جدار الكول", tooltip="CW في الكتلة. أكبر تجمّع قاما للكول فوق السعر، ويعمل غالبا كمقاومة" + GX_NOTE, group=G_GX)
+cGxPW   = input.color(#ff1744, "جدار البوت", tooltip="PW في الكتلة. أكبر تجمّع قاما للبوت تحت السعر، ويعمل غالبا كدعم" + GX_NOTE, group=G_GX)
+cGxFl   = input.color(#ffd600, "انقلاب القاما", tooltip="FLIP في الكتلة. السعر اللي يتغيّر عنده سلوك صنّاع السوق:\nفوقه: غالبا يبيعون مع الصعود ويشترون مع النزول، فالحركة تهدأ.\nتحته: يبيعون مع النزول ويشترون مع الصعود، فالحركة تتسارع." + GX_NOTE, group=G_GX)
+cGxPin  = input.color(#e0e0e0, "نقطة التثبيت", tooltip="PIN في الكتلة. أكبر تجمّع خيارات (كول وبوت مع بعض) عند سعر واحد. السعر أحيانا ينجذب له، خصوصا قرب انتهاء العقود." + GX_NOTE, group=G_GX)
+cGxDf   = input.color(#80d8ff, "انقلاب الدلتا", tooltip="DFLIP في الكتلة. السعر اللي تتوازن عنده كفّة الكول مع كفّة البوت. فوقه تميل الكفّة للكول، وتحته للبوت." + GX_NOTE, group=G_GX)
 wGx     = input.int(2, "السماكة", minval=1, maxval=5, group=G_GX)
 gexShape = input.string("صناديق", "شكل المستويات", options=["صناديق", "خطوط"], tooltip="صناديق: منطقة شفافة حول كل مستوى مثل الخريطة الحرارية. الجداران CW و PW بالعرض الكامل، والباقي بنصفه", group=G_GX)
 gexBand  = input.float(0.10, "عرض الصندوق (ATR يومي)", minval=0.02, maxval=1.0, step=0.02, tooltip="0.10 = عُشر حركة يوم. إذا لم يتوفر ATR اليومي يُستخدم 0.4% من السعر", group=G_GX)
