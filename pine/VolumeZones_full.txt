@@ -791,6 +791,10 @@ cGxFl   = input.color(#ffd600, "FLIP", inline="gx2", group=G_GX)
 cGxPin  = input.color(#e0e0e0, "PIN", inline="gx2", group=G_GX)
 cGxDf   = input.color(#80d8ff, "DFLIP", inline="gx2", group=G_GX)
 wGx     = input.int(2, "السماكة", minval=1, maxval=5, group=G_GX)
+gexShape = input.string("صناديق", "شكل المستويات", options=["صناديق", "خطوط"], tooltip="صناديق: منطقة شفافة حول كل مستوى مثل الخريطة الحرارية. الجداران CW و PW بالعرض الكامل، والباقي بنصفه", group=G_GX)
+gexBand  = input.float(0.10, "عرض الصندوق (ATR يومي)", minval=0.02, maxval=1.0, step=0.02, tooltip="0.10 = عُشر حركة يوم. إذا لم يتوفر ATR اليومي يُستخدم 0.4% من السعر", group=G_GX)
+gexFill  = input.int(75, "شفافية تعبئة الصندوق", minval=0, maxval=100, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان", group=G_GX)
+gexBord  = input.int(30, "شفافية حدود الصندوق", minval=0, maxval=100, step=5, group=G_GX)
 
 gxKeys = array.from("CW", "PW", "FLIP", "PIN", "DFLIP")
 var float[]  gxV    = array.new_float(5, na)
@@ -858,22 +862,32 @@ gxNear(float x) =>
     hit
 
 var line[]  gxLines = array.new_line()
+var box[]   gxBoxA  = array.new_box()
 var label[] gxLbls  = array.new_label()
 if barstate.islast
     for gx in gxLines
         line.delete(gx)
     array.clear(gxLines)
+    for gq in gxBoxA
+        box.delete(gq)
+    array.clear(gxBoxA)
     for gb in gxLbls
         label.delete(gb)
     array.clear(gxLbls)
     if gxOn
         gxCols = array.from(cGxCW, cGxPW, cGxFl, cGxPin, cGxDf)
         gxSty  = array.from(line.style_solid, line.style_solid, line.style_dashed, line.style_dotted, line.style_dotted)
+        gxH    = na(dATR) ? c_ * 0.004 : gexBand * dATR
         for i = 0 to 4
             x = array.get(gxV, i)
             if not na(x)
                 gc = array.get(gxCols, i)
-                array.push(gxLines, line.new(gxT0, x, time, x, xloc=xloc.bar_time, extend=extend.right, color=gc, style=array.get(gxSty, i), width=wGx))
+                // walls (CW / PW) full height, FLIP / PIN / DFLIP half, so overlapping levels stay apart
+                hb = (i < 2 ? 0.5 : 0.25) * gxH
+                if gexShape == "صناديق"
+                    array.push(gxBoxA, box.new(gxT0, x + hb, time, x - hb, xloc=xloc.bar_time, extend=extend.right, border_color=fade(gc, gexBord), border_width=1, border_style=array.get(gxSty, i), bgcolor=fade(gc, gexFill)))
+                if gexShape != "صناديق"
+                    array.push(gxLines, line.new(gxT0, x, time, x, xloc=xloc.bar_time, extend=extend.right, color=gc, style=array.get(gxSty, i), width=wGx))
                 array.push(gxLbls, label.new(bar_index + 3, x, array.get(gxKeys, i) + " " + str.tostring(x, format.mintick) + (gxNear(x) ? " ★" : ""), style=label.style_label_left, color=color.new(gc, 100), textcolor=gc, size=size.small))
 // ta.cross on every bar (not inside and/or), then combined
 gxXcw = ta.cross(c_, gxCW)
