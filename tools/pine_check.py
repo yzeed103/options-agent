@@ -5,7 +5,7 @@ from pynescript import ast as A
 
 BUILTIN = set("""open high low close volume time time_close bar_index last_bar_index na true false hl2 hlc3 ohlc4 hlcc4
 syminfo timeframe barstate color size shape location position text line box label table extend xloc yloc order format plot
-barmerge ta math array str input request alert alertcondition indicator plotshape plotchar bgcolor barcolor fill hline
+barmerge ticker ta math array str input request alert alertcondition indicator plotshape plotchar bgcolor barcolor fill hline
 int float bool string nz na timestamp dayofweek hour minute year month dayofmonth display session currency scale
 linefill matrix map strategy runtime log chart polyline adjustment dividends earnings splits""".split())
 RESTRICT = {"plot", "plotshape", "plotchar", "bgcolor", "barcolor", "alertcondition", "indicator", "fill", "hline"}
