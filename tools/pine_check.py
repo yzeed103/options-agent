@@ -99,6 +99,10 @@ for i, l in enumerate(lines):
             if pind < ind and (f"array.size({arr}) > 0" in pl or f"array.size({arr}) >" in pl or "nZones > 0" in pl): guarded = True; break
             if pind < ind and pl.lstrip().startswith(("if ", "else")): break
         if not guarded: warns.append(f"line {i+1}: loop over array.size({arr}) - 1 without an explicit size>0 guard")
+    # v5 `and` / `or` evaluate both sides: indexing an array in the same expression that tests its size fails at runtime
+    m2 = re.search(r"array\.size\((\w+)\)\s*(==\s*0|>\s*0)\s*(or|and)\b.*array\.get\(\1\b", l)
+    if m2 and not l.lstrip().startswith("//") and "?" not in l.split(m2.group(3))[0][-3:]:
+        errs.append(f"line {i+1}: array.get({m2.group(1)}) in the same and/or expression as its size test (v5 evaluates both sides)")
 print("SYNTAX: OK (parsed)")
 print("ERRORS:", len(errs)); [print("  ", e) for e in errs]
 print("WARNINGS:", len(warns)); [print("  ", w) for w in warns]
