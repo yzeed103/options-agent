@@ -43,15 +43,17 @@ def profile(a, b):
         else: a0 -= 1; acc += d_
     return lo, hi, [lo + (q + .5) * st for q in pk], lo + (pi + .5) * st, lo + (a1 + 1) * st, lo + a0 * st
 BG, GR, TX, MUT = "#0b0e14", "#2a2e39", "#d1d4dc", "#8a8f9c"
-N = len(day); fig, ax = plt.subplots(figsize=(19, 10), facecolor=BG); ax.set_facecolor(BG)
+N = len(day); fig = plt.figure(figsize=(21, 10), facecolor=BG); ax = fig.add_axes([0.03, 0.06, 0.70, 0.88], facecolor=BG)
 ax.tick_params(colors=MUT); [s.set_color(GR) for s in ax.spines.values()]; ax.grid(color=GR, lw=.3)
 END = N + 45
 shown = ranges[-2:] + ([live] if live else [])
+LV, VAS = [], None
 for a, b in shown:
     isl = live is not None and (a, b) == live
     lo, hi, pk, poc, vah, val = profile(a, b)
     ax.add_patch(Rectangle((a - .5, lo), b - a, hi - lo, fc="#ffb02010", ec="#ffb020", ls="--", lw=1.2, zorder=1))
     ax.text(a, hi, " منطقة قيد التكوين" if isl else " منطقة عرضية مكتملة", color="#ffb020", fontsize=10, va="bottom")
+    LV += pk + [poc, vah, val]; VAS = (poc, vah, val)
     for y in pk: ax.hlines(y, a - .5, END, color="#9b5cff", lw=1, zorder=2)
     ax.hlines(poc, a - .5, END, color="#ff3b3b", lw=3, zorder=3); ax.hlines([vah, val], a - .5, END, color="#ffb020", lw=2, zorder=3)
     for y, t, c in ((poc, "POC", "#ff3b3b"), (vah, "VAH", "#ffb020"), (val, "VAL", "#ffb020")):
@@ -81,5 +83,37 @@ mt = day.index; x0v = max(0, shown[0][0] - 30); ticks = range(x0v, N, 10)
 ax.set_xticks(list(ticks)); ax.set_xticklabels([mt[i].strftime("%m-%d") for i in ticks], color=MUT)
 ax.set_xlim(x0v - 12, END + 5); yl, yh = L[x0v:].min(), H[x0v:].max(); ax.set_ylim(yl - (yh - yl) * .08, yh + (yh - yl) * .08)
 ax.set_title(f"{SYM} · يومي · محاكاة بايثون لمنطق المؤشر الحالي (ليست لقطة TradingView)", color=TX, fontsize=13, loc="right")
-fig.tight_layout(); fig.savefig(ROOT / "reports/styles/R_ranges_preview.png", dpi=100, facecolor=BG)
+# ---- status panel, same rows as the Pine table
+import pandas as pd
+from matplotlib.patches import FancyBboxPatch
+cs = pd.Series(C); e20, e50 = cs.ewm(span=20).mean().iat[-1], cs.ewm(span=50).mean().iat[-1]
+up_, dn_ = np.r_[0, np.diff(H)], np.r_[0, -np.diff(L)]
+pdm, mdm = np.where((up_ > dn_) & (up_ > 0), up_, 0), np.where((dn_ > up_) & (dn_ > 0), dn_, 0)
+rma = lambda x: pd.Series(x).ewm(alpha=1 / 14).mean().to_numpy()
+pdi, mdi = 100 * rma(pdm) / rma(tr), 100 * rma(mdm) / rma(tr); adx = rma(100 * np.abs(pdi - mdi) / np.maximum(pdi + mdi, 1e-9))[-1]
+td = 1 if e20 > e50 and pdi[-1] > mdi[-1] else -1 if e20 < e50 and mdi[-1] > pdi[-1] else 0
+vol = day.volume.to_numpy(); vr = vol[-1] / vol[-21:-1].mean(); cl = C[-1]
+wu = min([x for x in LV if x > cl], default=np.nan); wd = max([x for x in LV if x < cl], default=np.nan)
+pc, vh, vl = VAS; nd = N - r0
+ptxt = "فوق VAH" if cl > vh else "تحت VAL" if cl < vl else "بين POC و VAH" if cl >= pc else "بين VAL و POC"
+rtxt = "قيد التكوين" if nd < WLEN else "السعر فوق القمة" if cl > rh else "السعر تحت القاع" if cl < rl else "السعر داخل المنطقة"
+dist = lambda x: f"{'+' if x >= cl else '-'}{abs(x - cl):.2f}   |   {'+' if x >= cl else '-'}{100 * abs(x - cl) / cl:.2f}%"
+G_, R_, Y_, P_ = "#00e676", "#ff5252", "#f0c419", "#9b5cff"
+rows = [("الاتجاه", ("صاعد" if td > 0 else "هابط" if td < 0 else "عرضي") + (" قوي" if adx >= 25 and td else ""), f"ADX {adx:.0f}", G_ if td > 0 else R_ if td < 0 else MUT),
+        ("الفوليوم", "ضعيف" if vr < .8 else "قوي" if vr >= 1.5 else "عادي", f"{vr:.1f}x مقارنة بالمتوسط", Y_ if vr < .8 else G_ if vr >= 1.5 else TX),
+        ("المنطقة العرضية", rtxt, f"{rl:.2f} - {rh:.2f}   |   {nd} يوم", Y_),
+        ("أقرب خط حوت فوق", f"{wu:.2f}", dist(wu), P_), ("أقرب خط حوت تحت", f"{wd:.2f}", dist(wd), P_),
+        ("موقع السعر من القيمة", ptxt, f"POC {pc:.2f}   VAH {vh:.2f}   VAL {vl:.2f}", G_ if cl > vh else R_ if cl < vl else TX),
+        ("آخر إشارة", "لا توجد على هذه الفترة", "-", MUT)]
+tp = fig.add_axes([0.745, 0.06, 0.245, 0.88], facecolor=BG); tp.axis("off"); tp.set_xlim(0, 1); tp.set_ylim(0, 1)
+tp.add_patch(FancyBboxPatch((0, .02), 1, .96, boxstyle="round,pad=0.005", fc="#1e222d", ec=GR))
+tp.text(.96, .95, "مناطق الفوليوم", color=TX, fontsize=13, ha="right", weight="bold"); tp.text(.04, .95, f"{SYM} · D · {cl:.2f}", color=MUT, fontsize=10)
+y = .86
+for lbl, v1, v2, col in rows:
+    tp.text(.96, y, lbl, color=MUT, fontsize=10.5, ha="right", va="center"); tp.text(.60, y + .015, v1, color=col, fontsize=11.5, ha="right", weight="bold", va="center")
+    tp.text(.60, y - .022, v2, color=MUT, fontsize=9.5, ha="right", va="center"); tp.plot([.03, .97], [y - .05, y - .05], color=GR, lw=.8); y -= .1
+tp.add_patch(FancyBboxPatch((.03, .05), .94, .12, boxstyle="round,pad=0.005", fc="#25282f", ec=MUT))
+tp.text(.94, .135, "الخلاصة: لا توجد إشارة. أقرب خط حوت فوق وتحت السعر:", color=TX, fontsize=10.5, ha="right", weight="bold")
+tp.text(.94, .08, f"▲ {wu:.2f}   |   ▼ {wd:.2f}", color=TX, fontsize=11, ha="right")
+fig.savefig(ROOT / "reports/styles/R_ranges_preview.png", dpi=100, facecolor=BG)
 print(len(ranges), "ranges, live:", live, [ (str(mt[a].date()), str(mt[min(b,N-1)].date())) for a,b in shown])
