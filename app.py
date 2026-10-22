@@ -979,37 +979,6 @@ loadPortfolio();
 def index():
     return render_template_string(HTML)
 
-# ═══════════════════════════════════════════════════════════
-# TradingView webhook -> Telegram
-# ═══════════════════════════════════════════════════════════
-# TradingView alert URL:  https://<public address>/webhook/tradingview?key=<webhook_key>
-# The key is in the URL because TradingView cannot send headers. Messages are built by vzones/alerts.py,
-# sent by vzones/telegram.py (token in runtime/telegram.json), and logged to runtime/alerts.log.
-from vzones import alerts as _alerts, telegram as _telegram   # noqa: E402
-
-_dedupe = _alerts.Dedupe()
-_ALERT_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtime", "alerts.log")
-
-
-@app.route("/webhook/tradingview", methods=["POST"])
-def webhook_tradingview():
-    key = _telegram.config()["webhook_key"]
-    if not key or request.args.get("key") != key:
-        return jsonify({"ok": False, "error": "bad key"}), 403
-    a = _alerts.parse(request.get_data(as_text=True))
-    if not _dedupe.fresh(a):
-        return jsonify({"ok": True, "duplicate": True})
-    msg = _alerts.format_message(a)
-    sent, why = _telegram.send(msg)
-    try:
-        os.makedirs(os.path.dirname(_ALERT_LOG), exist_ok=True)
-        with open(_ALERT_LOG, "a", encoding="utf-8") as f:
-            f.write(json.dumps({"at": datetime.now().isoformat(timespec="seconds"), "alert": a,
-                                "sent": sent, "why": why}, ensure_ascii=False) + "\n")
-    except OSError:
-        pass
-    return jsonify({"ok": True, "sent": sent, "why": why})
-
 if __name__ == "__main__":
     import socket
     hostname = socket.gethostname()

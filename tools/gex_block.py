@@ -1,12 +1,10 @@
-"""Build today's options-levels block from the local GEXRadar server and print it (optionally send it to Telegram).
+"""Build today's options-levels block from the local GEXRadar server and print it.
 
     python tools/gex_block.py                      # every symbol GEXRadar serves
     python tools/gex_block.py --symbols SPY,QQQ,HOOD
-    python tools/gex_block.py --out gex_block.txt --telegram
     python tools/gex_block.py --out gex_block.txt --clip --notify   # what the morning task runs
 
 Read-only on GEXRadar: it only calls GET /api/symbols and GET /api/gex/{symbol}.
-Telegram: token and chat id in runtime/telegram.json (git-ignored) or the environment - see vzones/telegram.py.
 """
 from __future__ import annotations
 
@@ -68,16 +66,6 @@ def build(base: str, symbols: list[str] | None, basis: str) -> tuple[str, list[s
     return format_block(date, rows), notes
 
 
-def send_telegram(text: str) -> bool:
-    """Through vzones/telegram.py (token in runtime/telegram.json or the environment). Never raises:
-    while Telegram is not configured it just reports that on stderr."""
-    from vzones import telegram
-    sent, why = telegram.send(text)
-    if not sent:
-        print("# telegram: " + why, file=sys.stderr)
-    return sent
-
-
 def copy_to_clipboard(text: str) -> None:
     """Windows clipboard via clip.exe (the block is plain ASCII)."""
     import subprocess
@@ -106,7 +94,6 @@ def main() -> None:
     ap.add_argument("--symbols", default="", help="comma list; empty = every symbol GEXRadar serves")
     ap.add_argument("--basis", default="oi", choices=["oi", "volume"])
     ap.add_argument("--out", help="also write the block to this file")
-    ap.add_argument("--telegram", action="store_true", help="send the block to Telegram")
     ap.add_argument("--clip", action="store_true", help="copy the block to the Windows clipboard")
     ap.add_argument("--notify", action="store_true", help="show a Windows notification when done")
     a = ap.parse_args()
@@ -120,8 +107,6 @@ def main() -> None:
             f.write(text + "\n")
     if a.clip:
         copy_to_clipboard(text)
-    if a.telegram:
-        send_telegram(text)
     if a.notify:
         n = text.count("\n")
         notify("كتلة GEX جاهزة " + text.splitlines()[0].replace("DATE=", ""),

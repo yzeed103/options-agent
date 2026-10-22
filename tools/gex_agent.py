@@ -29,7 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 from vzones.gex_watch import Watch  # noqa: E402
-import gex_block  # noqa: E402  (build, notify, send_telegram)
+import gex_block  # noqa: E402  (build, notify)
 
 NY = ZoneInfo("America/New_York")
 LOG_DIR = os.path.join(os.path.dirname(HERE), "runtime")   # log + state inside the project (not AppData / OneDrive)
@@ -160,11 +160,6 @@ def poll(w: Watch, a, state: dict) -> bool:
     state["no_study"] = 0
     if changed and tot["set"]:
         gex_block.notify("وكيل GEX: تحديث المستويات", say(what))
-        if a.telegram:
-            from vzones import telegram
-            sent, why = telegram.send("🧱 تحديث مستويات GEX\n" + "\n".join(what))
-            if not sent:
-                log.info("telegram: %s", why)
     if a.once:
         print(json.dumps({"changes": what, **tot}, ensure_ascii=True))
     return True
@@ -180,7 +175,6 @@ def main() -> None:
     ap.add_argument("--confirm", type=int, default=2, help="polls an open-interest change must survive")
     ap.add_argument("--live-gamma", action="store_true",
                     help="also update the gamma levels during the day (measured: ~67 pushes a day)")
-    ap.add_argument("--telegram", action="store_true", help="also send each update to Telegram")
     ap.add_argument("--once", action="store_true")
     a = ap.parse_args()
 
