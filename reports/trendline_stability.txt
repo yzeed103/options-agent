@@ -1,0 +1,7 @@
+ k rule     line changes/day  median life (bars)  avg touches  lines with 2+ touches
+ 2 latest               3.50                  12         0.43                     9%
+ 2 sticky               1.04                  21         0.63                    14%
+ 3 latest               2.48                  17         0.39                     8%
+ 3 sticky               0.68                  28         0.61                    13%
+ 5 latest               1.57                  26         0.36                     7%
+ 5 sticky               0.49                  44         0.59                    12%

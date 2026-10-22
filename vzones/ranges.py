@@ -4,7 +4,7 @@
   daily close outside completes the range (breakout day included) and starts the next one on the breakout day.
 - whale levels of a range: hidden 200-row volume profile of the source bars, tall columns + POC / VAH / VAL.
 - levels per trading day: last `keep` completed ranges + the forming one, built from completed days only.
-- instant trend (EMA 9/21 + DMI 7), Supertrend(10, 3), trendlines (2-bar pivots, latest lower-high / higher-low pair).
+- instant trend (EMA 9/21 + DMI 7), Supertrend(10, 3), trendlines (5-bar pivots, lower-high / higher-low pair held until closed through; was 2-bar latest pair).
 Volume is spread evenly over each bar's high-low range, as in the Pine code.
 """
 from __future__ import annotations
@@ -121,17 +121,19 @@ def supertrend(df: pd.DataFrame, factor=3.0, n=10):
     return st, d                                               # d < 0 = up, as in Pine
 
 
-def trendline_breaks(df: pd.DataFrame, k: int = 2) -> np.ndarray:
-    """+1 on the first close above the current red line, -1 on the first close below the current green line."""
+def trendline_breaks(df: pd.DataFrame, k: int = 5, hold: bool = True) -> np.ndarray:
+    """+1 on the first close above the current red line, -1 on the first close below the current green line.
+    k = pivot bars each side; hold = a new pivot pair replaces a line only after it was closed through
+    (Pine defaults since 2026-10-23: k=5, hold=True; the original was k=2, hold=False)."""
     h, l, c = (df[x].to_numpy(float) for x in ("high", "low", "close")); n = len(c); out = np.zeros(n, int)
     lastH = lastL = None; dn = up = None; dnBroke = upBroke = True
     for i in range(2 * k, n):
         p = i - k
         if h[p] == h[p - k:p + k + 1].max() and (h[p - k:p] < h[p]).all():
-            if lastH is not None and h[p] < lastH[1]: dn = (lastH[0], lastH[1], (h[p] - lastH[1]) / (p - lastH[0])); dnBroke = False
+            if lastH is not None and h[p] < lastH[1] and (not hold or dnBroke): dn = (lastH[0], lastH[1], (h[p] - lastH[1]) / (p - lastH[0])); dnBroke = False
             lastH = (p, h[p])
         if l[p] == l[p - k:p + k + 1].min() and (l[p - k:p] > l[p]).all():
-            if lastL is not None and l[p] > lastL[1]: up = (lastL[0], lastL[1], (l[p] - lastL[1]) / (p - lastL[0])); upBroke = False
+            if lastL is not None and l[p] > lastL[1] and (not hold or upBroke): up = (lastL[0], lastL[1], (l[p] - lastL[1]) / (p - lastL[0])); upBroke = False
             lastL = (p, l[p])
         if dn and not dnBroke and c[i] > dn[1] + dn[2] * (i - dn[0]): out[i] = 1; dnBroke = True
         if up and not upBroke and c[i] < up[1] + up[2] * (i - up[0]): out[i] = -1; upBroke = True

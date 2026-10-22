@@ -40,7 +40,7 @@ for s in SYMS:
             i = (hit or j) + 1
     # 2. supertrend flips, 3. trendline breaks
     _, sd = supertrend(d); sdir = np.where(sd < 0, 1, -1)
-    tb = trendline_breaks(d)
+    tb = trendline_breaks(d, k=2, hold=False)   # the study was run on the original lines
     for k in (4, 8):
         fwd = np.r_[(c[k:] - c[:-k]), np.full(k, np.nan)] / atr
         for i in range(1, n - k):

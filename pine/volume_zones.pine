@@ -917,9 +917,13 @@ alertcondition(gxCross, "عبور مستوى خيارات", "السعر عبر �
 // Pivots on the real highs / lows, tlLen bars each side. Red = latest pair of consecutive pivot highs where the
 // second is lower; green = latest pair of consecutive pivot lows where the second is higher. Drawn from the first
 // pivot and extended right. A broken line stays as drawn until a new pair replaces it.
+// 2026-10-23 "heavier" lines (the user found them jumping): 5-bar pivots and a line that HOLDS until price closes
+// through it. Measured on 7 symbols, 15m (reports/trendline_stability.py): 3.5 -> 0.49 line changes a day, median
+// life 12 -> 44 bars, lines touched 2+ times before the break 9% -> 12%. 2 bars + hold off = the original behaviour.
 G_TL = "خطوط الترند"
 showTL  = input.bool(true, "إظهار خطوط الترند", group=G_TL)
-tlLen   = input.int(2, "طول القمة / القاع (شموع يمين ويسار)", minval=1, maxval=20, group=G_TL)
+tlLen   = input.int(5, "طول القمة / القاع (شموع يمين ويسار)", minval=1, maxval=20, tooltip="أكبر = خطوط أثقل وأقل تغيرا. كان 2", group=G_TL)
+tlHold  = input.bool(true, "ثبّت الخط حتى يُكسر", tooltip="مفعّل: الخط لا يتبدّل بقمة أو قاع جديد إلا بعد إغلاق السعر خلفه. مقيس: تغيّرات أقل 7 مرات وعمر أطول 3.5 مرات", group=G_TL)
 cTlUp   = input.color(#00e676, "خط القيعان الصاعد", inline="tlc", group=G_TL)
 cTlDn   = input.color(#ff1744, "خط القمم الهابط", inline="tlc", group=G_TL)
 wTl     = input.int(2, "السماكة", minval=1, maxval=5, inline="tlc", group=G_TL)
@@ -936,24 +940,32 @@ var float dnS = na
 var float upA = na
 var int   upAB = na
 var float upS = na
+var bool  dnBroke = true      // the current red line has been closed through (or there is none)
+var bool  upBroke = true
 if not na(tPh)
     pb = bar_index - tlLen
-    if not na(tLastPh) and tPh < tLastPh
+    if not na(tLastPh) and tPh < tLastPh and (not tlHold or dnBroke or na(dnA))
         dnA := tLastPh
         dnAB := tLastPhB
         dnS := (tPh - tLastPh) / (pb - tLastPhB)
+        dnBroke := false
     tLastPh := tPh
     tLastPhB := pb
 if not na(tPl)
     pb = bar_index - tlLen
-    if not na(tLastPl) and tPl > tLastPl
+    if not na(tLastPl) and tPl > tLastPl and (not tlHold or upBroke or na(upA))
         upA := tLastPl
         upAB := tLastPlB
         upS := (tPl - tLastPl) / (pb - tLastPlB)
+        upBroke := false
     tLastPl := tPl
     tLastPlB := pb
 dnNow = na(dnA) ? na : dnA + dnS * (bar_index - dnAB)
 upNow = na(upA) ? na : upA + upS * (bar_index - upAB)
+if not na(dnNow) and c_ > dnNow
+    dnBroke := true
+if not na(upNow) and c_ < upNow
+    upBroke := true
 bool tlBrkUp = not na(dnNow) and c_ > dnNow and c_[1] <= dnNow - dnS
 bool tlBrkDn = not na(upNow) and c_ < upNow and c_[1] >= upNow - upS
 var line tlDnLine = na

@@ -1,0 +1,4 @@
+k=2 hold=False +8 bars: up breaks 51.8% (n=3305, base 52.0%) | down breaks 48.1% (n=3541, base 47.8%)
+k=2 hold=False +26 bars: up breaks 52.5% (n=3297, base 52.3%) | down breaks 48.6% (n=3530, base 47.7%)
+k=5 hold=True +8 bars: up breaks 51.2% (n=843, base 52.0%) | down breaks 52.4% (n=479, base 47.8%)
+k=5 hold=True +26 bars: up breaks 54.7% (n=843, base 52.3%) | down breaks 50.8% (n=478, base 47.7%)
