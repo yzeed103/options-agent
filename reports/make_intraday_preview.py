@@ -58,11 +58,11 @@ for i in range(1, len(full)):
     st[i] = lb[i] if sd[i] < 0 else ub[i]
 off = len(full) - len(w)
 # heading level state machine
-hDir, hL, hLast, heads = 0, np.nan, "", []
+hDir, hL, hLast, heads = 0, np.nan, "", []; hh_, ll_ = full.high.to_numpy(), full.low.to_numpy()
 for i in range(off, len(full)):
     if hDir:
-        if (hDir > 0 and cc[i] > hL) or (hDir < 0 and cc[i] < hL): hLast = f"اخترق {hL:.2f}"; hDir = 0
-        elif nowDir[i] == -hDir: hLast = f"انعكس عند {hL:.2f}"; hDir = 0
+        if (hDir > 0 and hh_[i] >= hL) or (hDir < 0 and ll_[i] <= hL): hLast = f"وصل {hL:.2f} ✓"; hDir = 0
+        elif nowDir[i] == -hDir: hLast = f"انعكس قبل {hL:.2f}"; hDir = 0
     if not hDir and nowDir[i]:
         cand = [x for x in LV if (x - cc[i]) * nowDir[i] > 0]
         if cand: hDir = int(nowDir[i]); hL = min(cand, key=lambda x: abs(x - cc[i]))
@@ -83,8 +83,8 @@ for i in range(1, N):
     if sdw[i] == sdw[i - 1]: ax.plot([i - 1, i], [stw[i - 1], stw[i]], color="#00e676" if sdw[i] < 0 else "#ff5252", lw=1.3, alpha=.8, zorder=3)
 hd, hl = heads[-1]
 if hd:
-    ax.hlines(hl, -1, N + 6, color="#ffeb3b", lw=5, zorder=5)
-    ax.text(N - 2, hl, ("▲ " if hd > 0 else "▼ ") + f"متجه إلى {hl:.2f}", color="#ffeb3b", fontsize=11, weight="bold", ha="right", va="bottom", zorder=6)
+    ax.hlines(hl, -1, N + 6, color="#9b5cff", lw=5, zorder=5)
+    ax.text(N - 2, hl, ("▲ " if hd > 0 else "▼ ") + f"متجه إلى {hl:.2f}", color="#b98cff", fontsize=11, weight="bold", ha="right", va="bottom", zorder=6)
 sess = w.index.normalize(); starts = np.r_[0, np.flatnonzero(sess[1:] != sess[:-1]) + 1]
 for s_ in starts: ax.axvline(s_ - .5, color=MUT, lw=.8, ls=":")
 ticks = list(range(0, N, 12)); ax.set_xticks(ticks); ax.set_xticklabels([w.index[i].strftime("%m-%d %H:%M") for i in ticks], color=MUT, fontsize=8)
@@ -99,7 +99,7 @@ G_, R_, Y_ = "#00e676", "#ff5252", "#ffeb3b"
 dist = lambda x: f"{'+' if x >= cl else '-'}{abs(x - cl):.2f}   |   {'+' if x >= cl else '-'}{100 * abs(x - cl) / cl:.2f}%"
 rows = [("الاتجاه", ("صاعد" if nd > 0 else "هابط" if nd < 0 else "عرضي") + (" قوي" if ax_ >= 25 and nd else ""), f"ADX {ax_:.0f}   |   متوسط 9 و 21", G_ if nd > 0 else R_ if nd < 0 else MUT),
         ("أهداف الحيتان اليوم", f"كول {cH} من {len(cT)}   |   بوت {pH} من {len(pT)}", f"الافتتاح {dO:.2f}   أعلى {dH:.2f}   أدنى {dL:.2f}", G_ if cH > pH else R_ if pH > cH else TX),
-        ("متجه إلى", ("▲ صاعد إلى " if hd > 0 else "▼ هابط إلى ") + f"{hl:.2f}" if hd else "لا يوجد", (dist(hl) if hd else "") + (f"   السابق: {hLast}" if hLast else ""), Y_),
+        ("متجه إلى", ("▲ صاعد إلى " if hd > 0 else "▼ هابط إلى ") + f"{hl:.2f}" if hd else "لا يوجد", (dist(hl) if hd else "") + (f"   السابق: {hLast}" if hLast else ""), "#b98cff"),
         ("صمود الترند", ("الترند الصاعد صامد" if up else "الترند الهابط صامد") if flip > 2 else ("انكسر الهابط، بدأ صعود" if up else "انكسر الصاعد، بدأ هبوط"),
          f"ينكسر إذا أغلق {'تحت' if up else 'فوق'} {st[-1]:.2f}   |   منذ {flip} شمعة", G_ if up else R_)]
 tp = fig.add_axes([0.705, 0.25, 0.285, 0.69], facecolor=BG); tp.axis("off"); tp.set_xlim(0, 1); tp.set_ylim(0, 1)
