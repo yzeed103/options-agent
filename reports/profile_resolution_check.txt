@@ -1,0 +1,9 @@
+2026-08-26 row=0.137 {'5min': 'POC 763.84 VAH 767.88 VAL 754.73', '15min': 'POC 760.69 VAH 768.02 VAL 754.73', '60min': 'POC 760.83 VAH 767.88 VAL 754.73'}
+   15min vs 5m shift in rows: POC -23 VAH 1 VAL 0
+   60min vs 5m shift in rows: POC -22 VAH 0 VAL 0
+2026-09-17 row=0.118 {'5min': 'POC 767.61 VAH 776.54 VAL 763.53', '15min': 'POC 767.84 VAH 776.54 VAL 763.53', '60min': 'POC 767.84 VAH 776.65 VAL 763.41'}
+   15min vs 5m shift in rows: POC 2 VAH 0 VAL 0
+   60min vs 5m shift in rows: POC 2 VAH 1 VAL -1
+2026-10-01 row=0.114 {'5min': 'POC 769.24 VAH 777.63 VAL 766.10', '15min': 'POC 769.24 VAH 777.63 VAL 766.22', '60min': 'POC 769.35 VAH 777.85 VAL 766.67'}
+   15min vs 5m shift in rows: POC 0 VAH 0 VAL 1
+   60min vs 5m shift in rows: POC 1 VAH 2 VAL 5

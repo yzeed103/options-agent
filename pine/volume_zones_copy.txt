@@ -404,7 +404,7 @@ showLive  = input.bool(true, "حساب المنطقة الحالية (قيد ا�
 whMode    = input.string("تلقائي", "طريقة تحديد المنطقة العرضية", options=["تلقائي", "يدوي"], tooltip="تلقائي: كل منطقة عرضية على الشموع اليومية تنتهي بكسر القمة أو القاع. يدوي: أنت تحدد بداية المنطقة ونهايتها", group=G_WH)
 whStartT  = input.time(timestamp("2026-05-01T00:00:00"), "بداية المنطقة (الوضع اليدوي)", group=G_WH)
 whEndT    = input.time(timestamp("2026-10-01T00:00:00"), "نهاية المنطقة (الوضع اليدوي)", group=G_WH)
-whSrcTF   = input.timeframe("60", "فريم بيانات البروفايل", tooltip="البروفايل يُبنى دائما من هذا الفريم، فتبقى الخطوط ثابتة عند تغيير فريم الشارت", group=G_WH)
+whSrcTF   = input.timeframe("15", "فريم بيانات البروفايل", tooltip="البروفايل يُبنى دائما من هذا الفريم، فتبقى الخطوط ثابتة عند تغيير فريم الشارت. فريم أصغر = خطوط أدق وأقرب لأداة FRVP، لكن تاريخ أقصر", group=G_WH)
 whPeaks   = input.int(8, "أقصى عدد للأعمدة الطويلة", minval=1, maxval=100, group=G_WH)
 showWhVA  = input.bool(true, "إظهار POC و VAH و VAL لكل منطقة عرضية", group=G_WH)
 cWhVA     = input.color(#ffb020, "لون VAH و VAL للمنطقة", inline="wva", group=G_WH)
@@ -441,7 +441,7 @@ var float[] wsH = array.new_float()
 var float[] wsL = array.new_float()
 var float[] wsV = array.new_float()
 var int[]   wsT = array.new_int()
-SRC_MAX = 8000
+SRC_MAX = 30000          // ~1 year of 15m bars on a 23h CFD, ~4 years on a 6.5h stock session
 // copy the intrabars of this chart bar (no `if` around the loop: a `while` with a counter is the simplest form the compiler accepts)
 int lN = useLower ? math.min(array.size(lT), math.min(array.size(lH), math.min(array.size(lL), array.size(lV)))) : 0
 int jj = 0
