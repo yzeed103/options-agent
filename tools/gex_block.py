@@ -3,6 +3,7 @@
     python tools/gex_block.py                      # every symbol GEXRadar serves
     python tools/gex_block.py --symbols SPY,QQQ,HOOD
     python tools/gex_block.py --out gex_block.txt --telegram
+    python tools/gex_block.py --out gex_block.txt --clip --notify   # what the morning task runs
 
 Read-only on GEXRadar: it only calls GET /api/symbols and GET /api/gex/{symbol}.
 Telegram needs TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment (never written to the repo).
@@ -67,6 +68,28 @@ def send_telegram(text: str) -> None:
             raise SystemExit("Telegram refused the message")
 
 
+def copy_to_clipboard(text: str) -> None:
+    """Windows clipboard via clip.exe (the block is plain ASCII)."""
+    import subprocess
+    subprocess.run(["clip"], input=text.encode("ascii", "replace"), check=True,
+                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+
+def notify(title: str, body: str) -> None:
+    """Windows toast through PowerShell's own app id (no extra modules). Text goes in -EncodedCommand so Arabic survives."""
+    import base64, subprocess
+    esc = lambda s: s.replace("'", "''")
+    ps = ("[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null;"
+          "$x = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
+          f"$x.GetElementsByTagName('text')[0].AppendChild($x.CreateTextNode('{esc(title)}')) > $null;"
+          f"$x.GetElementsByTagName('text')[1].AppendChild($x.CreateTextNode('{esc(body)}')) > $null;"
+          "$id = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe';"
+          "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($id).Show([Windows.UI.Notifications.ToastNotification]::new($x))")
+    enc = base64.b64encode(ps.encode("utf-16-le")).decode()
+    subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", enc],
+                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), timeout=30)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--url", default="http://127.0.0.1:8000", help="GEXRadar address")
@@ -74,6 +97,8 @@ def main() -> None:
     ap.add_argument("--basis", default="oi", choices=["oi", "volume"])
     ap.add_argument("--out", help="also write the block to this file")
     ap.add_argument("--telegram", action="store_true", help="send the block to Telegram")
+    ap.add_argument("--clip", action="store_true", help="copy the block to the Windows clipboard")
+    ap.add_argument("--notify", action="store_true", help="show a Windows notification when done")
     a = ap.parse_args()
     syms = [s.strip().upper() for s in a.symbols.split(",") if s.strip()]
     text, notes = build(a.url.rstrip("/"), syms, a.basis)
@@ -83,8 +108,15 @@ def main() -> None:
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:
             f.write(text + "\n")
+    if a.clip:
+        copy_to_clipboard(text)
     if a.telegram:
         send_telegram(text)
+    if a.notify:
+        n = text.count("\n")
+        notify("كتلة GEX جاهزة " + text.splitlines()[0].replace("DATE=", ""),
+               f"{n} سهم" + (" · منسوخة، الصقها في المؤشر بـ Ctrl+V" if a.clip else "")
+               + (f" · {len(notes)} ملاحظة" if notes else ""))
 
 
 if __name__ == "__main__":
