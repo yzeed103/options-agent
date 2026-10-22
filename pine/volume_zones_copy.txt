@@ -26,14 +26,7 @@ adxStrong  = input.float(25, "ترند قوي إذا ADX أكبر من", minval=
 showTop    = input.bool(true, "إظهار أقوى 3 مناطق", group="المناطق")
 tblPos     = input.string("أسفل اليمين", "موقع الجدول", options=["أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "أسفل اليسار"], group="المناطق")
 showVA     = input.bool(true, "إظهار POC و VAH و VAL", group="المناطق")
-cLblTxt  = input.color(color.black, "لون نص ملصقات الإشارات", group="المناطق")
-
-showVar    = input.bool(false, "إظهار إشارة العودة للقيمة (كثيرة، ميزة ضعيفة)", group="العودة لمنطقة القيمة")
-varCap     = input.float(2.0, "أقصى مسافة للهدف (ATR)", minval=0.5, maxval=10, step=0.25, group="العودة لمنطقة القيمة")
-varStop    = input.float(1.5, "وقف الخسارة (ATR)", minval=0.25, maxval=5, step=0.25, group="العودة لمنطقة القيمة")
-cVarUp     = input.color(#40c4ff, "لون الإشارة صعود", inline="va", group="العودة لمنطقة القيمة")
-cVarDn     = input.color(#ffab40, "هبوط", inline="va", group="العودة لمنطقة القيمة")
-
+cLblTxt  = input.color(color.black, "لون نص ملصقات الإشارات (اتجاه، حوت)", group="المناطق")
 
 showHeat   = input.bool(true, "إظهار الخريطة الحرارية", group="الخريطة الحرارية")
 heatMode   = input.string("ثلاثة ألوان", "شكل الخريطة", options=["ثلاثة ألوان", "لونان", "تدرج خمسة ألوان"], group="الخريطة الحرارية")
@@ -56,7 +49,6 @@ cVah     = input.color(#26c6da, "خط VAH (أعلى منطقة القيمة)", i
 wVah     = input.int(1, "السماكة", minval=1, maxval=5, inline="vah", group=G_LN)
 cVal     = input.color(#26c6da, "خط VAL (أدنى منطقة القيمة)", inline="val", group=G_LN)
 wVal     = input.int(1, "السماكة", minval=1, maxval=5, inline="val", group=G_LN)
-wVarL    = input.int(1, "سماكة خط هدف العودة للقيمة", minval=1, maxval=5, group=G_LN)
 wZoneB   = input.int(1, "سماكة حدود أقوى 3 مناطق", minval=1, maxval=5, group=G_LN)
 wPdVA    = input.int(1, "سماكة خطوط منطقة قيمة الأمس", minval=1, maxval=5, inline="pdw", group=G_LN)
 wPdPoc   = input.int(1, "أعلى تداول أمس", minval=1, maxval=5, inline="pdw", group=G_LN)
@@ -66,7 +58,6 @@ colorBars = input.bool(true, "تلوين الشموع حسب الفوليوم", 
 cStrongUp = input.color(#00e676, "فوليوم قوي صعود", inline="sv", group=G_CD)
 cStrongDn = input.color(#ff1744, "هبوط", inline="sv", group=G_CD)
 cWeakBar  = input.color(#4a4e5a, "شمعة فوليوم ضعيف", group=G_CD)
-
 
 G_ZN = "ألوان · أقوى 3 مناطق"
 cZone1   = input.color(#e8432d, "#1", inline="z", group=G_ZN)
@@ -247,54 +238,6 @@ if showTop and barstate.islast and nZones > 0
         pct = totZ > 0 ? math.round(100 * array.get(zv, k) / totZ) : 0
         txt = "#" + str.tostring(j + 1) + "  " + str.tostring(pct) + "%  " + str.tostring(array.get(hvnLo, k), format.mintick) + "-" + str.tostring(array.get(hvnHi, k), format.mintick)
         array.push(topBoxes, box.new(bar_index - lookback, array.get(hvnHi, k), bar_index + 15, array.get(hvnLo, k), border_color=fade(c, zoneBord), border_width=wZoneB, bgcolor=fade(c, zoneFill), text=txt, text_color=c, text_size=size.small, text_halign=text.align_right, text_valign=text.align_top))
-
-// ═══════════════ VA re-entry: close back inside the value area after being outside ═══════════════
-// Tested: many signals, near targets, small but fairly stable edge (profit factor ~0.95-1.45).
-int vaSig = 0
-float vaTgt = na
-float vaStp = na
-// one idea at a time, exactly like the backtest: no new signal until target, stop or 20 bars
-var int   vaOpen = 0
-var float vaOT = na
-var float vaOS = na
-var int   vaOB = na
-vaFree = vaOpen == 0
-if vaOpen != 0
-    hitT = vaOpen > 0 ? high >= vaOT : low <= vaOT
-    hitS = vaOpen > 0 ? low <= vaOS : high >= vaOS
-    if hitT or hitS or bar_index - vaOB >= 20
-        vaOpen := 0
-if vaFree and not na(vah[1]) and not na(val) and atrV > 0
-    if close[1] < val[1] and close > val and close < vah
-        vaSig := 1
-    else if close[1] > vah[1] and close < vah and close > val
-        vaSig := -1
-    if vaSig != 0
-        float best = na
-        lv = array.from(poc, vah, val)
-        if nZones > 0
-            for k = 0 to nZones - 1
-                array.push(lv, array.get(hvnLo, k))
-                array.push(lv, array.get(hvnHi, k))
-        for k = 0 to array.size(lv) - 1
-            x = array.get(lv, k)
-            dd = (x - close) * vaSig / atrV
-            if not na(x) and dd >= 0.5 and (na(best) or math.abs(x - close) < math.abs(best - close))
-                best := x
-        if na(best)
-            vaSig := 0
-        else
-            vaTgt := math.abs(best - close) > varCap * atrV ? close + vaSig * varCap * atrV : best
-            vaStp := close - vaSig * varStop * atrV
-            vaOpen := vaSig
-            vaOT := vaTgt
-            vaOS := vaStp
-            vaOB := bar_index
-plotshape(showVar and vaSig == 1, "عودة للقيمة صعود", shape.labelup, location.belowbar, cVarUp, text="عودة", textcolor=cLblTxt, size=size.tiny)
-plotshape(showVar and vaSig == -1, "عودة للقيمة هبوط", shape.labeldown, location.abovebar, cVarDn, text="عودة", textcolor=cLblTxt, size=size.tiny)
-if showVar and vaSig != 0
-    line.new(bar_index, vaTgt, bar_index + 10, vaTgt, color=vaSig > 0 ? cVarUp : cVarDn, style=line.style_dotted, width=wVarL)
-alertcondition(vaSig != 0, "عودة لمنطقة القيمة", "السعر عاد إلى داخل منطقة القيمة")
 
 // ═══════════════ Prior-day value area + trend alert ═══════════════
 // Tested on 7 symbols (15m, 1.5 years): two closes outside yesterday's value area with the EMA trend was the only
