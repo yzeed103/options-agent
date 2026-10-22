@@ -1,7 +1,8 @@
 //@version=5
 // Volume Zones
 // Rolling volume profile (POC / VAH / VAL / HVN), ranked top-3 zones, heat-map ribbons and a buy / sell profile,
-// prior-day value area + trend alert, whale levels of every daily sideways range + whale bounce, Arabic status panel.
+// prior-day value area + trend alert, whale levels of every daily sideways range + whale bounce, Arabic status panel,
+// options levels (CW / PW / FLIP / PIN) pasted as one daily block from GEXRadar (vzones/gex_block.py, tools/gex_block.py).
 // Python counterpart for testing: vzones/ranges.py (sideways ranges, whale levels, session profile, trendlines).
 indicator("Volume Zones", overlay=true, max_bars_back=5000, max_lines_count=500, max_boxes_count=500, max_labels_count=200)
 
@@ -776,6 +777,111 @@ stUp = stD < 0
 stFlipBars = ta.barssince(stD != stD[1])
 plot(showSt ? stLine : na, "خط كسر الترند", stUp ? cStUp : cStDn, wSt, plot.style_linebr)
 
+// ═══════════════ Options levels (GEX) pasted from GEXRadar ═══════════════
+// One daily block for all symbols, e.g. "INTU: CW=360 PW=340 FLIP=355 PIN=350" (DFLIP optional, "DATE=..." line
+// optional). Only the line of the current ticker is used. Same rules as vzones/gex_block.py (tests/test_gex_block.py).
+// These are levels for TODAY, so they are drawn from today's open only. No tested edge yet: context, not a signal.
+G_GX = "مستويات الخيارات (GEX)"
+showGex = input.bool(true, "إظهار مستويات الخيارات", group=G_GX)
+gexText = input.text_area("", "الصق كتلة اليوم من GEXRadar", tooltip="سطر لكل سهم، مثال:\nDATE=2026-10-22\nINTU: CW=360 PW=340 FLIP=355 PIN=350\nيُقرأ سطر السهم الحالي فقط. DFLIP اختياري", group=G_GX)
+gexTol  = input.float(0.25, "تلاقي مع خط حوت إذا المسافة أقل من (ATR يومي)", minval=0.0, maxval=2.0, step=0.05, group=G_GX)
+cGxCW   = input.color(#00c853, "CW جدار الكول", inline="gx1", group=G_GX)
+cGxPW   = input.color(#ff1744, "PW جدار البوت", inline="gx1", group=G_GX)
+cGxFl   = input.color(#ffd600, "FLIP", inline="gx2", group=G_GX)
+cGxPin  = input.color(#e0e0e0, "PIN", inline="gx2", group=G_GX)
+cGxDf   = input.color(#80d8ff, "DFLIP", inline="gx2", group=G_GX)
+wGx     = input.int(2, "السماكة", minval=1, maxval=5, group=G_GX)
+
+gxKeys = array.from("CW", "PW", "FLIP", "PIN", "DFLIP")
+var float[]  gxV    = array.new_float(5, na)
+var string[] gxInfo = array.new_string(2, "")      // 0 = date of the block, 1 = "1" when the ticker line was found
+gxNum(string s) =>
+    m = str.match(s, "[-+]?[0-9]*\\.?[0-9]+")
+    m == "" ? float(na) : str.tonumber(m)
+gxSym(string s) =>
+    parts = str.split(s, ":")
+    string last = ""
+    for p in parts
+        if str.length(p) > 0
+            last := p
+    str.upper(str.replace_all(last, "^", ""))
+
+// the text is an input, so it is parsed once
+if barstate.isfirst and showGex and str.length(gexText) > 0
+    me = gxSym(syminfo.ticker)
+    gxRows = str.split(str.replace_all(gexText, "\t", " "), "\n")
+    for gl in gxRows
+        string sym = ""
+        string dt = ""
+        got = array.new_float(5, na)
+        gxToks = str.split(str.replace_all(gl, ",", " "), " ")
+        for tk in gxToks
+            // separate ifs, not an if / else chain (branches ending differently can fail the type check)
+            bool isKv = str.length(tk) > 0 and str.contains(tk, "=")
+            if str.length(tk) > 0 and not isKv and sym == ""
+                sym := gxSym(tk)
+            if isKv
+                kv = str.split(tk, "=")
+                k = str.upper(array.get(kv, 0))
+                string v = ""
+                if array.size(kv) > 1
+                    v := array.get(kv, 1)
+                if k == "DATE"
+                    dt := v
+                ki = array.indexof(gxKeys, k)
+                if ki >= 0
+                    array.set(got, ki, gxNum(v))
+        if sym == "" and dt != ""
+            array.set(gxInfo, 0, dt)
+        if sym != "" and sym == me
+            for i = 0 to 4
+                array.set(gxV, i, array.get(got, i))
+            array.set(gxInfo, 1, "1")
+            if dt != ""
+                array.set(gxInfo, 0, dt)
+
+gxCW = array.get(gxV, 0)
+gxPW = array.get(gxV, 1)
+gxFl = array.get(gxV, 2)
+gxOn = showGex and array.get(gxInfo, 1) == "1"
+var int gxT0 = na
+if newDay or na(gxT0)
+    gxT0 := time
+
+// a GEX level within gexTol x daily ATR of a whale level = confluence (★)
+gxNear(float x) =>
+    bool hit = false
+    if not na(x) and not na(dATR)
+        for w in lvNow
+            if math.abs(w - x) <= gexTol * dATR
+                hit := true
+    hit
+
+var line[]  gxLines = array.new_line()
+var label[] gxLbls  = array.new_label()
+if barstate.islast
+    for gx in gxLines
+        line.delete(gx)
+    array.clear(gxLines)
+    for gb in gxLbls
+        label.delete(gb)
+    array.clear(gxLbls)
+    if gxOn
+        gxCols = array.from(cGxCW, cGxPW, cGxFl, cGxPin, cGxDf)
+        gxSty  = array.from(line.style_solid, line.style_solid, line.style_dashed, line.style_dotted, line.style_dotted)
+        for i = 0 to 4
+            x = array.get(gxV, i)
+            if not na(x)
+                gc = array.get(gxCols, i)
+                array.push(gxLines, line.new(gxT0, x, time, x, xloc=xloc.bar_time, extend=extend.right, color=gc, style=array.get(gxSty, i), width=wGx))
+                array.push(gxLbls, label.new(bar_index + 3, x, array.get(gxKeys, i) + " " + str.tostring(x, format.mintick) + (gxNear(x) ? " ★" : ""), style=label.style_label_left, color=color.new(gc, 100), textcolor=gc, size=size.small))
+// ta.cross on every bar (not inside and/or), then combined
+gxXcw = ta.cross(c_, gxCW)
+gxXpw = ta.cross(c_, gxPW)
+gxXfl = ta.cross(c_, gxFl)
+gxCross = gxOn and (gxXcw or gxXpw or gxXfl)
+alertcondition(gxCross, "عبور مستوى خيارات", "السعر عبر جدار الكول أو جدار البوت أو FLIP")
+
 // ═══════════════ Trendlines (reverse-engineered from the user's chart) ═══════════════
 // Pivots on the real highs / lows, tlLen bars each side. Red = latest pair of consecutive pivot highs where the
 // second is lower; green = latest pair of consecutive pivot lows where the second is higher. Drawn from the first
@@ -833,10 +939,10 @@ if barstate.islast
 // Only the readings that survived testing: trend, volume, the sideways range and its whale levels, and the two
 // signals kept on the chart (whale bounce, trend alert).
 tPos = tblPos == "أعلى اليمين" ? position.top_right : tblPos == "أعلى اليسار" ? position.top_left : tblPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
-var table tbl = table.new(tPos, 3, 12, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
+var table tbl = table.new(tPos, 3, 13, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
 if barstate.isfirst
     table.merge_cells(tbl, 0, 0, 1, 0)
-    table.merge_cells(tbl, 0, 11, 2, 11)
+    table.merge_cells(tbl, 0, 12, 2, 12)
 tSz = tblSize == "صغير جدا" ? size.tiny : tblSize == "صغير" ? size.small : tblSize == "كبير" ? size.large : size.normal
 
 // last kept signal: 1 whale bounce, 2 trend alert; status 0 active, 1 target reached, -1 stopped / ended
@@ -973,20 +1079,44 @@ if barstate.islast
     kTxt := stFlipBars <= 2 ? (stUp ? "انكسر الهابط، بدأ صعود" : "انكسر الصاعد، بدأ هبوط") : kTxt
     kSub = "ينكسر إذا أغلق " + (stUp ? "تحت " : "فوق ") + fmt(stLine) + "   |   منذ " + str.tostring(stFlipBars) + " شمعة"
     kCol = stUp ? cTblUp : cTblDn
+    // --- options levels (GEX block)
+    string xTxt = "-"
+    string xSub = "الصق كتلة GEXRadar في الإعدادات"
+    color  xCol = cTblLbl
+    if not showGex
+        xSub := "مخفية من الإعدادات"
+    else if gxOn
+        gxPin = array.get(gxV, 3)
+        wTxt = na(gxCW) or na(gxPW) ? "" : c_ > gxCW ? "فوق جدار الكول" : c_ < gxPW ? "تحت جدار البوت" : "بين الجدارين"
+        fTxt = na(gxFl) ? "" : c_ >= gxFl ? "فوق FLIP" : "تحت FLIP"
+        xTxt := fTxt + (fTxt != "" and wTxt != "" ? " · " : "") + wTxt
+        xTxt := xTxt == "" ? "مستويات ناقصة" : xTxt
+        xCol := na(gxFl) ? cTblTxt : c_ >= gxFl ? cTblUp : cTblDn
+        string conf = ""
+        for i = 0 to 4
+            if gxNear(array.get(gxV, i))
+                conf := conf + (conf == "" ? "" : "، ") + array.get(gxKeys, i)
+        dtB = array.get(gxInfo, 0)
+        dtNow = str.format_time(time, "yyyy-MM-dd", syminfo.timezone)
+        xSub := "CW " + (na(gxCW) ? "-" : fmt(gxCW)) + "   |   PW " + (na(gxPW) ? "-" : fmt(gxPW)) + "\nFLIP " + (na(gxFl) ? "-" : fmt(gxFl)) + "   |   PIN " + (na(gxPin) ? "-" : fmt(gxPin)) + (conf == "" ? "" : "\nتلاقي مع خط حوت ★ " + conf) + (dtB == "" ? "" : dtB == dtNow ? "\nكتلة اليوم " + dtB : "\nتنبيه: الكتلة بتاريخ " + dtB)
+    else if str.length(gexText) > 0
+        xTxt := "لا يوجد سطر لـ " + gxSym(syminfo.ticker)
+        xCol := cTblWeak
+        xSub := "أضف سطرا مثل:\n" + gxSym(syminfo.ticker) + ": CW=... PW=... FLIP=... PIN=..."
 
     // --- draw (column 2 = label on the right, column 1 = value, column 0 = meter)
     table.cell(tbl, 2, 0, "مناطق الفوليوم", text_color=cTblTxt, text_size=tSz, text_halign=text.align_right)
     table.cell(tbl, 0, 0, syminfo.ticker + " · " + timeframe.period + " · " + fmt(c_), text_color=cTblLbl, text_size=tSz, text_halign=text.align_left)
-    rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة", "أهداف الحيتان اليوم", "متجه إلى", "صمود الترند")
-    vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub, gTxt + "\n" + gSub, hTxt + "\n" + hSub, kTxt + "\n" + kSub)
-    cols  = array.from(tCol, vCol, rCol, cWhLv, cWhLv, pCol, sCol, gCol, hCol, kCol)
-    for i = 0 to 9
+    rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة", "أهداف الحيتان اليوم", "متجه إلى", "صمود الترند", "مستويات الخيارات")
+    vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub, gTxt + "\n" + gSub, hTxt + "\n" + hSub, kTxt + "\n" + kSub, xTxt + "\n" + xSub)
+    cols  = array.from(tCol, vCol, rCol, cWhLv, cWhLv, pCol, sCol, gCol, hCol, kCol, xCol)
+    for i = 0 to 10
         table.cell(tbl, 2, i + 1, array.get(rowsL, i), text_color=cTblLbl, text_size=tSz, text_halign=text.align_right)
         table.cell(tbl, 1, i + 1, array.get(vals, i), text_color=array.get(cols, i), text_size=tSz, text_halign=text.align_right)
         table.cell(tbl, 0, i + 1, "", text_size=tSz)
     table.cell(tbl, 0, 1, meter(tMet, 5), text_color=tCol, text_size=tSz)
     table.cell(tbl, 0, 2, meter(vMet, 5), text_color=vCol, text_size=tSz)
-    table.cell(tbl, 0, 11, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
+    table.cell(tbl, 0, 12, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
 
 // ═══════════════ Heatmap: two-colour or five-colour ribbons, no smoothing ═══════════════
 // colour = volume at that price in the rolling profile (today's session or the last `lookback` bars), relative to the busiest row (0..1)
