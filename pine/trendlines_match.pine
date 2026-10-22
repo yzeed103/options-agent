@@ -1,11 +1,14 @@
 //@version=5
 // Trendline reconstruction to identify which method draws the green / red lines on the user's INTU 5m chart.
 // Two common methods, switchable, with the pivot length as the main knob:
-//   "نقطتين"  : line through the last two pivot highs (lower high -> red) and the last two pivot lows (higher low -> green)
+//   "نقطتين"  : red = line through the latest pair of consecutive pivot highs where the second is lower,
+//               green = latest pair of consecutive pivot lows where the second is higher; drawn from the first pivot,
+//               extended right. With pivots of 2 bars each side this reproduced the user's INTU 5m lines exactly
+//               (red 19:30 357.12 -> 20:45 354.58, green 18:40 354.81 -> 19:10 355.54, 2026-10-22, UTC+3).
 //   "ATR"     : LuxAlgo "Trendlines with Breaks" style: from the last pivot, slope = ATR(len) / len x mult
 indicator("Trendline Match", overlay=true, max_lines_count=50)
 mode  = input.string("نقطتين", "طريقة الرسم", options=["نقطتين", "ATR"])
-len   = input.int(5, "طول القمة / القاع (شموع يمين ويسار)", minval=1, maxval=50)
+len   = input.int(2, "طول القمة / القاع (شموع يمين ويسار)", minval=1, maxval=50)
 mult  = input.float(1.0, "مضاعف الميل (طريقة ATR)", minval=0.1, maxval=5, step=0.1)
 cUp   = input.color(#00e676, "خط القيعان الصاعد")
 cDn   = input.color(#ff1744, "خط القمم الهابط")
@@ -15,27 +18,38 @@ ph = ta.pivothigh(high, len, len)
 pl = ta.pivotlow(low, len, len)
 atrS = ta.atr(len) / len * mult
 
-var float ph1 = na
-var int   phB1 = na
-var float ph2 = na
-var int   phB2 = na
-var float pl1 = na
-var int   plB1 = na
-var float pl2 = na
-var int   plB2 = na
+// last pivot of each kind, and the latest qualifying pair (kept until a newer qualifying pair forms)
+var float lastPh = na
+var int   lastPhB = na
+var float lastPl = na
+var int   lastPlB = na
+var float dnA = na
+var int   dnAB = na
+var float dnB = na
+var int   dnBB = na
+var float upA = na
+var int   upAB = na
+var float upB = na
+var int   upBB = na
 var float sPh = na
 var float sPl = na
 if not na(ph)
-    ph1 := ph2
-    phB1 := phB2
-    ph2 := ph
-    phB2 := bar_index - len
+    if not na(lastPh) and ph < lastPh
+        dnA := lastPh
+        dnAB := lastPhB
+        dnB := ph
+        dnBB := bar_index - len
+    lastPh := ph
+    lastPhB := bar_index - len
     sPh := atrS
 if not na(pl)
-    pl1 := pl2
-    plB1 := plB2
-    pl2 := pl
-    plB2 := bar_index - len
+    if not na(lastPl) and pl > lastPl
+        upA := lastPl
+        upAB := lastPlB
+        upB := pl
+        upBB := bar_index - len
+    lastPl := pl
+    lastPlB := bar_index - len
     sPl := atrS
 
 var line lDn = na
@@ -44,12 +58,12 @@ if barstate.islast
     line.delete(lDn)
     line.delete(lUp)
     if mode == "نقطتين"
-        if not na(ph1) and ph2 < ph1
-            lDn := line.new(phB1, ph1, phB2, ph2, color=cDn, width=wLn, extend=extend.right)
-        if not na(pl1) and pl2 > pl1
-            lUp := line.new(plB1, pl1, plB2, pl2, color=cUp, width=wLn, extend=extend.right)
+        if not na(dnA)
+            lDn := line.new(dnAB, dnA, dnBB, dnB, color=cDn, width=wLn, extend=extend.right)
+        if not na(upA)
+            lUp := line.new(upAB, upA, upBB, upB, color=cUp, width=wLn, extend=extend.right)
     else
-        if not na(ph2)
-            lDn := line.new(phB2, ph2, phB2 + 1, ph2 - sPh, color=cDn, width=wLn, extend=extend.right)
-        if not na(pl2)
-            lUp := line.new(plB2, pl2, plB2 + 1, pl2 + sPl, color=cUp, width=wLn, extend=extend.right)
+        if not na(lastPh)
+            lDn := line.new(lastPhB, lastPh, lastPhB + 1, lastPh - sPh, color=cDn, width=wLn, extend=extend.right)
+        if not na(lastPl)
+            lUp := line.new(lastPlB, lastPl, lastPlB + 1, lastPl + sPl, color=cUp, width=wLn, extend=extend.right)
