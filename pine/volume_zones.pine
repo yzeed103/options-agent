@@ -454,14 +454,17 @@ var float[] wsV = array.new_float()
 var int[]   wsT = array.new_int()
 SRC_MAX = 30000          // ~1 year of 15m bars on a 23h CFD, ~4 years on a 6.5h stock session
 // copy the intrabars of this chart bar (no `if` around the loop: a `while` with a counter is the simplest form the compiler accepts)
-int lN = useLower ? math.min(array.size(lT), math.min(array.size(lH), math.min(array.size(lL), array.size(lV)))) : 0
+// only closed chart bars, and only intrabars newer than the last one stored: keeps the buffer strictly time-sorted
+// (needed by the binary search in drawRange) and never stores a half-built intrabar
+int lastPushT = array.size(wsT) > 0 ? array.get(wsT, array.size(wsT) - 1) : na
+int lN = useLower and barstate.isconfirmed ? math.min(array.size(lT), math.min(array.size(lH), math.min(array.size(lL), array.size(lV)))) : 0
 int jj = 0
 while jj < lN
     float hj = array.get(lH, jj)
     float lj = array.get(lL, jj)
     float vj = nz(array.get(lV, jj))
     int   tj = array.get(lT, jj)
-    bool okj = not na(hj) and not na(lj) and not na(tj)
+    bool okj = not na(hj) and not na(lj) and not na(tj) and (na(lastPushT) or tj > lastPushT)
     if okj
         array.push(wsH, hj)
         array.push(wsL, lj)
@@ -1037,7 +1040,8 @@ if showHeat and ready and bar_index % heatStep == 0
             else
                 array.set(rowBox, r, na)
                 array.set(rowKey, r, 0)
-    while array.size(heatBoxes) > 400
+    // keep room in the 500-box budget for the right-edge profile (2 boxes per row) and the zone / range boxes
+    while array.size(heatBoxes) > math.max(50, 470 - 2 * rows)
         box.delete(array.shift(heatBoxes))
 
 // colour legend
