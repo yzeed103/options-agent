@@ -1,0 +1,32 @@
+1) heading target (whale levels vs placebo levels)
+            n  hit_rate  dist_atr  bars_med  react8_mean
+kind                                                    
+placebo  4519     0.480     1.995       4.0        0.255
+whale    4390     0.528     1.602       4.0        0.242
+
+   hit rate by distance bucket
+kind         placebo  whale
+b                          
+(0.0, 0.5]     0.859  0.899
+(0.5, 1.0]     0.739  0.768
+(1.0, 2.0]     0.595  0.562
+(2.0, 4.0]     0.393  0.407
+(4.0, 99.0]    0.131  0.121
+
+2) Supertrend flip, return in the new direction
+      n  mean_ATR    win
+k                       
+4  1961     0.087  0.498
+8  1959     0.149  0.516
+   baseline (all bars, same direction) mean_ATR: k
+4    0.046
+8    0.071
+
+3) trendline break, return in the break direction
+      n  mean_ATR    win
+k                       
+4  6849    -0.024  0.485
+8  6846    -0.033  0.499
+
+4) side with more whale targets hit by 12:00 -> 12:00..close return in that direction (%)
+   days 1550  mean -0.001%  win 0.493
