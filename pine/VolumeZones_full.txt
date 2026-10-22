@@ -742,26 +742,24 @@ else
     dHigh := math.max(dHigh, high)
     dLow  := math.min(dLow, low)
 
-// the whale level price is heading to: chosen in the instant-trend direction, kept until price
-// reaches it (high / low touches it) or the instant trend turns the other way (reversed)
+// the whale level price is heading to: the nearest whale level ahead of price in the instant-trend direction,
+// re-picked every bar (so after a pull-back the closer level becomes the target again). A level the bar touched
+// counts as reached and the next one becomes the target.
 var int    hDir = 0
 var float  hLvl = na
 var string hLast = ""
-if hDir != 0
-    if (hDir > 0 and high >= hLvl) or (hDir < 0 and low <= hLvl)
-        hLast := "وصل " + str.tostring(hLvl, format.mintick) + " ✓"
-        hDir := 0
-    else if nowDir == -hDir
-        hLast := "انعكس قبل " + str.tostring(hLvl, format.mintick)
-        hDir := 0
-if hDir == 0 and nowDir != 0 and array.size(lvNow) > 0
-    float best = na
+float nLvl = na
+if nowDir != 0
+    edge = nowDir > 0 ? high : low
     for x in lvNow
-        if (x - close) * nowDir > 0 and (na(best) or math.abs(x - close) < math.abs(best - close))
-            best := x
-    if not na(best)
-        hDir := nowDir
-        hLvl := best
+        if (x - edge) * nowDir > 0 and (na(nLvl) or math.abs(x - edge) < math.abs(nLvl - edge))
+            nLvl := x
+if hDir != 0 and not na(hLvl) and ((hDir > 0 and high >= hLvl) or (hDir < 0 and low <= hLvl))
+    hLast := "وصل " + str.tostring(hLvl, format.mintick) + " ✓"
+else if hDir != 0 and nowDir == -hDir and not na(hLvl)
+    hLast := "انعكس قبل " + str.tostring(hLvl, format.mintick)
+hDir := na(nLvl) ? 0 : nowDir
+hLvl := nLvl
 var line headLine = na
 var label headLbl = na
 if barstate.islast

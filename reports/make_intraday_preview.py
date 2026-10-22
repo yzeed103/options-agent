@@ -60,12 +60,13 @@ off = len(full) - len(w)
 # heading level state machine
 hDir, hL, hLast, heads = 0, np.nan, "", []; hh_, ll_ = full.high.to_numpy(), full.low.to_numpy()
 for i in range(off, len(full)):
-    if hDir:
-        if (hDir > 0 and hh_[i] >= hL) or (hDir < 0 and ll_[i] <= hL): hLast = f"وصل {hL:.2f} ✓"; hDir = 0
-        elif nowDir[i] == -hDir: hLast = f"انعكس قبل {hL:.2f}"; hDir = 0
-    if not hDir and nowDir[i]:
-        cand = [x for x in LV if (x - cc[i]) * nowDir[i] > 0]
-        if cand: hDir = int(nowDir[i]); hL = min(cand, key=lambda x: abs(x - cc[i]))
+    nd_ = int(nowDir[i]); nl = np.nan
+    if nd_:
+        edge = hh_[i] if nd_ > 0 else ll_[i]; cand = [x for x in LV if (x - edge) * nd_ > 0]
+        if cand: nl = min(cand, key=lambda x: abs(x - edge))
+    if hDir and np.isfinite(hL) and ((hDir > 0 and hh_[i] >= hL) or (hDir < 0 and ll_[i] <= hL)): hLast = f"وصل {hL:.2f} ✓"
+    elif hDir and nd_ == -hDir: hLast = f"انعكس قبل {hL:.2f}"
+    hDir, hL = (0 if np.isnan(nl) else nd_), nl
     heads.append((hDir, hL))
 BG, GR, TX, MUT = "#0b0e14", "#2a2e39", "#d1d4dc", "#8a8f9c"
 fig = plt.figure(figsize=(21, 10.5), facecolor=BG); ax = fig.add_axes([0.03, 0.06, 0.66, 0.88], facecolor=BG)
