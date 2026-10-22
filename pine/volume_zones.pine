@@ -11,22 +11,22 @@ rows       = input.int(40, "عدد صفوف البروفايل", minval=10, maxv
 vaPct      = input.float(0.70, "نسبة منطقة القيمة", minval=0.5, maxval=0.95, step=0.05, tooltip="نسبة الفوليوم داخل منطقة القيمة. المعتاد 0.70", group="البروفايل")
 hvnMult    = input.float(1.5, "منطقة فوليوم عالي = أكبر من المتوسط بـ", minval=1.0, maxval=3.0, step=0.1, group="البروفايل")
 
-volMaLen   = input.int(20, "متوسط الفوليوم (عدد الشموع)", group="الإشارات")
-udLen      = input.int(50, "فوليوم الاتجاه: عدد الشموع", minval=10, maxval=200, tooltip="فوليوم الشموع الصاعدة ÷ فوليوم الشموع الهابطة. أكبر من 1 = الشراء أقوى", group="الإشارات")
+volMaLen   = input.int(20, "متوسط الفوليوم (عدد الشموع)", group="الفوليوم")
+udLen      = input.int(50, "فوليوم الاتجاه: عدد الشموع", minval=10, maxval=200, tooltip="فوليوم الشموع الصاعدة ÷ فوليوم الشموع الهابطة. أكبر من 1 = الشراء أقوى", group="الفوليوم")
+udBand     = input.float(0.05, "فوليوم الاتجاه: هامش الحياد", minval=0.0, maxval=0.5, step=0.05, tooltip="0.05 = بين 0.95 و 1.05 يعتبر محايد", group="الفوليوم")
+weakRatio  = input.float(0.80, "فوليوم ضعيف إذا أقل من المتوسط بنسبة", minval=0.3, maxval=1.0, step=0.05, tooltip="0.80 = أقل من 80% من المتوسط", group="الفوليوم")
+breakRatio = input.float(1.5, "فوليوم قوي إذا أكبر من المتوسط بنسبة", minval=1.0, maxval=5.0, step=0.1, tooltip="1.5 = مرة ونصف المتوسط", group="الفوليوم")
 G_NOW = "الجدول: الاتجاه والفوليوم اللحظي"
 nowEmaF    = input.int(9, "متوسط سريع", minval=2, maxval=100, inline="ne", group=G_NOW)
 nowEmaS    = input.int(21, "متوسط بطيء", minval=3, maxval=200, inline="ne", group=G_NOW)
 nowAdxLen  = input.int(7, "فترة ADX اللحظي", minval=2, maxval=50, group=G_NOW)
 nowUdLen   = input.int(10, "فوليوم لحظي: عدد الشموع", minval=3, maxval=100, tooltip="الجدول فقط. إشارة الاتجاه على الشارت تبقى على الحساب المختبر (50 شمعة)", group=G_NOW)
-udBand     = input.float(0.05, "فوليوم الاتجاه: هامش الحياد", minval=0.0, maxval=0.5, step=0.05, tooltip="0.05 = بين 0.95 و 1.05 يعتبر محايد", group="الإشارات")
-weakRatio  = input.float(0.80, "فوليوم ضعيف إذا أقل من المتوسط بنسبة", minval=0.3, maxval=1.0, step=0.05, tooltip="0.80 = أقل من 80% من المتوسط", group="الإشارات")
-breakRatio = input.float(1.5, "فوليوم قوي إذا أكبر من المتوسط بنسبة", minval=1.0, maxval=5.0, step=0.1, tooltip="1.5 = مرة ونصف المتوسط", group="الإشارات")
-adxLen     = input.int(14, "فترة ADX", group="الإشارات")
-adxStrong  = input.float(25, "ترند قوي إذا ADX أكبر من", minval=10, maxval=50, step=1, group="الإشارات")
+adxStrong  = input.float(25, "ترند قوي إذا ADX أكبر من", minval=10, maxval=50, step=1, group=G_NOW)
 
 showTop    = input.bool(true, "إظهار أقوى 3 مناطق", group="المناطق")
 tblPos     = input.string("أسفل اليمين", "موقع الجدول", options=["أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "أسفل اليسار"], group="المناطق")
 showVA     = input.bool(true, "إظهار POC و VAH و VAL", group="المناطق")
+cLblTxt  = input.color(color.black, "لون نص ملصقات الإشارات", group="المناطق")
 
 showVar    = input.bool(false, "إظهار إشارة العودة للقيمة (كثيرة، ميزة ضعيفة)", group="العودة لمنطقة القيمة")
 varCap     = input.float(2.0, "أقصى مسافة للهدف (ATR)", minval=0.5, maxval=10, step=0.25, group="العودة لمنطقة القيمة")
@@ -67,7 +67,6 @@ cStrongUp = input.color(#00e676, "فوليوم قوي صعود", inline="sv", gr
 cStrongDn = input.color(#ff1744, "هبوط", inline="sv", group=G_CD)
 cWeakBar  = input.color(#4a4e5a, "شمعة فوليوم ضعيف", group=G_CD)
 
-G_SG = "ألوان · الإشارات"
 
 G_ZN = "ألوان · أقوى 3 مناطق"
 cZone1   = input.color(#e8432d, "#1", inline="z", group=G_ZN)
@@ -85,7 +84,6 @@ cTblUp   = input.color(#00e676, "صعود وقوي", inline="tc", group=G_TB)
 cTblDn   = input.color(#ff5252, "هبوط", inline="tc", group=G_TB)
 cTblWeak = input.color(#f0c419, "ضعيف", inline="tc", group=G_TB)
 cVdBgT   = input.int(85, "شفافية خلفية سطر الخلاصة", minval=0, maxval=100, step=5, group=G_TB)
-cLblTxt  = input.color(color.black, "لون نص الملصقات", group=G_SG)
 tblSize  = input.string("عادي", "حجم خط الجدول", options=["صغير جدا", "صغير", "عادي", "كبير"], group=G_TB)
 
 G_HM = "ألوان · الخريطة الحرارية"
@@ -128,7 +126,6 @@ volMa = ta.sma(volume, volMaLen)
 vr    = volMa > 0 ? volume / volMa : 1.0
 weak  = vr < weakRatio
 strongVol = vr >= breakRatio
-[diP, diM, adxV] = ta.dmi(adxLen, adxLen)
 emaF = ta.ema(close, 20)
 emaS = ta.ema(close, 50)
 // up / down volume over the last udLen bars (tested: trend alerts with supporting volume did better in both halves)
@@ -145,7 +142,6 @@ nUp = math.sum(close > open ? volume : 0.0, nowUdLen)
 nDn = math.sum(close < open ? volume : 0.0, nowUdLen)
 nowUd = nDn > 0 ? nUp / nDn : na
 nowUdDir = na(nowUd) ? 0 : nowUd > 1 + udBand ? 1 : nowUd < 1 / (1 + udBand) ? -1 : 0
-trendDir = emaF > emaS and diP > diM ? 1 : emaF < emaS and diM > diP ? -1 : 0
 
 // ═══════════════ Rolling volume profile (bars 1..lookback, past only) ═══════════════
 var float[] rowVol = array.new_float(rows, 0.0)
@@ -294,7 +290,7 @@ if vaFree and not na(vah[1]) and not na(val) and atrV > 0
             vaOT := vaTgt
             vaOS := vaStp
             vaOB := bar_index
-plotshape(showVar and vaSig == 1 and true, "عودة للقيمة صعود", shape.labelup, location.belowbar, cVarUp, text="عودة", textcolor=cLblTxt, size=size.tiny)
+plotshape(showVar and vaSig == 1, "عودة للقيمة صعود", shape.labelup, location.belowbar, cVarUp, text="عودة", textcolor=cLblTxt, size=size.tiny)
 plotshape(showVar and vaSig == -1, "عودة للقيمة هبوط", shape.labeldown, location.abovebar, cVarDn, text="عودة", textcolor=cLblTxt, size=size.tiny)
 if showVar and vaSig != 0
     line.new(bar_index, vaTgt, bar_index + 10, vaTgt, color=vaSig > 0 ? cVarUp : cVarDn, style=line.style_dotted, width=wVarL)
