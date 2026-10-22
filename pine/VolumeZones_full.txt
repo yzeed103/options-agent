@@ -399,6 +399,7 @@ whLen     = input.int(10, "أقل عدد أيام لتكوين المنطقة ا
 whMult    = input.float(6.0, "أقصى مدى للمنطقة (ATR يومي)", minval=1.0, maxval=20, step=0.5, group=G_WH)
 whRows    = input.int(200, "عدد صفوف البروفايل (العواميد الأفقية)", minval=20, maxval=500, tooltip="البروفايل لا يُرسم على الشارت. يُستخدم فقط لحساب خطوط الحيتان. صفوف أكثر = خطوط أدق", group=G_WH)
 whMinD    = input.float(0.5, "أقرب خط حوت في الجدول: أقل مسافة (ATR يومي)", minval=0.0, maxval=3.0, step=0.25, tooltip="يتجاهل الخطوط الأقرب من هذه المسافة للسعر. 0.5 = نصف حركة يوم. 0 = أقرب خط حتى لو ملاصق", group=G_WH)
+whInclBrk = input.bool(true, "تضمين يوم الكسر في البروفايل", tooltip="مفعّل = مثل رسم FRVP من بداية المنطقة حتى شمعة الكسر نفسها", group=G_WH)
 whKeep    = input.int(2, "عدد المناطق العرضية المكتملة المعروضة", minval=1, maxval=5, group=G_WH)
 showLive  = input.bool(true, "حساب المنطقة الحالية (قيد التكوين)", group=G_WH)
 whMode    = input.string("تلقائي", "طريقة تحديد المنطقة العرضية", options=["تلقائي", "يدوي"], tooltip="تلقائي: كل منطقة عرضية على الشموع اليومية تنتهي بكسر القمة أو القاع. يدوي: أنت تحدد بداية المنطقة ونهايتها", group=G_WH)
@@ -632,7 +633,7 @@ else
         else if pdCl > rHi or pdCl < rLo
             // daily close outside the top / bottom: range complete (breakout day excluded), new range starts today
             array.push(rgT0, array.get(wdT, rIdx))
-            array.push(rgT1, pdT)
+            array.push(rgT1, whInclBrk ? time("D") : pdT)
             while array.size(rgT0) > whKeep
                 array.shift(rgT0)
                 array.shift(rgT1)
