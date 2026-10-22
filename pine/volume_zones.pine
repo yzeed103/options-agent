@@ -888,7 +888,18 @@ if barstate.islast
                     array.push(gxBoxA, box.new(gxT0, x + hb, time, x - hb, xloc=xloc.bar_time, extend=extend.right, border_color=fade(gc, gexBord), border_width=1, border_style=array.get(gxSty, i), bgcolor=fade(gc, gexFill)))
                 if gexShape != "صناديق"
                     array.push(gxLines, line.new(gxT0, x, time, x, xloc=xloc.bar_time, extend=extend.right, color=gc, style=array.get(gxSty, i), width=wGx))
-                array.push(gxLbls, label.new(bar_index + 3, x, array.get(gxKeys, i) + " " + str.tostring(x, format.mintick) + (gxNear(x) ? " ★" : ""), style=label.style_label_left, color=color.new(gc, 100), textcolor=gc, size=size.small))
+                // levels at the same price (e.g. CW = PIN) share one label: "CW · PIN 340"
+                bool gxDup = false
+                string gxNm = array.get(gxKeys, i)
+                for j = 0 to 4
+                    y = array.get(gxV, j)
+                    if j != i and not na(y) and math.abs(y - x) <= 0.25 * gxH
+                        if j < i
+                            gxDup := true
+                        if j > i
+                            gxNm := gxNm + " · " + array.get(gxKeys, j)
+                if not gxDup
+                    array.push(gxLbls, label.new(bar_index + 3, x, gxNm + " " + str.tostring(x, format.mintick) + (gxNear(x) ? " ★" : ""), style=label.style_label_left, color=color.new(gc, 100), textcolor=gc, size=size.small))
 // ta.cross on every bar (not inside and/or), then combined
 gxXcw = ta.cross(c_, gxCW)
 gxXpw = ta.cross(c_, gxPW)
