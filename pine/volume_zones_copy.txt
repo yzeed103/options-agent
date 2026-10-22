@@ -714,7 +714,7 @@ alertcondition(wbSig != 0, "ارتداد حوت", "ارتداد من مستوى 
 // ═══════════════ Whale targets of the day, the level price is heading to, trend hold ═══════════════
 G_TG = "أهداف الحيتان واتجاه السعر"
 showHead = input.bool(true, "تسميك خط الحوت الذي يتجه له السعر", group=G_TG)
-cHead    = input.color(#ffeb3b, "لونه", inline="hd", group=G_TG)
+cHead    = input.color(#9b5cff, "لونه", inline="hd", group=G_TG)
 wHead    = input.int(4, "السماكة", minval=1, maxval=10, inline="hd", group=G_TG)
 stLen    = input.int(10, "صمود الترند: فترة Supertrend", minval=2, maxval=100, inline="st", group=G_TG)
 stMult   = input.float(3.0, "المضاعف", minval=0.5, maxval=10, step=0.5, inline="st", group=G_TG)
@@ -742,17 +742,17 @@ else
     dHigh := math.max(dHigh, high)
     dLow  := math.min(dLow, low)
 
-// the whale level price is heading to: chosen in the instant-trend direction, kept until price closes through it
-// (broken) or the instant trend turns the other way (reversed)
+// the whale level price is heading to: chosen in the instant-trend direction, kept until price
+// reaches it (high / low touches it) or the instant trend turns the other way (reversed)
 var int    hDir = 0
 var float  hLvl = na
 var string hLast = ""
 if hDir != 0
-    if (hDir > 0 and close > hLvl) or (hDir < 0 and close < hLvl)
-        hLast := "اخترق " + str.tostring(hLvl, format.mintick)
+    if (hDir > 0 and high >= hLvl) or (hDir < 0 and low <= hLvl)
+        hLast := "وصل " + str.tostring(hLvl, format.mintick) + " ✓"
         hDir := 0
     else if nowDir == -hDir
-        hLast := ((hDir > 0 and high >= hLvl) or (hDir < 0 and low <= hLvl) ? "لمس ثم انعكس عند " : "انعكس قبل ") + str.tostring(hLvl, format.mintick)
+        hLast := "انعكس قبل " + str.tostring(hLvl, format.mintick)
         hDir := 0
 if hDir == 0 and nowDir != 0 and array.size(lvNow) > 0
     float best = na
