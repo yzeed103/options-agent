@@ -38,7 +38,7 @@ def get(url: str, timeout: float = 20, tries: int = 4):
         except urllib.error.HTTPError as e:
             if e.code not in (429, 503) or i == tries - 1:
                 raise
-            time.sleep(5 * (i + 1))
+            time.sleep(10 * (i + 1))      # 10 + 20 + 30 s: spans the limiter's one-minute window
 
 
 def build(base: str, symbols: list[str] | None, basis: str) -> tuple[str, list[str]]:
