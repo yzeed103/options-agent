@@ -32,7 +32,7 @@ from vzones.gex_watch import Watch  # noqa: E402
 import gex_block  # noqa: E402  (build, notify, send_telegram)
 
 NY = ZoneInfo("America/New_York")
-LOG_DIR = os.path.join(os.environ.get("LOCALAPPDATA", HERE), "gex_agent")
+LOG_DIR = os.path.join(os.path.dirname(HERE), "runtime")   # log + state inside the project (not AppData / OneDrive)
 RETRY = 60          # seconds to the next poll after a failure (boot: GEXRadar / TradingView still starting)
 WARN_AFTER = 3      # consecutive failed polls before a notification (so a normal boot stays quiet)
 LOCK_PORT = 47231   # single-instance lock (a localhost socket, released automatically when the process ends)
@@ -135,6 +135,9 @@ def poll(w: Watch, a, state: dict) -> bool:
     state["gex_down"] = 0
     t = datetime.now(NY)
     changed, what = w.update(text, t.hour * 60 + t.minute)
+    if what and what[0].startswith("incomplete"):
+        log.warning("%s | %s", what[0], "; ".join(notes))
+        return False          # the chart keeps what it has; retry in RETRY seconds
     stale = [n for n in notes if "stale" in n]
     if stale and state.get("stale_warned") != w.date:
         state["stale_warned"] = w.date

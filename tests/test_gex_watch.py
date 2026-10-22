@@ -60,6 +60,13 @@ def test_state_survives_restart():
     assert "CW=770" in w2.block()
 
 
+def test_partial_block_is_ignored():
+    w = Watch(); w.update(B1, MID)
+    part = "DATE=2026-10-23\nSPY: CW=790 PW=750 FLIP=774.57 PIN=760 MAXOI=750 CWOI=800 PWOI=750"   # HOOD missing
+    ok, ch = w.update(part, PRE)
+    assert not ok and ch[0].startswith("incomplete block") and "HOOD" in w.block() and w.date == "2026-10-22"
+
+
 def test_parse_all():
     d, lv = parse_all(B1)
     assert d == "2026-10-22" and lv["HOOD"]["PW"] == 95 and set(lv) == {"SPY", "HOOD"}

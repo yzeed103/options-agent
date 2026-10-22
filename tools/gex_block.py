@@ -26,9 +26,19 @@ NY = ZoneInfo("America/New_York")
 FIELDS = {"CW": "call_wall", "PW": "put_wall", "FLIP": "gamma_flip", "PIN": "pin", "DFLIP": "delta_flip", "MAXOI": "max_oi_strike"}
 
 
-def get(url: str, timeout: float = 20):
-    with urllib.request.urlopen(url, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
+def get(url: str, timeout: float = 20, tries: int = 4):
+    """GET JSON. GEXRadar answers 429 (240 requests a minute per address) or 503 (still loading) under load:
+    wait and retry instead of dropping the symbol from the block."""
+    import time
+    import urllib.error
+    for i in range(tries):
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code not in (429, 503) or i == tries - 1:
+                raise
+            time.sleep(5 * (i + 1))
 
 
 def build(base: str, symbols: list[str] | None, basis: str) -> tuple[str, list[str]]:

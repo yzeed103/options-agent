@@ -62,6 +62,7 @@ class Watch:
     flip_tol: float = 0.0025    # live_gamma only: FLIP / DFLIP must move more than 0.25% of the level
     snap_at: int = 9 * 60 + 35  # minutes after midnight ET: gamma levels are taken once, at the first poll after this
     live_gamma: bool = False
+    min_share: float = 0.8      # a block with fewer symbols than this share of the chart's is ignored
     date: str = ""
     snapped: bool = False       # today's gamma snapshot taken
     applied: dict = field(default_factory=dict)     # symbol -> levels currently on the chart
@@ -73,6 +74,9 @@ class Watch:
         date, now = parse_all(text)
         if not now:
             return False, []
+        if self.applied and len(now) < self.min_share * len(self.applied):
+            # a partial block (GEXRadar overloaded / restarting) must not wipe symbols off the chart
+            return False, [f"incomplete block ({len(now)} of {len(self.applied)} symbols) - skipped"]
         after_snap = minute_et is None or minute_et >= self.snap_at
         if date != self.date:
             first = not self.date
