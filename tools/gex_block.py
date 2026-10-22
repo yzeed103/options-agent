@@ -6,7 +6,7 @@
     python tools/gex_block.py --out gex_block.txt --clip --notify   # what the morning task runs
 
 Read-only on GEXRadar: it only calls GET /api/symbols and GET /api/gex/{symbol}.
-Telegram needs TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the environment (never written to the repo).
+Telegram: token and chat id in runtime/telegram.json (git-ignored) or the environment - see vzones/telegram.py.
 """
 from __future__ import annotations
 
@@ -68,14 +68,14 @@ def build(base: str, symbols: list[str] | None, basis: str) -> tuple[str, list[s
     return format_block(date, rows), notes
 
 
-def send_telegram(text: str) -> None:
-    token, chat = os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat:
-        raise SystemExit("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID are not set")
-    body = urllib.parse.urlencode({"chat_id": chat, "text": text}).encode()
-    with urllib.request.urlopen(f"https://api.telegram.org/bot{token}/sendMessage", body, timeout=20) as r:
-        if not json.loads(r.read().decode()).get("ok"):
-            raise SystemExit("Telegram refused the message")
+def send_telegram(text: str) -> bool:
+    """Through vzones/telegram.py (token in runtime/telegram.json or the environment). Never raises:
+    while Telegram is not configured it just reports that on stderr."""
+    from vzones import telegram
+    sent, why = telegram.send(text)
+    if not sent:
+        print("# telegram: " + why, file=sys.stderr)
+    return sent
 
 
 def copy_to_clipboard(text: str) -> None:

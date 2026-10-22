@@ -756,6 +756,7 @@ if nowDir != 0
         if (x - edge) * nowDir > 0 and (na(nLvl) or math.abs(x - edge) < math.abs(nLvl - edge))
             nLvl := x
 bool hitHead = hDir != 0 and not na(hLvl) and ((hDir > 0 and h_ >= hLvl) or (hDir < 0 and l_ <= hLvl))
+float hitHeadLvl = hitHead ? hLvl : na      // kept before hLvl moves to the next target (webhook alert)
 if hitHead
     hLast := "وصل " + str.tostring(hLvl, format.mintick) + " ✓"
 else if hDir != 0 and nowDir == -hDir and not na(hLvl)
@@ -1263,3 +1264,33 @@ alertcondition(hitHead, "وصل خط حوت", "السعر وصل خط الحوت
 alertcondition(stD != stD[1] and not na(stD[1]), "انكسار الترند (Supertrend)", "انقلب صمود الترند: الترند السابق انكسر")
 alertcondition(tlBrkUp, "كسر خط الترند الهابط", "إغلاق فوق خط القمم الهابط")
 alertcondition(tlBrkDn, "كسر خط الترند الصاعد", "إغلاق تحت خط القيعان الصاعد")
+
+// ═══════════════ Webhook alerts: one JSON per signal for the Telegram server ═══════════════
+// app.py /webhook/tradingview turns them into Arabic Telegram messages (vzones/alerts.py). In TradingView create ONE
+// alert on this indicator with the condition "Any alert() function call" and the webhook URL; the alertcondition()
+// alerts above stay as they are. Fired once per bar close, so no repaint.
+G_TG2 = "تنبيهات تلغرام (webhook)"
+useHook = input.bool(true, "إرسال تنبيهات JSON (الرمز، الإشارة، الهدف، الوقف)", tooltip="تعمل فقط إذا أنشأت تنبيها على المؤشر بشرط Any alert() function call ورابط webhook", group=G_TG2)
+jnum(float x) => na(x) ? "null" : str.tostring(x, "#.######")
+hook(string sig, float tgt, float stp, float lvl) =>
+    alert("{\"sym\":\"" + syminfo.ticker + "\",\"tf\":\"" + timeframe.period + "\",\"sig\":\"" + sig + "\",\"price\":" + jnum(c_) + ",\"target\":" + jnum(tgt) + ",\"stop\":" + jnum(stp) + ",\"level\":" + jnum(lvl) + ",\"t\":" + str.tostring(time) + "}", alert.freq_once_per_bar_close)
+// separate ifs, not an else-if chain (Pine pitfall)
+if useHook and showTA and taFire == 1
+    hook("trend_up", na, pdVAH, na)
+if useHook and showTA and taFire == -1
+    hook("trend_dn", na, pdVAL, na)
+if useHook and wbSig == 1
+    hook("whale_up", wbTgt, wbStp, na)
+if useHook and wbSig == -1
+    hook("whale_dn", wbTgt, wbStp, na)
+if useHook and hitHead
+    hook("head_hit", na, na, hitHeadLvl)
+bool stFlip = stD != stD[1] and not na(stD[1])
+if useHook and stFlip
+    hook(stUp ? "st_up" : "st_dn", na, na, stLine)
+if useHook and tlBrkUp
+    hook("tl_up", na, na, dnNow)
+if useHook and tlBrkDn
+    hook("tl_dn", na, na, upNow)
+if useHook and gxCross
+    hook("gex_cross", na, na, gxXcw ? gxCW : gxXpw ? gxPW : gxFl)

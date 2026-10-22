@@ -161,10 +161,10 @@ def poll(w: Watch, a, state: dict) -> bool:
     if changed and tot["set"]:
         gex_block.notify("وكيل GEX: تحديث المستويات", say(what))
         if a.telegram:
-            try:
-                gex_block.send_telegram("GEX update\n" + "\n".join(what))
-            except SystemExit as e:
-                log.warning("telegram: %s", e)
+            from vzones import telegram
+            sent, why = telegram.send("🧱 تحديث مستويات GEX\n" + "\n".join(what))
+            if not sent:
+                log.info("telegram: %s", why)
     if a.once:
         print(json.dumps({"changes": what, **tot}, ensure_ascii=True))
     return True
