@@ -1,0 +1,55 @@
+//@version=5
+// Trendline reconstruction to identify which method draws the green / red lines on the user's INTU 5m chart.
+// Two common methods, switchable, with the pivot length as the main knob:
+//   "نقطتين"  : line through the last two pivot highs (lower high -> red) and the last two pivot lows (higher low -> green)
+//   "ATR"     : LuxAlgo "Trendlines with Breaks" style: from the last pivot, slope = ATR(len) / len x mult
+indicator("Trendline Match", overlay=true, max_lines_count=50)
+mode  = input.string("نقطتين", "طريقة الرسم", options=["نقطتين", "ATR"])
+len   = input.int(5, "طول القمة / القاع (شموع يمين ويسار)", minval=1, maxval=50)
+mult  = input.float(1.0, "مضاعف الميل (طريقة ATR)", minval=0.1, maxval=5, step=0.1)
+cUp   = input.color(#00e676, "خط القيعان الصاعد")
+cDn   = input.color(#ff1744, "خط القمم الهابط")
+wLn   = input.int(2, "السماكة", minval=1, maxval=5)
+
+ph = ta.pivothigh(high, len, len)
+pl = ta.pivotlow(low, len, len)
+atrS = ta.atr(len) / len * mult
+
+var float ph1 = na
+var int   phB1 = na
+var float ph2 = na
+var int   phB2 = na
+var float pl1 = na
+var int   plB1 = na
+var float pl2 = na
+var int   plB2 = na
+var float sPh = na
+var float sPl = na
+if not na(ph)
+    ph1 := ph2
+    phB1 := phB2
+    ph2 := ph
+    phB2 := bar_index - len
+    sPh := atrS
+if not na(pl)
+    pl1 := pl2
+    plB1 := plB2
+    pl2 := pl
+    plB2 := bar_index - len
+    sPl := atrS
+
+var line lDn = na
+var line lUp = na
+if barstate.islast
+    line.delete(lDn)
+    line.delete(lUp)
+    if mode == "نقطتين"
+        if not na(ph1) and ph2 < ph1
+            lDn := line.new(phB1, ph1, phB2, ph2, color=cDn, width=wLn, extend=extend.right)
+        if not na(pl1) and pl2 > pl1
+            lUp := line.new(plB1, pl1, plB2, pl2, color=cUp, width=wLn, extend=extend.right)
+    else
+        if not na(ph2)
+            lDn := line.new(phB2, ph2, phB2 + 1, ph2 - sPh, color=cDn, width=wLn, extend=extend.right)
+        if not na(pl2)
+            lUp := line.new(plB2, pl2, plB2 + 1, pl2 + sPl, color=cUp, width=wLn, extend=extend.right)
