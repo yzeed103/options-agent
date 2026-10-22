@@ -92,7 +92,7 @@ pdm, mdm = np.where((up_ > dn_) & (up_ > 0), up_, 0), np.where((dn_ > up_) & (dn
 rma = lambda x: pd.Series(x).ewm(alpha=1 / 14).mean().to_numpy()
 pdi, mdi = 100 * rma(pdm) / rma(tr), 100 * rma(mdm) / rma(tr); adx = rma(100 * np.abs(pdi - mdi) / np.maximum(pdi + mdi, 1e-9))[-1]
 td = 1 if e20 > e50 and pdi[-1] > mdi[-1] else -1 if e20 < e50 and mdi[-1] > pdi[-1] else 0
-vol = day.volume.to_numpy(); vr = vol[-1] / vol[-21:-1].mean(); cl = C[-1]
+vol = day.volume.to_numpy(); s50 = slice(N - 51, N - 1); ud = vol[s50][C[s50] > O[s50]].sum() / vol[s50][C[s50] < O[s50]].sum(); vr = vol[-1] / vol[-21:-1].mean(); cl = C[-1]
 wu = min([x for x in LV if x > cl], default=np.nan); wd = max([x for x in LV if x < cl], default=np.nan)
 pc, vh, vl = VAS; nd = N - r0
 ptxt = "فوق VAH" if cl > vh else "تحت VAL" if cl < vl else "بين POC و VAH" if cl >= pc else "بين VAL و POC"
@@ -100,7 +100,8 @@ rtxt = "قيد التكوين" if nd < WLEN else "السعر فوق القمة" 
 dist = lambda x: f"{'+' if x >= cl else '-'}{abs(x - cl):.2f}   |   {'+' if x >= cl else '-'}{100 * abs(x - cl) / cl:.2f}%"
 G_, R_, Y_, P_ = "#00e676", "#ff5252", "#f0c419", "#9b5cff"
 rows = [("الاتجاه", ("صاعد" if td > 0 else "هابط" if td < 0 else "عرضي") + (" قوي" if adx >= 25 and td else ""), f"ADX {adx:.0f}", G_ if td > 0 else R_ if td < 0 else MUT),
-        ("الفوليوم", "ضعيف" if vr < .8 else "قوي" if vr >= 1.5 else "عادي", f"{vr:.1f}x مقارنة بالمتوسط", Y_ if vr < .8 else G_ if vr >= 1.5 else TX),
+        ("فوليوم الاتجاه", "داعم للصعود" if ud > 1.05 else "داعم للهبوط" if ud < 1 / 1.05 else "محايد",
+         f"شراء ÷ بيع {ud:.2f}   |   آخر 50 شمعة" + ("   عكس الترند" if td and ((ud > 1.05) - (ud < 1 / 1.05)) == -td else ""), G_ if ud > 1.05 else R_ if ud < 1 / 1.05 else MUT),
         ("المنطقة العرضية", rtxt, f"{rl:.2f} - {rh:.2f}   |   {nd} يوم", Y_),
         ("أقرب خط حوت فوق", f"{wu:.2f}", dist(wu), P_), ("أقرب خط حوت تحت", f"{wd:.2f}", dist(wd), P_),
         ("موقع السعر من القيمة", ptxt, f"POC {pc:.2f}   VAH {vh:.2f}   VAL {vl:.2f}", G_ if cl > vh else R_ if cl < vl else TX),
