@@ -111,26 +111,69 @@ fade(color c, float extraT) => color.new(c, 100 - (100 - color.t(c)) * (100 - ma
 heatMidE  = math.max(heatMid, heatMin)
 heatHighE = math.max(heatHigh, heatMidE)
 
+// ═══════════════ Real candles ═══════════════
+// Every measurement uses the real (standard) OHLC, so Heikin Ashi or other chart types only change how the chart
+// looks, not the levels or signals. On a normal candle chart these equal the built-in open / high / low / close.
+stdT = ticker.standard(syminfo.tickerid)
+[o_, h_, l_, c_] = request.security(stdT, timeframe.period, [open, high, low, close], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+trR = na(c_[1]) ? h_ - l_ : math.max(h_ - l_, math.max(math.abs(h_ - c_[1]), math.abs(l_ - c_[1])))
+
+// DMI / ADX on the real candles (same formula as ta.dmi)
+dmiReal(int len) =>
+    up = h_ - h_[1]
+    dn = l_[1] - l_
+    pDM = na(up) ? 0.0 : up > dn and up > 0 ? up : 0.0
+    mDM = na(dn) ? 0.0 : dn > up and dn > 0 ? dn : 0.0
+    trS = ta.rma(trR, len)
+    pDI = 100 * ta.rma(pDM, len) / trS
+    mDI = 100 * ta.rma(mDM, len) / trS
+    sDI = pDI + mDI
+    adxR = 100 * ta.rma(math.abs(pDI - mDI) / (sDI == 0 ? 1 : sDI), len)
+    [pDI, mDI, adxR]
+
+// Supertrend on the real candles (same formula as ta.supertrend; direction < 0 = up)
+stReal(float factor, int len) =>
+    atrS = ta.rma(trR, len)
+    src = (h_ + l_) / 2
+    float upB = src + factor * atrS
+    float loB = src - factor * atrS
+    float prevLo = nz(loB[1])
+    float prevUp = nz(upB[1])
+    loB := loB > prevLo or c_[1] < prevLo ? loB : prevLo
+    upB := upB < prevUp or c_[1] > prevUp ? upB : prevUp
+    int dir = na
+    float prevSt = na
+    prevSt := nz(prevSt[1])
+    if na(atrS[1])
+        dir := 1
+    else if prevSt == prevUp
+        dir := c_ > upB ? -1 : 1
+    else
+        dir := c_ < loB ? 1 : -1
+    float stv = dir == -1 ? loB : upB
+    prevSt := stv
+    [stv, dir]
+
 // ═══════════════ Volume / trend ═══════════════
-atrV  = ta.atr(14)
+atrV  = ta.rma(trR, 14)
 volMa = ta.sma(volume, volMaLen)
 vr    = volMa > 0 ? volume / volMa : 1.0
 weak  = vr < weakRatio
 strongVol = vr >= breakRatio
-emaF = ta.ema(close, 20)
-emaS = ta.ema(close, 50)
+emaF = ta.ema(c_, 20)
+emaS = ta.ema(c_, 50)
 // up / down volume over the last udLen bars (tested: trend alerts with supporting volume did better in both halves)
-upVol = math.sum(close > open ? volume : 0.0, udLen)
-dnVol = math.sum(close < open ? volume : 0.0, udLen)
+upVol = math.sum(c_ > o_ ? volume : 0.0, udLen)
+dnVol = math.sum(c_ < o_ ? volume : 0.0, udLen)
 udR   = dnVol > 0 ? upVol / dnVol : na
 udDir = na(udR) ? 0 : udR > 1 + udBand ? 1 : udR < 1 / (1 + udBand) ? -1 : 0
 // instant readings for the panel (faster than the tested signal settings)
-nowF = ta.ema(close, nowEmaF)
-nowS = ta.ema(close, nowEmaS)
-[nDiP, nDiM, nAdx] = ta.dmi(nowAdxLen, nowAdxLen)
+nowF = ta.ema(c_, nowEmaF)
+nowS = ta.ema(c_, nowEmaS)
+[nDiP, nDiM, nAdx] = dmiReal(nowAdxLen)
 nowDir = nowF > nowS and nDiP > nDiM ? 1 : nowF < nowS and nDiM > nDiP ? -1 : 0
-nUp = math.sum(close > open ? volume : 0.0, nowUdLen)
-nDn = math.sum(close < open ? volume : 0.0, nowUdLen)
+nUp = math.sum(c_ > o_ ? volume : 0.0, nowUdLen)
+nDn = math.sum(c_ < o_ ? volume : 0.0, nowUdLen)
 nowUd = nDn > 0 ? nUp / nDn : na
 nowUdDir = na(nowUd) ? 0 : nowUd > 1 + udBand ? 1 : nowUd < 1 / (1 + udBand) ? -1 : 0
 
@@ -139,8 +182,8 @@ var float[] rowVol = array.new_float(rows, 0.0)
 var float[] rowBuy = array.new_float(rows, 0.0)
 var float[] hvnLo  = array.new_float()
 var float[] hvnHi  = array.new_float()
-pHi  = ta.highest(high, lookback)[1]
-pLo  = ta.lowest(low, lookback)[1]
+pHi  = ta.highest(h_, lookback)[1]
+pLo  = ta.lowest(l_, lookback)[1]
 step = (pHi - pLo) / rows
 float poc = na
 float vah = na
@@ -151,10 +194,10 @@ if ready
     array.fill(rowVol, 0.0)
     array.fill(rowBuy, 0.0)
     for i = 1 to lookback
-        bh = high[i]
-        bl = low[i]
+        bh = h_[i]
+        bl = l_[i]
         bv = nz(volume[i])
-        isUp = close[i] >= open[i]
+        isUp = c_[i] >= o_[i]
         rng = math.max(bh - bl, syminfo.mintick)
         r0 = math.max(0, math.min(rows - 1, int((bl - pLo) / step)))
         r1 = math.max(0, math.min(rows - 1, int((bh - pLo) / step)))
@@ -214,7 +257,7 @@ if barstate.islast and showVA and not na(poc)
     lbPoc := label.new(bar_index + 2, poc, "POC", style=label.style_label_left, color=color.new(cPoc, 100), textcolor=cPoc, size=size.small)
     lbVah := label.new(bar_index + 2, vah, "VAH", style=label.style_label_left, color=color.new(cVah, 100), textcolor=cVah, size=size.small)
     lbVal := label.new(bar_index + 2, val, "VAL", style=label.style_label_left, color=color.new(cVal, 100), textcolor=cVal, size=size.small)
-barcolor(not colorBars ? na : strongVol ? (close >= open ? cStrongUp : cStrongDn) : weak ? cWeakBar : na, title="شموع حسب الفوليوم")
+barcolor(not colorBars ? na : strongVol ? (c_ >= o_ ? cStrongUp : cStrongDn) : weak ? cWeakBar : na, title="شموع حسب الفوليوم")
 // ═══════════════ Top-3 volume zones (ranked, % of zone volume) ═══════════════
 var box[] topBoxes = array.new_box()
 if showTop and barstate.islast and nZones > 0
@@ -304,20 +347,20 @@ if newSess
     array.clear(sH)
     array.clear(sL)
     array.clear(sV)
-    sessOpen := open
+    sessOpen := o_
     upCnt := 0
     dnCnt := 0
     taFired := false
     taDir := 0
 if timeframe.isintraday
-    array.push(sH, high)
-    array.push(sL, low)
+    array.push(sH, h_)
+    array.push(sL, l_)
     array.push(sV, nz(volume))
 
 int taFire = 0
 if not na(pdVAH)
-    upCnt := close > pdVAH ? upCnt + 1 : 0
-    dnCnt := close < pdVAL ? dnCnt + 1 : 0
+    upCnt := c_ > pdVAH ? upCnt + 1 : 0
+    dnCnt := c_ < pdVAL ? dnCnt + 1 : 0
     if not taFired and upCnt >= taBars and sessOpen <= pdVAH and emaF > emaS
         taFire := 1
     else if not taFired and dnCnt >= taBars and sessOpen >= pdVAL and emaF < emaS
@@ -325,9 +368,9 @@ if not na(pdVAH)
     if taFire != 0
         taFired := true
         taDir := taFire
-    else if taDir == 1 and (close < pdVAH or emaF < emaS)
+    else if taDir == 1 and (c_ < pdVAH or emaF < emaS)
         taDir := 0
-    else if taDir == -1 and (close > pdVAL or emaF > emaS)
+    else if taDir == -1 and (c_ > pdVAL or emaF > emaS)
         taDir := 0
 
 plot(showPdVA and timeframe.isintraday ? pdVAH : na, "أعلى منطقة قيمة الأمس", cPdVA, wPdVA, plot.style_stepline)
@@ -387,9 +430,9 @@ chartSec = timeframe.in_seconds()
 srcSec   = timeframe.in_seconds(whSrcTF)
 useLower = chartSec > srcSec                                   // chart (e.g. daily) is above the source TF
 lowerTF  = useLower ? whSrcTF : timeframe.period
-[lH, lL, lV, lT] = request.security_lower_tf(syminfo.tickerid, lowerTF, [high, low, volume, time], ignore_invalid_timeframe=true)
-[uH, uL, uV, uT] = request.security(syminfo.tickerid, whSrcTF, [high[1], low[1], volume[1], time[1]], lookahead=barmerge.lookahead_on)
-[pdHi, pdLo, pdCl, pdT] = request.security(syminfo.tickerid, "D", [high[1], low[1], close[1], time[1]], lookahead=barmerge.lookahead_on)
+[lH, lL, lV, lT] = request.security_lower_tf(stdT, lowerTF, [high, low, volume, time], ignore_invalid_timeframe=true)
+[uH, uL, uV, uT] = request.security(stdT, whSrcTF, [high[1], low[1], volume[1], time[1]], lookahead=barmerge.lookahead_on)
+[pdHi, pdLo, pdCl, pdT] = request.security(stdT, "D", [high[1], low[1], close[1], time[1]], lookahead=barmerge.lookahead_on)
 
 var float[] wsH = array.new_float()
 var float[] wsL = array.new_float()
@@ -613,17 +656,17 @@ var float wbOS = na
 var int   wbOB = na
 wbFree = wbOpen == 0
 if wbOpen != 0
-    hitT = wbOpen > 0 ? high >= wbOT : low <= wbOT
-    hitS = wbOpen > 0 ? low <= wbOS : high >= wbOS
+    hitT = wbOpen > 0 ? h_ >= wbOT : l_ <= wbOT
+    hitS = wbOpen > 0 ? l_ <= wbOS : h_ >= wbOS
     if hitT or hitS or bar_index - wbOB >= 130
         wbOpen := 0
 if wbFree and showWB and array.size(whLv) > 0 and atrV > 0
     for j = 0 to array.size(whLv) - 1
         L = array.get(whLv, j)
-        if close[1] > L and low <= L and close > L
+        if c_[1] > L and l_ <= L and c_ > L
             wbSig := 1
             break
-        if close[1] < L and high >= L and close < L
+        if c_[1] < L and h_ >= L and c_ < L
             wbSig := -1
             break
     if wbSig != 0
@@ -631,13 +674,13 @@ if wbFree and showWB and array.size(whLv) > 0 and atrV > 0
         float best = na
         for j = 0 to array.size(whLv) - 1
             L = array.get(whLv, j)
-            if (L - close) * wbSig >= wbMinR * risk and (na(best) or math.abs(L - close) < math.abs(best - close))
+            if (L - c_) * wbSig >= wbMinR * risk and (na(best) or math.abs(L - c_) < math.abs(best - c_))
                 best := L
         if na(best)
             wbSig := 0
         else
             wbTgt := best
-            wbStp := close - wbSig * risk
+            wbStp := c_ - wbSig * risk
             wbOpen := wbSig
             wbOT := wbTgt
             wbOS := wbStp
@@ -674,12 +717,12 @@ var float dOpen = na
 var float dHigh = na
 var float dLow  = na
 if newDay or na(dOpen)
-    dOpen := open
-    dHigh := high
-    dLow  := low
+    dOpen := o_
+    dHigh := h_
+    dLow  := l_
 else
-    dHigh := math.max(dHigh, high)
-    dLow  := math.min(dLow, low)
+    dHigh := math.max(dHigh, h_)
+    dLow  := math.min(dLow, l_)
 
 // the whale level price is heading to: the nearest whale level ahead of price in the instant-trend direction,
 // re-picked every bar (so after a pull-back the closer level becomes the target again). A level the bar touched
@@ -689,11 +732,11 @@ var float  hLvl = na
 var string hLast = ""
 float nLvl = na
 if nowDir != 0
-    edge = nowDir > 0 ? high : low
+    edge = nowDir > 0 ? h_ : l_
     for x in lvNow
         if (x - edge) * nowDir > 0 and (na(nLvl) or math.abs(x - edge) < math.abs(nLvl - edge))
             nLvl := x
-if hDir != 0 and not na(hLvl) and ((hDir > 0 and high >= hLvl) or (hDir < 0 and low <= hLvl))
+if hDir != 0 and not na(hLvl) and ((hDir > 0 and h_ >= hLvl) or (hDir < 0 and l_ <= hLvl))
     hLast := "وصل " + str.tostring(hLvl, format.mintick) + " ✓"
 else if hDir != 0 and nowDir == -hDir and not na(hLvl)
     hLast := "انعكس قبل " + str.tostring(hLvl, format.mintick)
@@ -709,7 +752,7 @@ if barstate.islast
         headLbl := label.new(bar_index + 3, hLvl, (hDir > 0 ? "▲ " : "▼ ") + "متجه إلى " + str.tostring(hLvl, format.mintick), style=label.style_label_left, color=color.new(cHead, 100), textcolor=cHead, size=size.small)
 
 // trend hold: Supertrend on the chart timeframe (direction < 0 = up in Pine)
-[stLine, stD] = ta.supertrend(stMult, stLen)
+[stLine, stD] = stReal(stMult, stLen)
 stUp = stD < 0
 stFlipBars = ta.barssince(stD != stD[1])
 plot(showSt ? stLine : na, "خط كسر الترند", stUp ? cStUp : cStDn, wSt, plot.style_linebr)
@@ -747,15 +790,15 @@ else if showTA and taFire != 0
     lastStat := 0
 else if lastDir != 0 and lastStat == 0
     if lastType == 1
-        if (lastDir > 0 and high >= lastTgt) or (lastDir < 0 and low <= lastTgt)
+        if (lastDir > 0 and h_ >= lastTgt) or (lastDir < 0 and l_ <= lastTgt)
             lastStat := 1
-        else if (lastDir > 0 and low <= lastStop) or (lastDir < 0 and high >= lastStop)
+        else if (lastDir > 0 and l_ <= lastStop) or (lastDir < 0 and h_ >= lastStop)
             lastStat := -1
     else if taDir == 0
         lastStat := -1
 
 fmt(float x) => str.tostring(x, format.mintick)
-dist(float x) => (x >= close ? "+" : "-") + fmt(math.abs(x - close)) + "   |   " + (x >= close ? "+" : "-") + str.tostring(100 * math.abs(x - close) / close, "#.00") + "%"
+dist(float x) => (x >= c_ ? "+" : "-") + fmt(math.abs(x - c_)) + "   |   " + (x >= c_ ? "+" : "-") + str.tostring(100 * math.abs(x - c_) / c_, "#.00") + "%"
 meter(int k, int n) =>
     string m = ""
     for i = 1 to n
@@ -788,8 +831,8 @@ if barstate.islast
     else if not na(rIdx)
         nDays = array.size(wdT) - rIdx
         forming = nDays < whLen
-        rTxt := forming ? "قيد التكوين" : close > rHi ? "السعر فوق القمة" : close < rLo ? "السعر تحت القاع" : "السعر داخل المنطقة"
-        rCol := forming ? cTblLbl : close > rHi ? cTblUp : close < rLo ? cTblDn : cTblWeak
+        rTxt := forming ? "قيد التكوين" : c_ > rHi ? "السعر فوق القمة" : c_ < rLo ? "السعر تحت القاع" : "السعر داخل المنطقة"
+        rCol := forming ? cTblLbl : c_ > rHi ? cTblUp : c_ < rLo ? cTblDn : cTblWeak
         rSub := fmt(rLo) + " - " + fmt(rHi) + "   |   " + str.tostring(nDays) + " يوم"
     // --- nearest whale levels (tall columns + POC / VAH / VAL of the drawn ranges)
     float wUp = na
@@ -799,10 +842,10 @@ if barstate.islast
         array.push(lvAll, array.get(curVA, k))
     minD = na(dATR) ? 0.0 : whMinD * dATR
     for x in lvAll
-        if not na(x) and math.abs(x - close) >= minD
-            if x > close and (na(wUp) or x < wUp)
+        if not na(x) and math.abs(x - c_) >= minD
+            if x > c_ and (na(wUp) or x < wUp)
                 wUp := x
-            if x < close and (na(wDn) or x > wDn)
+            if x < c_ and (na(wDn) or x > wDn)
                 wDn := x
     // --- position vs the current range's value area
     cPocW = array.get(curVA, 0)
@@ -811,8 +854,8 @@ if barstate.islast
     string pTxt = "-"
     color  pCol = cTblLbl
     if not na(cPocW)
-        pTxt := close > cVahW ? "فوق VAH" : close < cValW ? "تحت VAL" : close >= cPocW ? "بين POC و VAH" : "بين VAL و POC"
-        pCol := close > cVahW ? cTblUp : close < cValW ? cTblDn : cTblTxt
+        pTxt := c_ > cVahW ? "فوق VAH" : c_ < cValW ? "تحت VAL" : c_ >= cPocW ? "بين POC و VAH" : "بين VAL و POC"
+        pCol := c_ > cVahW ? cTblUp : c_ < cValW ? cTblDn : cTblTxt
     pSub = na(cPocW) ? "-" : "POC " + fmt(cPocW) + "\nVAH " + fmt(cVahW) + "   |   VAL " + fmt(cValW)
     // --- last signal
     sName = lastType == 1 ? "حوت" : "اتجاه"
@@ -860,7 +903,7 @@ if barstate.islast
 
     // --- draw (column 2 = label on the right, column 1 = value, column 0 = meter)
     table.cell(tbl, 2, 0, "مناطق الفوليوم", text_color=cTblTxt, text_size=tSz, text_halign=text.align_right)
-    table.cell(tbl, 0, 0, syminfo.ticker + " · " + timeframe.period + " · " + fmt(close), text_color=cTblLbl, text_size=tSz, text_halign=text.align_left)
+    table.cell(tbl, 0, 0, syminfo.ticker + " · " + timeframe.period + " · " + fmt(c_), text_color=cTblLbl, text_size=tSz, text_halign=text.align_left)
     rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة", "أهداف الحيتان اليوم", "متجه إلى", "صمود الترند")
     vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub, gTxt + "\n" + gSub, hTxt + "\n" + hSub, kTxt + "\n" + kSub)
     cols  = array.from(tCol, vCol, rCol, cWhLv, cWhLv, pCol, sCol, gCol, hCol, kCol)
