@@ -93,7 +93,7 @@ rma = lambda x: pd.Series(x).ewm(alpha=1 / 14).mean().to_numpy()
 pdi, mdi = 100 * rma(pdm) / rma(tr), 100 * rma(mdm) / rma(tr); adx = rma(100 * np.abs(pdi - mdi) / np.maximum(pdi + mdi, 1e-9))[-1]
 td = 1 if e20 > e50 and pdi[-1] > mdi[-1] else -1 if e20 < e50 and mdi[-1] > pdi[-1] else 0
 vol = day.volume.to_numpy(); s50 = slice(N - 51, N - 1); ud = vol[s50][C[s50] > O[s50]].sum() / vol[s50][C[s50] < O[s50]].sum(); vr = vol[-1] / vol[-21:-1].mean(); cl = C[-1]
-wu = min([x for x in LV if x > cl], default=np.nan); wd = max([x for x in LV if x < cl], default=np.nan)
+md = 0.5 * atr[-2]; wu = min([x for x in LV if x > cl + md], default=np.nan); wd = max([x for x in LV if x < cl - md], default=np.nan)
 pc, vh, vl = VAS; nd = N - r0
 ptxt = "فوق VAH" if cl > vh else "تحت VAL" if cl < vl else "بين POC و VAH" if cl >= pc else "بين VAL و POC"
 rtxt = "قيد التكوين" if nd < WLEN else "السعر فوق القمة" if cl > rh else "السعر تحت القاع" if cl < rl else "السعر داخل المنطقة"

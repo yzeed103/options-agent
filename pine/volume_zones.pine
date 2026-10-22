@@ -398,6 +398,7 @@ showWhale = input.bool(true, "إظهار مستويات الحيتان", group=G
 whLen     = input.int(10, "أقل عدد أيام لتكوين المنطقة العرضية", minval=3, maxval=60, tooltip="أول هذه الأيام تحدد القمة والقاع. بعدها أي إغلاق يومي فوق القمة أو تحت القاع يُنهي المنطقة ويبدأ منطقة جديدة", group=G_WH)
 whMult    = input.float(6.0, "أقصى مدى للمنطقة (ATR يومي)", minval=1.0, maxval=20, step=0.5, group=G_WH)
 whRows    = input.int(200, "عدد صفوف البروفايل (العواميد الأفقية)", minval=20, maxval=500, tooltip="البروفايل لا يُرسم على الشارت. يُستخدم فقط لحساب خطوط الحيتان. صفوف أكثر = خطوط أدق", group=G_WH)
+whMinD    = input.float(0.5, "أقرب خط حوت في الجدول: أقل مسافة (ATR يومي)", minval=0.0, maxval=3.0, step=0.25, tooltip="يتجاهل الخطوط الأقرب من هذه المسافة للسعر. 0.5 = نصف حركة يوم. 0 = أقرب خط حتى لو ملاصق", group=G_WH)
 whKeep    = input.int(2, "عدد المناطق العرضية المكتملة المعروضة", minval=1, maxval=5, group=G_WH)
 showLive  = input.bool(true, "حساب المنطقة الحالية (قيد التكوين)", group=G_WH)
 whMode    = input.string("تلقائي", "طريقة تحديد المنطقة العرضية", options=["تلقائي", "يدوي"], tooltip="تلقائي: كل منطقة عرضية على الشموع اليومية تنتهي بكسر القمة أو القاع. يدوي: أنت تحدد بداية المنطقة ونهايتها", group=G_WH)
@@ -778,8 +779,9 @@ if barstate.islast
     lvAll = array.copy(whLv)
     for k = 0 to 2
         array.push(lvAll, array.get(curVA, k))
+    minD = na(dATR) ? 0.0 : whMinD * dATR
     for x in lvAll
-        if not na(x)
+        if not na(x) and math.abs(x - close) >= minD
             if x > close and (na(wUp) or x < wUp)
                 wUp := x
             if x < close and (na(wDn) or x > wDn)
