@@ -6,7 +6,8 @@
 indicator("Volume Zones", overlay=true, max_bars_back=5000, max_lines_count=500, max_boxes_count=500, max_labels_count=200)
 
 // ═══════════════ Inputs ═══════════════
-lookback   = input.int(120, "فترة البروفايل (عدد الشموع)", minval=20, maxval=400, group="البروفايل")
+vpMode     = input.string("الجلسة الحالية", "البروفايل المتحرك يُحسب على", options=["الجلسة الحالية", "عدد الشموع"], tooltip="الجلسة الحالية: من افتتاح اليوم حتى الشمعة الحالية، ويبدأ من جديد كل يوم. على الفريم اليومي وفوق يُستخدم عدد الشموع تلقائيا", group="البروفايل")
+lookback   = input.int(120, "عدد الشموع (إذا اخترت عدد الشموع)", minval=20, maxval=400, group="البروفايل")
 rows       = input.int(40, "عدد صفوف البروفايل", minval=10, maxval=100, group="البروفايل")
 vaPct      = input.float(0.70, "نسبة منطقة القيمة", minval=0.5, maxval=0.95, step=0.05, tooltip="نسبة الفوليوم داخل منطقة القيمة. المعتاد 0.70", group="البروفايل")
 hvnMult    = input.float(1.5, "منطقة فوليوم عالي = أكبر من المتوسط بـ", minval=1.0, maxval=3.0, step=0.1, group="البروفايل")
@@ -177,23 +178,35 @@ nDn = math.sum(c_ < o_ ? volume : 0.0, nowUdLen)
 nowUd = nDn > 0 ? nUp / nDn : na
 nowUdDir = na(nowUd) ? 0 : nowUd > 1 + udBand ? 1 : nowUd < 1 / (1 + udBand) ? -1 : 0
 
-// ═══════════════ Rolling volume profile (bars 1..lookback, past only) ═══════════════
+// ═══════════════ Rolling volume profile (today's session, or bars 1..lookback) ═══════════════
 var float[] rowVol = array.new_float(rows, 0.0)
 var float[] rowBuy = array.new_float(rows, 0.0)
 var float[] hvnLo  = array.new_float()
 var float[] hvnHi  = array.new_float()
-pHi  = ta.highest(h_, lookback)[1]
-pLo  = ta.lowest(l_, lookback)[1]
+// session mode: bars of today's session up to and including the current bar (developing profile);
+// bars mode: the previous `lookback` bars (past only)
+useSess = vpMode == "الجلسة الحالية" and timeframe.isintraday
+var int sessBar0 = 0
+if ta.change(time("D")) != 0
+    sessBar0 := bar_index
+int profLen = useSess ? math.min(bar_index - sessBar0 + 1, 1000) : lookback
+int profOff = useSess ? 0 : 1
+sessHi = ta.highest(h_, math.max(1, profLen))
+sessLo = ta.lowest(l_, math.max(1, profLen))
+barsHi = ta.highest(h_, lookback)[1]
+barsLo = ta.lowest(l_, lookback)[1]
+pHi  = useSess ? sessHi : barsHi
+pLo  = useSess ? sessLo : barsLo
 step = (pHi - pLo) / rows
 float poc = na
 float vah = na
 float val = na
-ready = bar_index > lookback and step > 0
+ready = (useSess ? profLen >= 2 : bar_index > lookback) and step > 0
 
 if ready
     array.fill(rowVol, 0.0)
     array.fill(rowBuy, 0.0)
-    for i = 1 to lookback
+    for i = profOff to profOff + profLen - 1
         bh = h_[i]
         bl = l_[i]
         bv = nz(volume[i])
@@ -280,7 +293,7 @@ if showTop and barstate.islast and nZones > 0
         c = array.get(cols, j)
         pct = totZ > 0 ? math.round(100 * array.get(zv, k) / totZ) : 0
         txt = "#" + str.tostring(j + 1) + "  " + str.tostring(pct) + "%  " + str.tostring(array.get(hvnLo, k), format.mintick) + "-" + str.tostring(array.get(hvnHi, k), format.mintick)
-        array.push(topBoxes, box.new(bar_index - lookback, array.get(hvnHi, k), bar_index + 15, array.get(hvnLo, k), border_color=fade(c, zoneBord), border_width=wZoneB, bgcolor=fade(c, zoneFill), text=txt, text_color=c, text_size=size.small, text_halign=text.align_right, text_valign=text.align_top))
+        array.push(topBoxes, box.new(bar_index - profOff - profLen + 1, array.get(hvnHi, k), bar_index + 15, array.get(hvnLo, k), border_color=fade(c, zoneBord), border_width=wZoneB, bgcolor=fade(c, zoneFill), text=txt, text_color=c, text_size=size.small, text_halign=text.align_right, text_valign=text.align_top))
 
 // ═══════════════ Prior-day value area + trend alert ═══════════════
 // Tested on 7 symbols (15m, 1.5 years): two closes outside yesterday's value area with the EMA trend was the only
@@ -965,7 +978,7 @@ if barstate.islast
     table.cell(tbl, 0, 11, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
 
 // ═══════════════ Heatmap: two-colour or five-colour ribbons, no smoothing ═══════════════
-// colour = volume at that price over the last `lookback` bars, relative to the busiest row (0..1)
+// colour = volume at that price in the rolling profile (today's session or the last `lookback` bars), relative to the busiest row (0..1)
 viridis(float x) =>
     t = (x - heatMin) / math.max(1.0 - heatMin, 0.000001)
     t < 0.25 ? color.from_gradient(t, 0.00, 0.25, cH1, cH2) : t < 0.50 ? color.from_gradient(t, 0.25, 0.50, cH2, cH3) : t < 0.75 ? color.from_gradient(t, 0.50, 0.75, cH3, cH4) : color.from_gradient(t, 0.75, 1.00, cH4, cH5)
