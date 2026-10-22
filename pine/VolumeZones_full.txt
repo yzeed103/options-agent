@@ -2,11 +2,12 @@
 // Volume Zones
 // Rolling volume profile (POC / VAH / VAL / HVN), ranked top-3 zones, heat-map ribbons and a buy / sell profile,
 // prior-day value area + trend alert, whale levels of every daily sideways range + whale bounce, Arabic status panel.
-// Mirrors vzones/indicator.py: the profile is built from past bars only.
+// Python counterpart for testing: vzones/ranges.py (sideways ranges, whale levels, session profile, trendlines).
 indicator("Volume Zones", overlay=true, max_bars_back=5000, max_lines_count=500, max_boxes_count=500, max_labels_count=200)
 
 // ═══════════════ Inputs ═══════════════
 vpMode     = input.string("الجلسة الحالية", "البروفايل المتحرك يُحسب على", options=["الجلسة الحالية", "عدد الشموع"], tooltip="الجلسة الحالية: من افتتاح اليوم حتى الشمعة الحالية، ويبدأ من جديد كل يوم. على الفريم اليومي وفوق يُستخدم عدد الشموع تلقائيا", group="البروفايل")
+sessMax    = input.int(300, "الجلسة: أقصى عدد شموع", minval=50, maxval=1000, tooltip="حد أعلى للسرعة. على فريم 1 دقيقة أو عقود 23 ساعة تُستخدم آخر هذه الشموع من الجلسة فقط", group="البروفايل")
 lookback   = input.int(120, "عدد الشموع (إذا اخترت عدد الشموع)", minval=20, maxval=400, group="البروفايل")
 rows       = input.int(40, "عدد صفوف البروفايل", minval=10, maxval=100, group="البروفايل")
 vaPct      = input.float(0.70, "نسبة منطقة القيمة", minval=0.5, maxval=0.95, step=0.05, tooltip="نسبة الفوليوم داخل منطقة القيمة. المعتاد 0.70", group="البروفايل")
@@ -189,7 +190,7 @@ useSess = vpMode == "الجلسة الحالية" and timeframe.isintraday
 var int sessBar0 = 0
 if ta.change(time("D")) != 0
     sessBar0 := bar_index
-int profLen = useSess ? math.min(bar_index - sessBar0 + 1, 1000) : lookback
+int profLen = useSess ? math.min(bar_index - sessBar0 + 1, sessMax) : lookback
 int profOff = useSess ? 0 : 1
 sessHi = ta.highest(h_, math.max(1, profLen))
 sessLo = ta.lowest(l_, math.max(1, profLen))
@@ -396,9 +397,9 @@ plotshape(showTA and taFire == -1, "تنبيه اتجاه هابط", shape.label
 alertcondition(taFire != 0, "تنبيه اتجاه", "ثبات السعر خارج منطقة قيمة الأمس مع اتجاه المتوسطات")
 
 // ═══════════════ Whale levels + whale bounce (UNDER TEST) ═══════════════
-// Whale levels = tall columns of a 200-row volume profile built on the LATEST completed sideways range of daily candles
-// (range = N days whose high-low span <= k x daily ATR, extended while daily closes stay inside, completed by the
-// first daily close outside). Levels become active the session after the breakout day.
+// Whale levels = tall columns + POC / VAH / VAL of a hidden 200-row volume profile of every daily sideways range
+// (the first N days set top / bottom unless wider than k x daily ATR; the first daily close outside completes it and
+// starts the next one). Recomputed once per new day from completed days only, so history matches live.
 // Whale bounce = touch of a whale level and close back on the side price came from; target = nearest whale level at
 // least minR x risk away. Backtest on 5 stocks (15m): out-of-sample PF 1.18, ~20% win rate, avg win ~5.5R, but NOT
 // statistically proven (random levels can do as well). Use as an experiment.
@@ -497,8 +498,7 @@ var line[] whLines = array.new_line()
 var box[] whBoxA = array.new_box()
 var label[] whLbls = array.new_label()
 var float[] curVA = array.new_float(3, na)   // POC, VAH, VAL of the last drawn range (live one if shown)
-var int   lastBuildT = na
-var int   lastLiveDraw = na
+var string[] curVAName = array.new_string(1, "")
 
 // profile of [t0, t1) from the source bars (never drawn), tall columns -> lines. Appends to whLv / whLines / whBoxA.
 drawRange(int t0, int t1, int boxEnd, bool live) =>
@@ -506,10 +506,14 @@ drawRange(int t0, int t1, int boxEnd, bool live) =>
     float pHiW = na
     float pLoW = na
     nSrc = array.size(wsT)
-    int j0 = 0
+    // the source times are sorted: jump straight to the range instead of scanning the whole buffer
+    int jS = nSrc > 0 ? math.max(0, array.binary_search_leftmost(wsT, t0)) : 0
+    int j0 = jS
     while j0 < nSrc
         tj = array.get(wsT, j0)
-        if tj >= t0 and tj < t1
+        if tj >= t1
+            break
+        if tj >= t0
             pHiW := na(pHiW) ? array.get(wsH, j0) : math.max(pHiW, array.get(wsH, j0))
             pLoW := na(pLoW) ? array.get(wsL, j0) : math.min(pLoW, array.get(wsL, j0))
             nUsed += 1
@@ -517,7 +521,7 @@ drawRange(int t0, int t1, int boxEnd, bool live) =>
     if nUsed > 10 and pHiW > pLoW
         stW = (pHiW - pLoW) / whRows
         pv = array.new_float(whRows, 0.0)
-        for j = 0 to nSrc - 1
+        for j = jS to j0 - 1
             tj = array.get(wsT, j)
             if tj >= t0 and tj < t1
                 bh = array.get(wsH, j)
@@ -566,6 +570,7 @@ drawRange(int t0, int t1, int boxEnd, bool live) =>
         array.set(curVA, 0, pocV)
         array.set(curVA, 1, vahW)
         array.set(curVA, 2, valW)
+        array.set(curVAName, 0, live ? "المنطقة الحالية" : "آخر منطقة مكتملة")
         if showWhVA
             array.push(whLines, line.new(t0, pocV, boxEnd, pocV, xloc=xloc.bar_time, extend=extend.right, color=cWhPoc, width=wWhPocL))
             array.push(whLines, line.new(t0, vahW, boxEnd, vahW, xloc=xloc.bar_time, extend=extend.right, color=cWhVA, width=wWhVA))
@@ -586,7 +591,7 @@ drawRange(int t0, int t1, int boxEnd, bool live) =>
     nUsed
 
 // delete everything and redraw the completed ranges (+ the live one if liveT0 is not na)
-redrawAll(int liveT0) =>
+redrawAll(int liveT0, int liveT1) =>
     for ln in whLines
         line.delete(ln)
     array.clear(whLines)
@@ -602,30 +607,31 @@ redrawAll(int liveT0) =>
         drawRange(array.get(rgT0, k), array.get(rgT1, k), array.get(rgT1, k), false)
         k += 1
     if not na(liveT0)
-        drawRange(liveT0, time_close + 1, time, true)
+        drawRange(liveT0, liveT1, time, true)
     k
 
+// Everything below runs once per new trading day, on history and live alike, so the levels a past bar saw are the
+// same levels it would have seen live (the forming range uses completed days only, never today's bars).
 int lastDayT = array.size(wdT) > 0 ? array.get(wdT, array.size(wdT) - 1) : na
-if whMode == "يدوي"
-    // manual: rebuild once the source bars cover the chosen end time (and on the last bar for live data)
-    int newestSrcT = array.size(wsT) > 0 ? array.get(wsT, array.size(wsT) - 1) : na
-    if na(lastBuildT) and ((not na(newestSrcT) and newestSrcT >= whEndT) or barstate.islast)
+if not na(pdT) and (na(lastDayT) or pdT != lastDayT)
+    array.push(wdH, pdHi)
+    array.push(wdL, pdLo)
+    array.push(wdC, pdCl)
+    array.push(wdT, pdT)
+    n = array.size(wdC) - 1
+    pcD = n > 0 ? array.get(wdC, n - 1) : pdCl
+    trD = math.max(pdHi - pdLo, math.max(math.abs(pdHi - pcD), math.abs(pdLo - pcD)))
+    dATR := na(dATR) ? trD : dATR + (trD - dATR) / 14
+    todayT = time("D")
+    if whMode == "يدوي"
+        // manual: the chosen dates; while the end date is still ahead the profile grows day by day
         array.clear(rgT0)
         array.clear(rgT1)
-        array.push(rgT0, whStartT)
-        array.push(rgT1, whEndT)
-        redrawAll(na)
-        lastBuildT := time
-else
-    if not na(pdT) and (na(lastDayT) or pdT != lastDayT)
-        array.push(wdH, pdHi)
-        array.push(wdL, pdLo)
-        array.push(wdC, pdCl)
-        array.push(wdT, pdT)
-        n = array.size(wdC) - 1
-        pcD = n > 0 ? array.get(wdC, n - 1) : pdCl
-        trD = math.max(pdHi - pdLo, math.max(math.abs(pdHi - pcD), math.abs(pdLo - pcD)))
-        dATR := na(dATR) ? trD : dATR + (trD - dATR) / 14
+        if todayT > whStartT
+            array.push(rgT0, whStartT)
+            array.push(rgT1, math.min(whEndT, todayT))
+        redrawAll(na, na)
+    else
         if na(rIdx)
             rIdx := n
             rHi := pdHi
@@ -640,24 +646,20 @@ else
                 rHi := pdHi
                 rLo := pdLo
         else if pdCl > rHi or pdCl < rLo
-            // daily close outside the top / bottom: range complete (breakout day excluded), new range starts today
+            // daily close outside the top / bottom: range complete, new range starts on the breakout day
             array.push(rgT0, array.get(wdT, rIdx))
-            array.push(rgT1, whInclBrk ? time("D") : pdT)
+            array.push(rgT1, whInclBrk ? todayT : pdT)
             while array.size(rgT0) > whKeep
                 array.shift(rgT0)
                 array.shift(rgT1)
-            redrawAll(na)
             rIdx := n
             rHi := pdHi
             rLo := pdLo
         else
             rHi := math.max(rHi, pdHi)
             rLo := math.min(rLo, pdLo)
-    // live range: drawn on the last bar only (cheap), once per new day
-    if barstate.islast and not na(rIdx) and (na(lastLiveDraw) or lastLiveDraw != lastDayT)
         liveOk = showLive and array.size(wdT) - rIdx >= whLen
-        redrawAll(liveOk ? array.get(wdT, rIdx) : na)
-        lastLiveDraw := lastDayT
+        redrawAll(liveOk ? array.get(wdT, rIdx) : na, todayT)
 
 // whale bounce signal
 int wbSig = 0
@@ -749,7 +751,8 @@ if nowDir != 0
     for x in lvNow
         if (x - edge) * nowDir > 0 and (na(nLvl) or math.abs(x - edge) < math.abs(nLvl - edge))
             nLvl := x
-if hDir != 0 and not na(hLvl) and ((hDir > 0 and h_ >= hLvl) or (hDir < 0 and l_ <= hLvl))
+bool hitHead = hDir != 0 and not na(hLvl) and ((hDir > 0 and h_ >= hLvl) or (hDir < 0 and l_ <= hLvl))
+if hitHead
     hLast := "وصل " + str.tostring(hLvl, format.mintick) + " ✓"
 else if hDir != 0 and nowDir == -hDir and not na(hLvl)
     hLast := "انعكس قبل " + str.tostring(hLvl, format.mintick)
@@ -809,6 +812,10 @@ if not na(tPl)
         upS := (tPl - tLastPl) / (pb - tLastPlB)
     tLastPl := tPl
     tLastPlB := pb
+dnNow = na(dnA) ? na : dnA + dnS * (bar_index - dnAB)
+upNow = na(upA) ? na : upA + upS * (bar_index - upAB)
+bool tlBrkUp = not na(dnNow) and c_ > dnNow and c_[1] <= dnNow - dnS
+bool tlBrkDn = not na(upNow) and c_ < upNow and c_[1] >= upNow - upS
 var line tlDnLine = na
 var line tlUpLine = na
 if barstate.islast
@@ -893,8 +900,9 @@ if barstate.islast
     else if not na(rIdx)
         nDays = array.size(wdT) - rIdx
         forming = nDays < whLen
-        rTxt := forming ? "قيد التكوين" : c_ > rHi ? "السعر فوق القمة" : c_ < rLo ? "السعر تحت القاع" : "السعر داخل المنطقة"
-        rCol := forming ? cTblLbl : c_ > rHi ? cTblUp : c_ < rLo ? cTblDn : cTblWeak
+        where = c_ > rHi ? "السعر فوق القمة" : c_ < rLo ? "السعر تحت القاع" : "السعر داخل المنطقة"
+        rTxt := forming ? "قيد التكوين · " + where : where
+        rCol := c_ > rHi ? cTblUp : c_ < rLo ? cTblDn : forming ? cTblLbl : cTblWeak
         rSub := fmt(rLo) + " - " + fmt(rHi) + "   |   " + str.tostring(nDays) + " يوم"
     // --- nearest whale levels (tall columns + POC / VAH / VAL of the drawn ranges)
     float wUp = na
@@ -918,7 +926,7 @@ if barstate.islast
     if not na(cPocW)
         pTxt := c_ > cVahW ? "فوق VAH" : c_ < cValW ? "تحت VAL" : c_ >= cPocW ? "بين POC و VAH" : "بين VAL و POC"
         pCol := c_ > cVahW ? cTblUp : c_ < cValW ? cTblDn : cTblTxt
-    pSub = na(cPocW) ? "-" : "POC " + fmt(cPocW) + "\nVAH " + fmt(cVahW) + "   |   VAL " + fmt(cValW)
+    pSub = na(cPocW) ? "-" : array.get(curVAName, 0) + ":  POC " + fmt(cPocW) + "\nVAH " + fmt(cVahW) + "   |   VAL " + fmt(cValW)
     // --- last signal
     sName = lastType == 1 ? "حوت" : "اتجاه"
     sTxt = lastDir == 0 ? "لا توجد" : sName + " " + (lastDir > 0 ? "صعود" : "هبوط") + "، " + (lastStat == 1 ? "تحقق الهدف ✓" : lastStat == -1 ? (lastType == 1 ? "ضرب الوقف ✗" : "انتهى") : "نشطة")
@@ -1017,7 +1025,7 @@ if showHeat and ready and bar_index % heatStep == 0
                         c := fade(share > 0 ? cBuy : cSell, math.max(heatAlpha, 100 - math.min(75, math.abs(share) * 200)))
             mid = pLo + (r + 0.5) * step
             bx = array.get(rowBox, r)
-            sameRun = key != 0 and not na(bx) and array.get(rowKey, r) == key and math.abs(mid - array.get(rowMid, r)) <= step * 0.6
+            sameRun = key != 0 and not na(bx) and array.get(rowKey, r) == key and math.abs(mid - array.get(rowMid, r)) <= step * (useSess ? 1.0 : 0.6)
             if sameRun
                 box.set_right(bx, bar_index + heatStep - 1)
             else if key != 0
@@ -1084,3 +1092,7 @@ if showSplit and barstate.islast and ready
 
 // ═══════════════ Alerts ═══════════════
 alertcondition(weak and not weak[1], "فوليوم ضعيف", "الفوليوم أصبح ضعيفا")
+alertcondition(hitHead, "وصل خط حوت", "السعر وصل خط الحوت الذي كان متجها إليه")
+alertcondition(stD != stD[1] and not na(stD[1]), "انكسار الترند (Supertrend)", "انقلب صمود الترند: الترند السابق انكسر")
+alertcondition(tlBrkUp, "كسر خط الترند الهابط", "إغلاق فوق خط القمم الهابط")
+alertcondition(tlBrkDn, "كسر خط الترند الصاعد", "إغلاق تحت خط القيعان الصاعد")
