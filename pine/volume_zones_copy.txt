@@ -757,6 +757,67 @@ stUp = stD < 0
 stFlipBars = ta.barssince(stD != stD[1])
 plot(showSt ? stLine : na, "خط كسر الترند", stUp ? cStUp : cStDn, wSt, plot.style_linebr)
 
+// ═══════════════ Trendlines (reverse-engineered from the user's chart) ═══════════════
+// Pivots on the real highs / lows, tlLen bars each side. Red = latest pair of consecutive pivot highs where the
+// second is lower; green = latest pair of consecutive pivot lows where the second is higher. Drawn from the first
+// pivot and extended right. A close through a line marks it broken (faded or hidden); a new pair replaces it.
+G_TL = "خطوط الترند"
+showTL  = input.bool(true, "إظهار خطوط الترند", group=G_TL)
+tlLen   = input.int(2, "طول القمة / القاع (شموع يمين ويسار)", minval=1, maxval=20, group=G_TL)
+tlBrk   = input.string("باهت", "الخط بعد الكسر", options=["باهت", "مخفي", "بدون تغيير"], group=G_TL)
+cTlUp   = input.color(#00e676, "خط القيعان الصاعد", inline="tlc", group=G_TL)
+cTlDn   = input.color(#ff1744, "خط القمم الهابط", inline="tlc", group=G_TL)
+wTl     = input.int(2, "السماكة", minval=1, maxval=5, inline="tlc", group=G_TL)
+tlFade  = input.int(75, "شفافية الخط المكسور", minval=10, maxval=95, step=5, group=G_TL)
+
+tPh = ta.pivothigh(h_, tlLen, tlLen)
+tPl = ta.pivotlow(l_, tlLen, tlLen)
+var float tLastPh = na
+var int   tLastPhB = na
+var float tLastPl = na
+var int   tLastPlB = na
+var float dnA = na
+var int   dnAB = na
+var float dnS = na
+var bool  dnBroken = false
+var float upA = na
+var int   upAB = na
+var float upS = na
+var bool  upBroken = false
+if not na(tPh)
+    pb = bar_index - tlLen
+    if not na(tLastPh) and tPh < tLastPh
+        dnA := tLastPh
+        dnAB := tLastPhB
+        dnS := (tPh - tLastPh) / (pb - tLastPhB)
+        dnBroken := false
+    tLastPh := tPh
+    tLastPhB := pb
+if not na(tPl)
+    pb = bar_index - tlLen
+    if not na(tLastPl) and tPl > tLastPl
+        upA := tLastPl
+        upAB := tLastPlB
+        upS := (tPl - tLastPl) / (pb - tLastPlB)
+        upBroken := false
+    tLastPl := tPl
+    tLastPlB := pb
+dnNow = na(dnA) ? na : dnA + dnS * (bar_index - dnAB)
+upNow = na(upA) ? na : upA + upS * (bar_index - upAB)
+if not na(dnNow) and not dnBroken and c_ > dnNow
+    dnBroken := true
+if not na(upNow) and not upBroken and c_ < upNow
+    upBroken := true
+var line tlDnLine = na
+var line tlUpLine = na
+if barstate.islast
+    line.delete(tlDnLine)
+    line.delete(tlUpLine)
+    if showTL and not na(dnA) and not (dnBroken and tlBrk == "مخفي")
+        tlDnLine := line.new(dnAB, dnA, dnAB + 1, dnA + dnS, extend=extend.right, width=wTl, color=dnBroken and tlBrk == "باهت" ? fade(cTlDn, tlFade) : cTlDn)
+    if showTL and not na(upA) and not (upBroken and tlBrk == "مخفي")
+        tlUpLine := line.new(upAB, upA, upAB + 1, upA + upS, extend=extend.right, width=wTl, color=upBroken and tlBrk == "باهت" ? fade(cTlUp, tlFade) : cTlUp)
+
 // ═══════════════ Status panel (Arabic) ═══════════════
 // Only the readings that survived testing: trend, volume, the sideways range and its whale levels, and the two
 // signals kept on the chart (whale bounce, trend alert).
