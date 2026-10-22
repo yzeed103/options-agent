@@ -12,6 +12,8 @@ vaPct      = input.float(0.70, "نسبة منطقة القيمة", minval=0.5, m
 hvnMult    = input.float(1.5, "منطقة فوليوم عالي = أكبر من المتوسط بـ", minval=1.0, maxval=3.0, step=0.1, group="البروفايل")
 
 volMaLen   = input.int(20, "متوسط الفوليوم (عدد الشموع)", group="الإشارات")
+udLen      = input.int(50, "فوليوم الاتجاه: عدد الشموع", minval=10, maxval=200, tooltip="فوليوم الشموع الصاعدة ÷ فوليوم الشموع الهابطة. أكبر من 1 = الشراء أقوى", group="الإشارات")
+udBand     = input.float(0.05, "فوليوم الاتجاه: هامش الحياد", minval=0.0, maxval=0.5, step=0.05, tooltip="0.05 = بين 0.95 و 1.05 يعتبر محايد", group="الإشارات")
 weakRatio  = input.float(0.80, "فوليوم ضعيف إذا أقل من المتوسط بنسبة", minval=0.3, maxval=1.0, step=0.05, tooltip="0.80 = أقل من 80% من المتوسط", group="الإشارات")
 breakRatio = input.float(1.5, "فوليوم قوي إذا أكبر من المتوسط بنسبة", minval=1.0, maxval=5.0, step=0.1, tooltip="1.5 = مرة ونصف المتوسط", group="الإشارات")
 adxLen     = input.int(14, "فترة ADX", group="الإشارات")
@@ -124,6 +126,11 @@ strongVol = vr >= breakRatio
 [diP, diM, adxV] = ta.dmi(adxLen, adxLen)
 emaF = ta.ema(close, 20)
 emaS = ta.ema(close, 50)
+// up / down volume over the last udLen bars (tested: trend alerts with supporting volume did better in both halves)
+upVol = math.sum(close > open ? volume : 0.0, udLen)
+dnVol = math.sum(close < open ? volume : 0.0, udLen)
+udR   = dnVol > 0 ? upVol / dnVol : na
+udDir = na(udR) ? 0 : udR > 1 + udBand ? 1 : udR < 1 / (1 + udBand) ? -1 : 0
 trendDir = emaF > emaS and diP > diM ? 1 : emaF < emaS and diM > diP ? -1 : 0
 
 // ═══════════════ Rolling volume profile (bars 1..lookback, past only) ═══════════════
@@ -374,8 +381,9 @@ plot(showPdVA and timeframe.isintraday ? pdVAH : na, "أعلى منطقة قيم
 plot(showPdVA and timeframe.isintraday ? pdVAL : na, "أدنى منطقة قيمة الأمس", cPdVA, wPdVA, plot.style_stepline)
 plot(showPdVA and timeframe.isintraday ? pdPOC : na, "أعلى تداول أمس", cPdPoc, wPdPoc, plot.style_stepline)
 bgcolor(showTA and taDir == 1 ? cTaUp : showTA and taDir == -1 ? cTaDn : na, title="خلفية تنبيه الاتجاه")
-plotshape(showTA and taFire == 1, "تنبيه اتجاه صاعد", shape.labelup, location.belowbar, cTaLbl, text="اتجاه ↑", textcolor=cLblTxt, size=size.small)
-plotshape(showTA and taFire == -1, "تنبيه اتجاه هابط", shape.labeldown, location.abovebar, cTaLblDn, text="اتجاه ↓", textcolor=cLblTxt, size=size.small)
+// faded when the up/down volume points the other way
+plotshape(showTA and taFire == 1, "تنبيه اتجاه صاعد", shape.labelup, location.belowbar, udDir < 0 ? fade(cTaLbl, 65) : cTaLbl, text="اتجاه ↑", textcolor=cLblTxt, size=size.small)
+plotshape(showTA and taFire == -1, "تنبيه اتجاه هابط", shape.labeldown, location.abovebar, udDir > 0 ? fade(cTaLblDn, 65) : cTaLblDn, text="اتجاه ↓", textcolor=cLblTxt, size=size.small)
 alertcondition(taFire != 0, "تنبيه اتجاه", "ثبات السعر خارج منطقة قيمة الأمس مع اتجاه المتوسطات")
 
 // ═══════════════ Whale levels + whale bounce (UNDER TEST) ═══════════════
@@ -743,10 +751,13 @@ if barstate.islast
     tSub = (adxV < 20 ? "قوة ضعيفة" : adxV < adxStrong ? "قوة متوسطة" : "قوة عالية") + "\nADX " + str.tostring(adxV, "#")
     tMet = int(math.min(5, math.max(1, math.ceil(adxV / 10))))
     // --- volume
-    vTxt = weak ? "ضعيف" : vr >= 2.5 ? "قوي جدا" : strongVol ? "قوي" : "عادي"
-    vCol = weak ? cTblWeak : strongVol ? cTblUp : cTblTxt
-    vMet = int(math.min(5, math.max(1, math.round(vr * 1.5))))
-    vSub = "مقارنة بالمتوسط\n" + str.tostring(vr, "#.0") + "x"
+    // completed bars only, so the half-built current candle does not distort it
+    udP = udR[1]
+    udD = udDir[1]
+    vTxt = udD > 0 ? "داعم للصعود" : udD < 0 ? "داعم للهبوط" : "محايد"
+    vCol = udD > 0 ? cTblUp : udD < 0 ? cTblDn : cTblLbl
+    vMet = na(udP) ? 1 : int(math.min(5, math.max(1, math.round(math.abs(math.log(udP)) * 10) + 1)))
+    vSub = "شراء ÷ بيع " + (na(udP) ? "-" : str.tostring(udP, "#.00")) + "   |   آخر " + str.tostring(udLen) + " شمعة" + (trendDir != 0 and udD == -trendDir ? "\nعكس الترند" : "")
     // --- sideways range (daily)
     string rTxt = "لا توجد منطقة"
     string rSub = "-"
@@ -797,13 +808,15 @@ if barstate.islast
     else if showTA and taDir != 0
         vd := "اتجاه " + (taDir > 0 ? "صاعد" : "هابط") + ": ثبات " + (taDir > 0 ? "فوق" : "تحت") + " منطقة قيمة الأمس مع الترند. ينتهي بالعودة داخلها:\n" + fmt(taDir > 0 ? pdVAH : pdVAL)
         vdc := taDir > 0 ? cTaLbl : cTaLblDn
+        if udD == -taDir
+            vd := vd + "\nتنبيه: الفوليوم لا يدعمها"
     else
         vd := "لا توجد إشارة. أقرب خط حوت فوق وتحت السعر:\n▲ " + (na(wUp) ? "-" : fmt(wUp)) + "   |   ▼ " + (na(wDn) ? "-" : fmt(wDn))
 
     // --- draw (column 2 = label on the right, column 1 = value, column 0 = meter)
     table.cell(tbl, 2, 0, "مناطق الفوليوم", text_color=cTblTxt, text_size=tSz, text_halign=text.align_right)
     table.cell(tbl, 0, 0, syminfo.ticker + " · " + timeframe.period + " · " + fmt(close), text_color=cTblLbl, text_size=tSz, text_halign=text.align_left)
-    rowsL = array.from("الاتجاه", "الفوليوم", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة")
+    rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة")
     vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub)
     cols  = array.from(tCol, vCol, rCol, cWhLv, cWhLv, pCol, sCol)
     for i = 0 to 6
