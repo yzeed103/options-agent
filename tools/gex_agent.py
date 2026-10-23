@@ -173,6 +173,9 @@ def main() -> None:
     ap.add_argument("--every", type=int, default=300, help="seconds between polls in session (04:00-20:00 ET)")
     ap.add_argument("--idle", type=int, default=600, help="seconds between polls outside the session")
     ap.add_argument("--confirm", type=int, default=2, help="polls an open-interest change must survive")
+    ap.add_argument("--fill", type=int, default=15,
+                    help="seconds between fill passes: any Volume Zones copy whose box is empty or out of date gets "
+                         "the last block (a newly added indicator is filled within this time); 0 = off")
     ap.add_argument("--live-gamma", action="store_true",
                     help="also update the gamma levels during the day (measured: ~67 pushes a day)")
     ap.add_argument("--once", action="store_true")
@@ -218,7 +221,28 @@ def main() -> None:
             log.warning("could not save state")
         if a.once:
             return
-        time.sleep(RETRY if not ok else a.every if in_session(datetime.now(NY)) else a.idle)
+        wait = RETRY if not ok else a.every if in_session(datetime.now(NY)) else a.idle
+        end = time.time() + wait
+        while True:                     # between polls: fill new or emptied copies with the block already pushed
+            left = end - time.time()
+            if left <= 0:
+                break
+            time.sleep(min(a.fill, left) if a.fill > 0 else left)
+            if a.fill > 0 and time.time() < end:
+                fill(w, a)
+
+
+def fill(w: Watch, a) -> None:
+    """Write the last good block wherever a copy of the indicator has an empty or different box. GEXRadar is not
+    asked; only TradingView. Quiet unless something was filled."""
+    if not w.applied:
+        return
+    try:
+        tot = push(w.block(), a.port)
+    except Exception:  # noqa: BLE001 - TradingView closed: the next poll reports it
+        return
+    if tot["set"]:
+        log.info("fill: %d copies filled (tabs %d, studies %d)", tot["set"], tot["tabs"], tot["studies"])
 
 
 if __name__ == "__main__":
