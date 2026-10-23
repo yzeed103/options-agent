@@ -39,7 +39,7 @@ def get(url: str, timeout: float = 20, tries: int = 4):
             time.sleep(10 * (i + 1))      # 10 + 20 + 30 s: spans the limiter's one-minute window
 
 
-def profile_line(sym: str, strikes: list[dict], spot: float, span: float = 0.05) -> str | None:
+def profile_line(sym: str, strikes: list[dict], spot: float, span: float = 0.03) -> str | None:
     """'MSFT#G: 505=-1.2 507.5=-3.4 ...': net gamma (millions) per strike within +-span of price, for the indicator's
     gamma strip. Old indicator versions ignore it (the symbol 'MSFT#G' never matches a chart)."""
     pts = sorted((s["strike"], s.get("net_gex") or 0.0) for s in strikes

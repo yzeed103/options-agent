@@ -806,9 +806,9 @@ cGxCWoi = input.color(#69f0ae, "جدار الكول الثابت", tooltip="CWOI
 cGxPWoi = input.color(#ff8a80, "جدار البوت الثابت", tooltip="PWOI في الكتلة. السترايك اللي عليه أكبر عقود بوت مفتوحة تحت السعر وقت توليد الكتلة." + GX_OIW + GX_NOTE, group=G_GX)
 wGx    = input.int(2, "السماكة", minval=1, maxval=5, group=G_GX)
 gexShape = input.string("شريط", "شكل المستويات", options=["شريط", "صناديق", "خطوط"], tooltip="شريط: جاما كل سترايك كخطوط رفيعة على يمين آخر شمعة (أخضر = الكول أقوى، أحمر = البوت أقوى، الطول = الحجم) مع خط انقلاب القاما فقط، فتبقى الشموع نظيفة. يحتاج سطر السهم الذي يكتبه وكيل GEX؛ إن لم يوجد تُرسم الصناديق. صناديق: منطقة شفافة حول كل مستوى. خطوط: خط لكل مستوى", group=G_GX)
-gxStripOff = input.int(5, "بُعد شريط القاما", minval=0, maxval=300, inline="gxs", tooltip="بعد البروفايل الأيمن إن كان ظاهرًا، وإلا بعد آخر شمعة", group=G_GX)
-gxStripW   = input.int(30, "عرضه (شموع)", minval=5, maxval=200, inline="gxs", group=G_GX)
-gxStripTop = input.int(3, "عدد السترايكات المكتوب حجمها", minval=0, maxval=10, tooltip="أكبر السترايكات جاما يُكتب بجانبها السعر والحجم بالمليون", group=G_GX)
+gxStripOff = input.int(3, "بُعد شريط القاما", minval=0, maxval=300, inline="gxs", tooltip="بعد آخر شمعة. إن تداخل مع البروفايل الأيمن يُنقل بعده", group=G_GX)
+gxStripW   = input.int(40, "عرضه (شموع)", minval=15, maxval=200, inline="gxs", group=G_GX)
+gxStripTop = input.int(5, "عدد السترايكات المبرزة", minval=0, maxval=10, tooltip="كل سترايك يُكتب بجانبه حجمه بالمليون؛ أكبرها يُكتب بخط أوضح", group=G_GX)
 gexBand  = input.float(0.10, "عرض الصندوق (ATR يومي)", minval=0.02, maxval=1.0, step=0.02, tooltip="0.10 = عُشر حركة يوم. إذا لم يتوفر ATR اليومي يُستخدم 0.4% من السعر", group=G_GX)
 gexFill  = input.int(75, "شفافية تعبئة الصندوق", minval=0, maxval=100, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان", group=G_GX)
 gexBord  = input.int(30, "شفافية حدود الصندوق", minval=0, maxval=100, step=5, group=G_GX)
@@ -913,39 +913,44 @@ if barstate.islast
     if gxStrip
         // minimal strip right of the last bar: a thin line per strike, length = |net gamma| / largest, green where calls
         // dominate (net > 0, dealers calm the move), red where puts dominate; a dot at the tip; the biggest strikes labelled
+        // design 4 (approved 2026-10-23): thick lollipops, square-root length (small strikes stay visible), every strike
+        // labelled with its size, the biggest brighter, the flip as a soft band
         float gpMax = 0.0
         for v in gpV
             gpMax := math.max(gpMax, math.abs(v))
-        // starts right of the volume profile when it is shown, so the two never overlap
-        int gxL0 = bar_index + (showSplit ? vpOffset + vpWidth : 0) + gxStripOff
+        // right next to the candles; after the volume profile only if the two would overlap
+        bool gxClash = showSplit and vpOffset < gxStripOff + gxStripW + 3
+        int gxL0 = bar_index + (gxClash ? vpOffset + vpWidth : 0) + gxStripOff
         int gxR = gxL0 + gxStripW
-        // order by |value| for the labels
         gpAbs = array.new_float()
         for v in gpV
             array.push(gpAbs, math.abs(v))
         gpTop = array.sort_indices(gpAbs, order.descending)
+        nTop = math.min(gxStripTop, array.size(gpTop))
+        gpIsTop = array.new_bool(array.size(gpK), false)
+        if nTop > 0
+            for j = 0 to nTop - 1
+                array.set(gpIsTop, array.get(gpTop, j), true)
         for j = 0 to array.size(gpK) - 1
             k = array.get(gpK, j)
             v = array.get(gpV, j)
             if gpMax > 0 and v != 0
                 gc = v > 0 ? cGxCW : cGxPW
-                int x1 = gxR - math.max(1, int(math.round(gxStripW * math.abs(v) / gpMax)))
-                array.push(gxLines, line.new(x1, k, gxR, k, color=gc, width=2))
-                array.push(gxLines, line.new(x1, k, x1 + 1, k, color=gc, width=6))       // the dot at the tip
-        int nTop = math.min(gxStripTop, array.size(gpTop))
-        if nTop > 0
-            for j = 0 to nTop - 1
-                gtj = array.get(gpTop, j)
-                k = array.get(gpK, gtj)
-                v = array.get(gpV, gtj)
-                if gpMax > 0 and v != 0
-                    int x1 = gxR - math.max(1, int(math.round(gxStripW * math.abs(v) / gpMax)))
-                    array.push(gxLbls, label.new(x1 - 1, k, str.tostring(k) + "  " + (v > 0 ? "+" : "") + str.tostring(v, "#.#") + "M",
-                         style=label.style_label_right, color=color.new(color.black, 100), textcolor=v > 0 ? cGxCW : cGxPW, size=size.small))
+                int x1 = gxR - math.max(1, int(math.round((gxStripW - 10) * math.sqrt(math.abs(v) / gpMax))))
+                array.push(gxLines, line.new(x1, k, gxR, k, color=gc, width=4))
+                array.push(gxLines, line.new(x1, k, x1 + 1, k, color=gc, width=9))       // the dot at the tip
+                bool big = array.get(gpIsTop, j)
+                array.push(gxLbls, label.new(x1 - 1, k, str.tostring(k) + "  " + (v > 0 ? "+" : "") + str.tostring(v, "#.#") + "M",
+                     style=label.style_label_right, color=color.new(color.black, 100),
+                     textcolor=big ? color.new(color.white, 10) : color.new(color.gray, 20), size=big ? size.small : size.tiny))
         float fl = array.get(gxV, 2)
         if not na(fl)
-            array.push(gxLines, line.new(gxT0, fl, time, fl, xloc=xloc.bar_time, extend=extend.right, color=cGxFl, style=line.style_dashed, width=1))
-            array.push(gxLbls, label.new(gxR, fl, "انقلاب القاما " + str.tostring(fl, format.mintick), style=label.style_label_left,
+            // soft band: a third of the strike spacing tall
+            float gpStep = array.size(gpK) > 1 ? math.abs(array.get(gpK, 1) - array.get(gpK, 0)) : c_ * 0.005
+            float hb = 0.15 * gpStep
+            array.push(gxBoxA, box.new(gxT0, fl + hb, time, fl - hb, xloc=xloc.bar_time, extend=extend.right,
+                 border_color=color.new(cGxFl, 100), bgcolor=color.new(cGxFl, 75)))
+            array.push(gxLbls, label.new(gxL0, fl, "انقلاب القاما " + str.tostring(fl, format.mintick), style=label.style_label_left,
                  color=color.new(color.black, 100), textcolor=cGxFl, size=size.small))
     if gxOn and not gxStrip
         gxCols = array.from(cGxCW, cGxPW, cGxFl, cGxPin, cGxDf, cGxMoi, cGxCWoi, cGxPWoi)
