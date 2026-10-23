@@ -1594,13 +1594,15 @@ if showSplit and barstate.islast and ready
                 array.push(splitBoxes, box.new(x0 + u, pLo + (r + 1) * step, x0 + u + d, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=fade(cdn, vpAlpha)))
 
 // ═══════════════ جدول أسهم الجدران ═══════════════
+// Badges: one cell per symbol, its colour is its state (green = call wall, red = put wall; solid + arrow = broke
+// through, dark = at the wall, grey = between). Hover a cell for the state in words and the gamma side.
 wtP = wtPos == "أعلى اليمين" ? position.top_right : wtPos == "أعلى اليسار" ? position.top_left : wtPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
-// no table background: the optional top gap row stays transparent; every cell paints its own background
-// sized for the widest case of the chosen shape; each bar fills only what it needs
+// sized for the widest case of the chosen shape; each bar fills only what it needs. No table background: the
+// optional top gap row stays transparent; every cell paints its own.
 wtGMax = wtLay == "بالعرض (صفّان)" ? int(math.ceil(wtMax / 2)) : wtLay == "بالطول (عمود)" ? 1 : wtCols
-var table wtTbl = table.new(wtP, wtGMax * 3, 3 + int(math.ceil(wtMax / wtGMax)), border_color=cTblBd, border_width=1)
+var table wtTbl = table.new(wtP, wtGMax, 3 + int(math.ceil(wtMax / wtGMax)), border_color=cTblBd, border_width=1)
 if barstate.islast and wtShow and showGex and array.size(wtSym) > 0
-    table.clear(wtTbl, 0, 0, wtGMax * 3 - 1, 2 + int(math.ceil(wtMax / wtGMax)))
+    table.clear(wtTbl, 0, 0, wtGMax - 1, 2 + int(math.ceil(wtMax / wtGMax)))
     wSz = wtSize == "عادي" ? size.normal : wtSize == "صغير" ? size.small : size.tiny
     meW = gxSym(syminfo.ticker)
     // which symbols: in the agent's order (broke out, at a wall, between), optionally the first two kinds only
@@ -1614,24 +1616,26 @@ if barstate.islast and wtShow and showGex and array.size(wtSym) > 0
     int r0 = (wtP == position.top_right or wtP == position.top_left) and wtGap > 0 ? 1 : 0
     if r0 == 1
         table.cell(wtTbl, 0, 0, "", height=wtGap, bgcolor=color.new(color.black, 100))
-        table.merge_cells(wtTbl, 0, 0, nG * 3 - 1, 0)
-    table.cell(wtTbl, 0, r0, "أسهم الجدران  " + array.get(wtT, 0) + "  (" + str.tostring(nW) + ")", text_color=cTblLbl, text_size=wSz, bgcolor=cTblBg)
-    table.merge_cells(wtTbl, 0, r0, nG * 3 - 1, r0)
+        table.merge_cells(wtTbl, 0, 0, nG - 1, 0)
+    string wtTitle = "أسهم الجدران  " + array.get(wtT, 0) + "  (" + str.tostring(nW) + ")"
+    table.cell(wtTbl, 0, r0, nG >= 4 ? wtTitle + "   أخضر=كول  أحمر=بوت  غامق=عنده  ▲▼=اخترق" : wtTitle, text_color=cTblLbl, text_size=wSz, bgcolor=cTblBg,
+               tooltip="أخضر = جدار الكول، أحمر = جدار البوت.\nفاقع مع ▲ أو ▼ = السعر اخترق الجدار. غامق = قريب منه (أقل من 0.5%). رمادي = بين الجدارين.\nمرّر الماوس على أي سهم للتفاصيل")
+    if nG > 1
+        table.merge_cells(wtTbl, 0, r0, nG - 1, r0)
     if nW > 0
         nRows = int(math.ceil(nW / nG))
         for k = 0 to nW - 1
             i = array.get(wIdx, k)
-            c0 = int(math.floor(k / nRows)) * 3
-            r = r0 + 1 + k % nRows
             st_ = array.get(wtSt, i)
             g_ = array.get(wtG, i)
-            sTxt = st_ == 1 ? "فوق الكول ▲" : st_ == 2 ? "عند الكول" : st_ == 3 ? "بين الجدارين" : st_ == 4 ? "عند البوت" : "تحت البوت ▼"
-            // white text on the wall's colour (solid = broke out, faint = at the wall): readable on a dark chart
-            sBg = st_ == 1 ? color.new(cGxCW, 15) : st_ == 2 ? color.new(cGxCW, 60) : st_ == 4 ? color.new(cGxPW, 60) : st_ == 5 ? color.new(cGxPW, 15) : cTblBg
-            wBg = array.get(wtSym, i) == meW ? #434651 : cTblBg
-            table.cell(wtTbl, c0, r, array.get(wtSym, i), text_color=color.white, text_size=wSz, bgcolor=wBg)
-            table.cell(wtTbl, c0 + 1, r, sTxt, text_color=st_ == 3 ? cTblLbl : color.white, text_size=wSz, bgcolor=sBg)
-            table.cell(wtTbl, c0 + 2, r, g_ == "+" ? "+" : g_ == "-" ? "−" : "", text_color=g_ == "+" ? cGxFl : #ffa726, text_size=wSz, bgcolor=wBg)
+            sym_ = array.get(wtSym, i)
+            bool brk = st_ == 1 or st_ == 5
+            bgc = st_ == 1 ? cGxCW : st_ == 2 ? color.new(cGxCW, 60) : st_ == 4 ? color.new(cGxPW, 60) : st_ == 5 ? cGxPW : cTblBg
+            txt = (sym_ == meW ? "● " : "") + sym_ + (st_ == 1 ? " ▲" : st_ == 5 ? " ▼" : "")
+            tip = (st_ == 1 ? "فوق جدار الكول (اخترقه)" : st_ == 2 ? "عند جدار الكول" : st_ == 3 ? "بين الجدارين" : st_ == 4 ? "عند جدار البوت" : "تحت جدار البوت (اخترقه)") +
+                  (g_ == "+" ? "\nالقاما +: فوق الانقلاب، الحركة تهدأ عادة" : g_ == "-" ? "\nالقاما −: تحت الانقلاب، الحركة تتسارع عادة" : "")
+            table.cell(wtTbl, int(math.floor(k / nRows)), r0 + 1 + k % nRows, txt, text_color=st_ == 3 ? cTblLbl : color.white, text_size=wSz,
+                       bgcolor=bgc, tooltip=tip, text_formatting=brk or sym_ == meW ? text.format_bold : text.format_none)
 
 // ═══════════════ المتوسطات المتحركة ═══════════════
 // Same as TradingView's built-in "MA ribbon" plus Hull (HMA): four averages, each with on/off, type, source, length and color, on the

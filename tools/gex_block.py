@@ -69,7 +69,7 @@ def build(base: str, symbols: list[str] | None, basis: str, profiles: dict | Non
         st = d.get("strikes") or []
         rows[sym]["CWOI"], rows[sym]["PWOI"] = oi_walls(st, d.get("spot") or 0.0)
         if spots is not None and d.get("spot"):
-            spots[sym] = float(d["spot"])
+            spots[sym.replace("^", "")] = float(d["spot"])      # same key as the block rows (^SPX -> SPX)
         if profiles is not None:
             pl = profile_line(sym, st, d.get("spot") or 0.0)
             if pl:
