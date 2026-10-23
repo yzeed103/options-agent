@@ -15,3 +15,7 @@ At least 2 years of regular-trading-hours bars are needed. Record the source, da
 Previous status (before the upload): The build environment could not reach any data provider (Polygon, Alpaca, Tiingo, Databento,
 Yahoo, Stooq, Alpha Vantage were all blocked by the network policy), and the only reachable source
 (QuantConnect Lean sample) has just 5 days of SPY minute data from October 2013.
+- `<SYM>_5m_alpaca.csv` (SPY QQQ COST INTU JNJ UNH HOOD): Alpaca IEX feed, 5-minute, regular hours, split-adjusted
+  (not dividend-adjusted), 2025-04-01 to 2026-10-22, ~30k bars each (COST / INTU fewer: IEX had no trade in some bars).
+  Volume is IEX-only. Fetched with `tools/fetch_alpaca_5m.py`. Checked against the TradingView SPY export: same bars,
+  5m return correlation 0.994, constant per-day price ratio (TradingView adjusts for dividends).

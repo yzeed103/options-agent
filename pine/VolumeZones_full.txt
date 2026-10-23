@@ -920,6 +920,8 @@ alertcondition(gxCross, "عبور مستوى خيارات", "السعر عبر �
 // 2026-10-23 "heavier" lines (the user found them jumping): 5-bar pivots and a line that HOLDS until price closes
 // through it. Measured on 7 symbols, 15m (reports/trendline_stability.py): 3.5 -> 0.49 line changes a day, median
 // life 12 -> 44 bars, lines touched 2+ times before the break 9% -> 12%. 2 bars + hold off = the original behaviour.
+// Backtest (reports/trendline_backtest.py, 7 stocks, 5m + 15m, 36 settings, held-out last 40%): NO setting's breaks
+// beat random entries out of sample (best p = 0.25, gross edge ~0). The lines are a picture of structure, not a signal.
 G_TL = "خطوط الترند"
 showTL  = input.bool(true, "إظهار خطوط الترند", group=G_TL)
 tlLen   = input.int(5, "طول القمة / القاع (شموع يمين ويسار)", minval=1, maxval=20, tooltip="أكبر = خطوط أثقل وأقل تغيرا. كان 2", group=G_TL)
