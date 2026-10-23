@@ -1,0 +1,107 @@
+[
+ {
+  "g": 1.0,
+  "n": 67,
+  "lag": 9.91,
+  "overshoot": 0.174,
+  "delay": 9.6331,
+  "flips": 4.029,
+  "noise": 0.0526,
+  "vs_hma": {
+   "overshoot": 0.0,
+   "delay": 0.0,
+   "flips": 0.0,
+   "noise": 0.0
+  }
+ },
+ {
+  "g": 0.95,
+  "n": 64,
+  "lag": 10.11,
+  "overshoot": 0.1205,
+  "delay": 9.4784,
+  "flips": 4.1183,
+  "noise": 0.0521,
+  "vs_hma": {
+   "overshoot": 0.307,
+   "delay": 0.016,
+   "flips": -0.022,
+   "noise": 0.01
+  }
+ },
+ {
+  "g": 0.9,
+  "n": 60,
+  "lag": 10.0,
+  "overshoot": 0.0858,
+  "delay": 9.0403,
+  "flips": 4.2773,
+  "noise": 0.0537,
+  "vs_hma": {
+   "overshoot": 0.507,
+   "delay": 0.062,
+   "flips": -0.062,
+   "noise": -0.021
+  }
+ },
+ {
+  "g": 0.85,
+  "n": 58,
+  "lag": 10.08,
+  "overshoot": 0.0625,
+  "delay": 8.88,
+  "flips": 4.3519,
+  "noise": 0.0538,
+  "vs_hma": {
+   "overshoot": 0.641,
+   "delay": 0.078,
+   "flips": -0.08,
+   "noise": -0.023
+  }
+ },
+ {
+  "g": 0.8,
+  "n": 57,
+  "lag": 10.07,
+  "overshoot": 0.0501,
+  "delay": 8.6993,
+  "flips": 4.4336,
+  "noise": 0.0543,
+  "vs_hma": {
+   "overshoot": 0.712,
+   "delay": 0.097,
+   "flips": -0.1,
+   "noise": -0.032
+  }
+ },
+ {
+  "g": 0.7,
+  "n": 54,
+  "lag": 10.07,
+  "overshoot": 0.0261,
+  "delay": 8.2873,
+  "flips": 4.6738,
+  "noise": 0.0558,
+  "vs_hma": {
+   "overshoot": 0.85,
+   "delay": 0.14,
+   "flips": -0.16,
+   "noise": -0.061
+  }
+ },
+ {
+  "g": 0.6,
+  "n": 50,
+  "lag": 10.05,
+  "overshoot": 0.016,
+  "delay": 7.9482,
+  "flips": 4.8564,
+  "noise": 0.0573,
+  "vs_hma": {
+   "overshoot": 0.908,
+   "delay": 0.175,
+   "flips": -0.205,
+   "noise": -0.089
+  }
+ }
+]

@@ -68,3 +68,9 @@ four** timeframes and better on at least two.
 
 ## Changes after writing
 (none yet)
+- 2026-10-24, after the runs (nothing above changed): (a) on the planted series the overshoot of every damped
+  candidate was exactly 0 for most shape values, so the step-1 rule "lowest overshoot" picked the most damped grid
+  point by tie-break (DHMA g 0.6, HOLT phi 0.8); the planted V was too easy to separate them. (b) The daily overshoot
+  interval is NaN: only 89 labelled reversals, and bootstrap draws with zero reversals divide by zero. (c) An
+  exploratory sweep of g on real 5m data was run **after** the verdict (tools/hma_successor_sweep.py); it is reported
+  as exploratory, not as a result.
