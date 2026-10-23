@@ -1,0 +1,10 @@
+tf   setting                 on screen  distance ATR  touches/100  fakeouts%
+5m   fixed 15 (current)            58%          1.18          9.3       35.6
+5m   adaptive 15-30-60             89%          1.44          7.7       44.2
+5m   adaptive 10-20-40-80          91%          1.45          7.7       46.7
+15m  fixed 15 (current)            58%          1.01         12.5       34.6
+15m  adaptive 15-30-60             90%          1.33          9.8       45.4
+15m  adaptive 10-20-40-80          92%          1.31          9.7       47.2
+1h   fixed 15 (current)            62%          1.26          9.3       32.4
+1h   adaptive 15-30-60             91%          1.43          8.2       41.6
+1h   adaptive 10-20-40-80          92%          1.41          8.4       44.0

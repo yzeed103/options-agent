@@ -984,6 +984,7 @@ bool tlBrkDnL = not na(upNow) and c_ < upNow and c_[1] >= upNow - upS
 tlMode = input.string("صغير", "نوع خطوط الترند", options=["صغير", "يومي", "ممتد"], tooltip="صغير: الترندات الصغيرة من آخر شموع قليلة، تتحدث كل شمعة (الأفضل في القياس لصيد الموجات الصغيرة). يومي: من قمم وقيعان اليوم كله. ممتد: الخطوط الطويلة الممتدة لليمين", group=G_TL)
 tsLen  = input.int(1, "الترند الصغير: طول القمة / القاع", minval=1, maxval=5, tooltip="مقيس على 7 أسهم 5د و15د: 1 مع نافذة 15 شمعة هو الأفضل", group=G_TL)
 tsWin  = input.int(15, "الترند الصغير: عدد الشموع الأخيرة", minval=6, maxval=60, tooltip="أقل = ترندات أصغر وأقرب للسعر. أكثر = خطوط تظهر وقتا أطول", group=G_TL)
+tsWiden = input.int(3, "الترند الصغير: توسيع تلقائي (مرات)", minval=1, maxval=4, tooltip="إذا ما فيه خط في آخر N شمعة يجرّب 2N ثم 4N. مقيس على 5د و15د وساعة: الخط يظهر نحو 90% من الوقت بدل 58%. 1 = بدون توسيع", group=G_TL)
 tlExt  = input.int(5, "امتداد الخط يمين (شموع) للصغير واليومي", minval=0, maxval=50, group=G_TL)
 dailyTL = tlMode == "يومي" and timeframe.isintraday
 var int[]   dHb = array.new_int()
@@ -992,6 +993,13 @@ var int[]   dLb = array.new_int()
 var float[] dLv = array.new_float()
 var float[] dLn = array.new_float(6, na)     // red: anchor bar, anchor price, slope | green: the same
 var int dSess = 0
+// closes kept in an array so the line functions read no series history: TradingView's compiler warned that a
+// function with c_[...] called inside an if can be inconsistent. TL_KEEP bars cover a 23-hour 1-minute session.
+TL_KEEP = 3000
+var float[] tlCl = array.new_float()
+array.push(tlCl, c_)
+if array.size(tlCl) > TL_KEEP
+    array.shift(tlCl)
 var int dHStart = 0
 var int dLStart = 0
 if newDay
@@ -1028,8 +1036,11 @@ pickTL(int[] bs, float[] vs, bool hi) =>
                 float s = (bV - aV) / (bB - aB)
                 bool valid = true
                 int j = aB + 1
+                int nCl = array.size(tlCl)
+                if bar_index - aB >= nCl
+                    valid := false        // anchor older than the kept closes: no line
                 while j <= bar_index and valid
-                    float cj = c_[bar_index - j]
+                    float cj = array.get(tlCl, nCl - 1 - (bar_index - j))
                     float yj = aV + s * (j - aB)
                     bool through = hi ? cj > yj : cj < yj
                     if through
@@ -1080,6 +1091,31 @@ if dailyTL and not dBrkDn and not na(tPl) and bar_index - tlLen >= math.max(dSes
 // window 15 ranked #1 on both timeframes and both halves of the dates; 15m: on screen 58% of bars (daily 22%),
 // 1.0 ATR from price, 12.5 touches per 100 bars.
 smallTL = tlMode == "صغير"
+// adaptive window: the last tsWin bars; when no line fits, 2x, then 4x ... (tsWiden tries).
+// reports/small_trend_adaptive.py: on screen 89-91% of bars on 5m / 15m / 1h (fixed 15: 58-62%), 1.3-1.4 ATR from price.
+pickWin(int[] bs, float[] vs, bool hi) =>
+    float rb = na
+    float rv = na
+    float rs = na
+    int w = tsWin
+    int tries = 0
+    while tries < tsWiden and na(rb)
+        int lo = bar_index - w + 1
+        int n = array.size(bs)
+        int st = n
+        if n > 0
+            for q = 0 to n - 1
+                if array.get(bs, q) >= lo
+                    st := q
+                    break
+        if n - st >= 2
+            [a1, a2, a3] = pickTL(array.slice(bs, st, n), array.slice(vs, st, n), hi)
+            rb := a1
+            rv := a2
+            rs := a3
+        w := w * 2
+        tries += 1
+    [rb, rv, rs]
 tsPh = ta.pivothigh(h_, tsLen, tsLen)
 tsPl = ta.pivotlow(l_, tsLen, tsLen)
 var int[]   sHb = array.new_int()
@@ -1099,7 +1135,7 @@ if smallTL
         array.push(sLb, bar_index - tsLen)
         array.push(sLv, tsPl)
     // drop pivots that left the window (size test and array.get kept in separate ifs - Pine pitfall)
-    int oldest = bar_index - tsWin + 1
+    int oldest = bar_index - tsWin * int(math.pow(2, tsWiden - 1)) + 1
     bool more = true
     while more
         more := false
@@ -1116,11 +1152,11 @@ if smallTL
                 array.shift(sLb)
                 array.shift(sLv)
                 more := true
-    [srb, srv, srs] = pickTL(sHb, sHv, true)
+    [srb, srv, srs] = pickWin(sHb, sHv, true)
     array.set(sLn, 0, srb)
     array.set(sLn, 1, srv)
     array.set(sLn, 2, srs)
-    [sgb, sgv, sgs] = pickTL(sLb, sLv, false)
+    [sgb, sgv, sgs] = pickWin(sLb, sLv, false)
     array.set(sLn, 3, sgb)
     array.set(sLn, 4, sgv)
     array.set(sLn, 5, sgs)

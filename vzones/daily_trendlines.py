@@ -27,9 +27,10 @@ def _pivots(x: np.ndarray, k: int, high: bool) -> np.ndarray:
     return out
 
 
-def small_lines(df: pd.DataFrame, k: int = 2, window: int = 20) -> dict:
+def small_lines(df: pd.DataFrame, k: int = 2, window: int = 20, widen: int = 1) -> dict:
     """SMALL trends: the same line rule as daily_lines, but over the last `window` bars only (rolling), re-picked every
-    bar, no session reset and no waiting after a break - lines for every small swing.
+    bar, no session reset and no waiting after a break - lines for every small swing. widen=n: when no line fits,
+    retry with 2x, 4x ... the window (n tries) so a line is on screen far more often.
 
     red   : A = highest pivot high among pivots of the last `window` bars; B = most recent later lower pivot high
             with no close above the line A->B since A.  green mirrored.
@@ -48,21 +49,32 @@ def small_lines(df: pd.DataFrame, k: int = 2, window: int = 20) -> dict:
                     out["break_" + side][i] = True
                     ln = None
             out[side][i] = ln
-            lo = max(0, i - window + 1)
-            cand = [p for p in range(lo, i - k + 1) if piv[p]]
             best = None
-            if len(cand) >= 2:
-                a = max(cand, key=lambda p: x[p]) if sgn == 1 else min(cand, key=lambda p: x[p])
-                for b in reversed([p for p in cand if p > a]):
-                    if (sgn == 1 and x[b] >= x[a]) or (sgn == -1 and x[b] <= x[a]):
-                        continue
-                    s = (x[b] - x[a]) / (b - a)
-                    js = np.arange(a + 1, i + 1)
-                    if (sgn == 1 and (c[js] <= x[a] + s * (js - a)).all()) or \
-                       (sgn == -1 and (c[js] >= x[a] + s * (js - a)).all()):
-                        best = (a, x[a], s); break
+            w = window
+            for _ in range(widen):          # adaptive: no line in the last `window` bars -> try 2x, 4x ...
+                lo = max(0, i - w + 1)
+                cand = [p for p in range(lo, i - k + 1) if piv[p]]
+                best = _pick(cand, x, c, i, sgn)
+                if best is not None:
+                    break
+                w *= 2
             line[side] = best
     return out
+
+
+def _pick(cand, x, c, i, sgn):
+    """Line from the extreme pivot to the most recent later pivot on the trend side with no close through it."""
+    if len(cand) < 2:
+        return None
+    a = max(cand, key=lambda p: x[p]) if sgn == 1 else min(cand, key=lambda p: x[p])
+    for b in reversed([p for p in cand if p > a]):
+        if (sgn == 1 and x[b] >= x[a]) or (sgn == -1 and x[b] <= x[a]):
+            continue
+        s = (x[b] - x[a]) / (b - a)
+        js = np.arange(a + 1, i + 1)
+        if (sgn == 1 and (c[js] <= x[a] + s * (js - a)).all()) or            (sgn == -1 and (c[js] >= x[a] + s * (js - a)).all()):
+            return (a, x[a], s)
+    return None
 
 
 def daily_lines(df: pd.DataFrame, k: int = 2) -> dict:
