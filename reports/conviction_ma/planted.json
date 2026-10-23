@@ -1,0 +1,56 @@
+{
+ "matched": {
+  "cma_lag": 3.4704667497186783,
+  "ema_len": 8,
+  "ema_lag": 3.5
+ },
+ "table": {
+  "CMA-A": {
+   "side_flips": 26.281,
+   "delay_up": 2.0,
+   "delay_down": 0.0,
+   "dent": 0.143,
+   "lag": 3.527
+  },
+  "CMA-B": {
+   "side_flips": 24.722,
+   "delay_up": 2.0,
+   "delay_down": 0.0,
+   "dent": 0.129,
+   "lag": 7.242
+  },
+  "CMA-C": {
+   "side_flips": 25.167,
+   "delay_up": 3.0,
+   "delay_down": 0.0,
+   "dent": 0.111,
+   "lag": 7.463
+  },
+  "EMA": {
+   "side_flips": 19.376,
+   "delay_up": 3.0,
+   "delay_down": 1.0,
+   "dent": 0.16,
+   "lag": 3.5
+  },
+  "StreakEMA": {
+   "side_flips": 13.14,
+   "delay_up": 3.0,
+   "delay_down": 0.0,
+   "dent": 0.086,
+   "lag": 10.943
+  }
+ },
+ "gate": {
+  "fewer_false_flips_share": -0.36980425399252725,
+  "lo": -0.3835332590423395,
+  "hi": -0.3555188166356681,
+  "lag_within_10pct": true,
+  "pass": false
+ },
+ "noise_test": {
+  "cma_commit": 0.7189066666666668,
+  "ema_commit": 0.8838466666666668,
+  "pass": true
+ }
+}

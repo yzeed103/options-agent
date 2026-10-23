@@ -1,0 +1,13 @@
+EMA 2 trend lag 1.02 flips 29.48
+EMA 5 trend lag 2.58 flips 22.05
+EMA 8 trend lag 4.17 flips 19.14
+EMA 14 trend lag 7.41 flips 17.34
+EMA 20 trend lag 10.48 flips 17.03
+{'law': 'A', 'g': 0.3, 'keep': 0.6, 'p': 1.0} trend lag 4.22 flips 26.18 | EMA(8) lag 4.17 flips 19.14 | fewer -37%
+{'law': 'A', 'g': 0.15, 'keep': 0.6, 'p': 2.0} trend lag 5.74 flips 24.08 | EMA(11) lag 5.80 flips 17.93 | fewer -34%
+{'law': 'A', 'g': 0.15, 'keep': 0.4, 'p': 2.0} trend lag 6.06 flips 24.64 | EMA(11) lag 5.80 flips 17.93 | fewer -37%
+{'law': 'A', 'g': 0.15, 'keep': 0.6, 'p': 1.0} trend lag 4.93 flips 25.43 | EMA(9) lag 4.72 flips 18.60 | fewer -37%
+{'law': 'A', 'g': 0.15, 'keep': 0.4, 'p': 1.0} trend lag 5.36 flips 25.71 | EMA(10) lag 5.26 flips 18.34 | fewer -40%
+{'law': 'B', 'g': 0.3, 'keep': 0.6, 'p': 1.0} trend lag 4.69 flips 24.81 | EMA(9) lag 4.72 flips 18.60 | fewer -33%
+{'law': 'C', 'g': 0.3, 'keep': 0.6, 'p': 1.0} trend lag 7.42 flips 25.19 | EMA(14) lag 7.41 flips 17.34 | fewer -45%
+StreakEMA trend lag 7.76 flips 13.25 | EMA(15) flips 17.26

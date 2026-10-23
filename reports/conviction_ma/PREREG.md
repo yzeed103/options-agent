@@ -78,4 +78,13 @@ numba is not installed, so the grid is kept small.)
 - **worse**: otherwise.
 
 ## Changes after writing
-(none yet)
+- 2026-10-23, measurement fix (found before any tuning, on the planted test): the pre-registered lag metric
+  (cross-correlation peak of one-bar differences) scores **0 bars for every EMA length** (checked: EMA 5..100 all 0),
+  so it cannot match lags; the first planted run had matched the conviction average to an EMA(14) on that metric,
+  which is meaningless. Replaced by the **drift lag**: run the filter on the candles and on the candles plus a tiny
+  linear drift mu*t; lag = mean(mu*t - (M2 - M1)) / mu. Checked against theory: EMA(5, 14, 20, 60, 100) and
+  SMA(10, 60) all give exactly (n-1)/2. Everything else, including the thresholds, is unchanged.
+- 2026-10-23, after the gate result: the drift lag is exact for linear filters but not for the conviction average
+  (the tiny drift changes candle colours, hence speed); four grid points scored a negative drift lag. Cross-checked
+  with the trend lag (price minus average in the planted trends, divided by the trend step). The verdict does not
+  depend on which lag is used.
