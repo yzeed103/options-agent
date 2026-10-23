@@ -39,3 +39,8 @@ A fifth average «متوسط الثبات (هيكين آشي)» with the chosen 
 
 ## Changes after writing
 (none yet)
+- 2026-10-23, after step 3 ran: the drift lag overstates this average's lag about 2x (planted, chosen point: drift lag
+  15.2, trend lag 7.75), which makes the pre-registered matching unfair to it (baselines too slow), and Hull MA has no
+  drift lag at all by design (it hit the length cap). Added a cross-check matched by lag inside trends on real data
+  (forward-backward EMA(20) labels, evaluation only). The verdict is reported under both. Daily warm-up fixed (the
+  200-bar warm-up hid every daily training bar).
