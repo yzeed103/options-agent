@@ -812,6 +812,14 @@ gxStripTop = input.int(5, "عدد السترايكات المبرزة", minval=0
 gexBand  = input.float(0.10, "عرض الصندوق (ATR يومي)", minval=0.02, maxval=1.0, step=0.02, tooltip="0.10 = عُشر حركة يوم. إذا لم يتوفر ATR اليومي يُستخدم 0.4% من السعر", group=G_GX)
 gexFill  = input.int(75, "شفافية تعبئة الصندوق", minval=0, maxval=100, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان", group=G_GX)
 gexBord  = input.int(30, "شفافية حدود الصندوق", minval=0, maxval=100, step=5, group=G_GX)
+// watch table: every symbol of the block vs its own walls, from the "#S:" line the GEX agent rewrites every poll
+G_WT = "جدول أسهم الجدران"
+wtShow = input.bool(true, "إظهار جدول أسهم الجدران", tooltip="حالة كل سهم في كتلة GEX مقابل جدرانه: فوق الكول، عند الكول، بين الجدارين، عند البوت، تحت البوت. «عند» = أقل من 0.5% من الجدار.\nالقاما: + = السعر فوق انقلاب القاما (الحركة تهدأ عادة)، − = تحته (الحركة تتسارع).\nالأسعار من GEXRadar يكتبها وكيل GEX كل 5 دقائق؛ الوقت في رأس الجدول. الأسهم المخترقة أولا ثم اللي عند جدار", group=G_WT)
+wtPos  = input.string("أعلى اليمين", "موقعه", options=["أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "أسفل اليسار"], inline="wt", group=G_WT)
+wtCols = input.int(2, "أعمدة", minval=1, maxval=6, inline="wt", group=G_WT)
+wtMax  = input.int(60, "أقصى عدد أسهم", minval=1, maxval=80, inline="wt2", group=G_WT)
+wtOnly = input.bool(false, "المخترقة واللي عند جدار فقط", inline="wt2", group=G_WT)
+wtSize = input.string("صغير جدا", "حجم الخط", options=["صغير جدا", "صغير"], group=G_WT)
 
 gxKeys = array.from("CW", "PW", "FLIP", "PIN", "DFLIP", "MAXOI", "CWOI", "PWOI")
 // names drawn on the chart (the keys above stay for reading the block); the user asked for Arabic on these three
@@ -820,6 +828,10 @@ var float[]  gxV    = array.new_float(8, na)
 var string[] gxInfo = array.new_string(2, "")      // 0 = date of the block, 1 = "1" when the ticker line was found
 var float[]  gpK    = array.new_float()            // gamma strip: strikes and net gamma (millions) from the "SYM#G:" line
 var float[]  gpV    = array.new_float()
+var string[] wtSym  = array.new_string()           // watch table, from the "#S:" line: symbol, wall state 1..5, gamma side
+var int[]    wtSt   = array.new_int()
+var string[] wtG    = array.new_string()
+var string[] wtT    = array.new_string(1, "")
 gxNum(string s) =>
     m = str.match(s, "[-+]?[0-9]*\\.?[0-9]+")
     m == "" ? float(na) : str.tonumber(m)
@@ -848,6 +860,21 @@ if barstate.isfirst and showGex and str.length(gexText) > 0
                         if not na(gk) and not na(gv)
                             array.push(gpK, gk)
                             array.push(gpV, gv)
+            continue
+        // the watch-table line: "#S: T=14:35 NVDA=182.3|1|+ AAPL=..." (states 1..5, gamma + / - / empty)
+        if str.startswith(gl, "#S:")
+            for wt in str.split(str.substring(gl, 3), " ")
+                if str.startswith(wt, "T=")
+                    array.set(wtT, 0, str.substring(wt, 2))
+                else if str.contains(wt, "=") and str.contains(wt, "|")
+                    wkv = str.split(wt, "=")
+                    wpt = str.split(array.get(wkv, 1), "|")
+                    if array.size(wpt) >= 2
+                        wsn = str.tonumber(array.get(wpt, 1))
+                        if not na(wsn)
+                            array.push(wtSym, array.get(wkv, 0))
+                            array.push(wtSt, int(wsn))
+                            array.push(wtG, array.size(wpt) > 2 ? array.get(wpt, 2) : "")
             continue
         string sym = ""
         string dt = ""
@@ -1563,6 +1590,36 @@ if showSplit and barstate.islast and ready
                 array.push(splitBoxes, box.new(x0, pLo + (r + 1) * step, x0 + u, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=fade(cu, vpAlpha)))
             if d > 0
                 array.push(splitBoxes, box.new(x0 + u, pLo + (r + 1) * step, x0 + u + d, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=fade(cdn, vpAlpha)))
+
+// ═══════════════ جدول أسهم الجدران ═══════════════
+wtP = wtPos == "أعلى اليمين" ? position.top_right : wtPos == "أعلى اليسار" ? position.top_left : wtPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
+var table wtTbl = table.new(wtP, wtCols * 3, 2 + int(math.ceil(wtMax / wtCols)), bgcolor=cTblBg, border_color=cTblBd, border_width=1)
+if barstate.islast and wtShow and showGex and array.size(wtSym) > 0
+    table.clear(wtTbl, 0, 0, wtCols * 3 - 1, 1 + int(math.ceil(wtMax / wtCols)))
+    wSz = wtSize == "صغير" ? size.small : size.tiny
+    meW = gxSym(syminfo.ticker)
+    // which symbols: in the agent's order (broke out, at a wall, between), optionally the first two kinds only
+    wIdx = array.new_int()
+    for i = 0 to array.size(wtSym) - 1
+        if array.size(wIdx) < wtMax and (not wtOnly or array.get(wtSt, i) != 3)
+            array.push(wIdx, i)
+    nW = array.size(wIdx)
+    table.cell(wtTbl, 0, 0, "أسهم الجدران  " + array.get(wtT, 0) + "  (" + str.tostring(nW) + ")", text_color=cTblLbl, text_size=wSz)
+    table.merge_cells(wtTbl, 0, 0, wtCols * 3 - 1, 0)
+    if nW > 0
+        nRows = int(math.ceil(nW / wtCols))
+        for k = 0 to nW - 1
+            i = array.get(wIdx, k)
+            c0 = int(math.floor(k / nRows)) * 3
+            r = 1 + k % nRows
+            st_ = array.get(wtSt, i)
+            g_ = array.get(wtG, i)
+            sTxt = st_ == 1 ? "فوق الكول ▲" : st_ == 2 ? "عند الكول" : st_ == 3 ? "بين الجدارين" : st_ == 4 ? "عند البوت" : "تحت البوت ▼"
+            sCol = st_ == 1 ? cGxCW : st_ == 2 ? color.new(cGxCW, 35) : st_ == 3 ? cTblLbl : st_ == 4 ? color.new(cGxPW, 35) : cGxPW
+            wBg = array.get(wtSym, i) == meW ? color.new(color.white, 85) : na
+            table.cell(wtTbl, c0, r, array.get(wtSym, i), text_color=color.white, text_size=wSz, bgcolor=wBg)
+            table.cell(wtTbl, c0 + 1, r, sTxt, text_color=sCol, text_size=wSz, bgcolor=wBg)
+            table.cell(wtTbl, c0 + 2, r, g_ == "+" ? "+" : g_ == "-" ? "−" : "", text_color=g_ == "+" ? cGxFl : color.orange, text_size=wSz, bgcolor=wBg)
 
 // ═══════════════ المتوسطات المتحركة ═══════════════
 // Same as TradingView's built-in "MA ribbon" plus Hull (HMA): four averages, each with on/off, type, source, length and color, on the

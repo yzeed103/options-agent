@@ -93,3 +93,41 @@ def format_block(date: str, rows: dict[str, dict]) -> str:
         if parts:
             out.append(f"{norm_symbol(sym)}: " + " ".join(parts))
     return "\n".join(out)
+
+
+NEAR = 0.005     # "at the wall" = within 0.5% of price
+
+
+def wall_state(price: float, cw: float | None, pw: float | None, near: float = NEAR) -> int:
+    """1 above the call wall, 2 at it, 3 between the walls, 4 at the put wall, 5 below it; 0 = unknown."""
+    if not price or cw is None or pw is None:
+        return 0
+    if price > cw * (1 + near):
+        return 1
+    if abs(price - cw) <= near * price:
+        return 2
+    if price < pw * (1 - near):
+        return 5
+    if abs(price - pw) <= near * price:
+        return 4
+    return 3
+
+
+def status_line(levels: dict[str, dict], spots: dict[str, float], hhmm: str) -> str | None:
+    """'#S: T=14:35 NVDA=182.3|1|+ ...' for the indicator's watch table: price, wall state, gamma side (+ above FLIP,
+    - below). Sorted: broke out (1, 5), at a wall (2, 4), between (3); then by symbol."""
+    rows = []
+    for sym, lv in levels.items():
+        p = spots.get(sym)
+        if not p:
+            continue
+        stt = wall_state(p, lv.get("CW"), lv.get("PW"))
+        if stt == 0:
+            continue
+        fl = lv.get("FLIP")
+        g = "" if fl is None else "+" if p > fl else "-"
+        rows.append(({1: 0, 5: 0, 2: 1, 4: 1, 3: 2}[stt], norm_symbol(sym), f"{norm_symbol(sym)}={_fmt(round(p, 2))}|{stt}|{g}"))
+    if not rows:
+        return None
+    rows.sort()
+    return f"#S: T={hhmm} " + " ".join(r[2] for r in rows)

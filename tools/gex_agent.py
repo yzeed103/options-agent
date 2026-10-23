@@ -29,6 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 from vzones.gex_watch import Watch  # noqa: E402
+from vzones.gex_block import status_line  # noqa: E402
 import gex_block  # noqa: E402  (build, notify)
 
 NY = ZoneInfo("America/New_York")
@@ -42,7 +43,7 @@ log = logging.getLogger("gex_agent")
 # Runs inside each chart page. Finds every Volume Zones study on every chart of the tab and its GEXRadar text input
 # (by input type + title, so it survives input reordering), and sets the block only where it differs.
 JS_APPLY = """
-((block, prof) => {
+((block, prof, status) => {
   const a = window.TradingViewApi;
   if (!a) return {api: false};
   const out = {api: true, studies: 0, set: 0, same: 0};
@@ -51,7 +52,8 @@ JS_APPLY = """
     const ch = a.chartsCount ? a.chart(i) : a.activeChart();
     // each chart gets the shared block + the gamma-strip line of its own symbol (keeps the block small)
     const sym = ch.symbol().split(':').filter(x => x).pop().replace('^', '').toUpperCase();
-    const want = prof && prof[sym] ? block + '\\n' + prof[sym] : block;
+    let want = prof && prof[sym] ? block + '\\n' + prof[sym] : block;
+    if (status) want += '\\n' + status;      // the watch-table line (every symbol's price, same for all charts)
     for (const s of ch.getAllStudies()) {
       if (!/Volume Zones/i.test(s.name)) continue;
       const st = ch.getStudyById(s.id);
@@ -65,10 +67,11 @@ JS_APPLY = """
     }
   }
   return out;
-})(%s, %s)
+})(%s, %s, %s)
 """
 PROFILES_FILE = os.path.join(LOG_DIR, "gex_profiles.json")
 PROF: dict = {}          # symbol -> strip line, refreshed with the gamma levels (session start, 09:35 snapshot)
+STATUS = [""]            # "#S: ..." watch-table line: every symbol's price vs its walls, rebuilt on every poll
 
 
 def load_profiles() -> None:
@@ -99,7 +102,7 @@ def push(block: str, port: int) -> dict:
             ws = websocket.create_connection(t["webSocketDebuggerUrl"], timeout=15, suppress_origin=True)
             try:
                 ws.send(json.dumps({"id": 1, "method": "Runtime.evaluate",
-                                    "params": {"expression": JS_APPLY % (json.dumps(block), json.dumps(PROF)), "returnByValue": True}}))
+                                    "params": {"expression": JS_APPLY % (json.dumps(block), json.dumps(PROF), json.dumps(STATUS[0])), "returnByValue": True}}))
                 r = json.loads(ws.recv())
             finally:
                 ws.close()
@@ -146,8 +149,9 @@ def strike(state: dict, key: str, title: str, body: str) -> None:
 def poll(w: Watch, a, state: dict) -> bool:
     """One poll. Returns True when everything worked."""
     fresh: dict = {}
+    spots: dict = {}
     try:
-        text, notes = gex_block.build(a.url.rstrip("/"), [], a.basis, profiles=fresh)
+        text, notes = gex_block.build(a.url.rstrip("/"), [], a.basis, profiles=fresh, spots=spots)
     except Exception as e:  # noqa: BLE001 - GEXRadar down or still loading
         log.warning("GEXRadar not reachable: %s", type(e).__name__)
         strike(state, "gex_down", "وكيل GEX: GEXRadar لا يرد", "المستويات لن تتحدث حتى يعود GEXRadar")
@@ -162,6 +166,8 @@ def poll(w: Watch, a, state: dict) -> bool:
     if fresh and (not PROF or any(x.startswith(("first block", "new session", "opening snapshot")) for x in what)):
         PROF.clear(); PROF.update(fresh); save_profiles(w.date)
         log.info("gamma strip lines refreshed for %d symbols", len(PROF))
+    # the watch table compares each price with the levels the charts actually show (w.applied), not the fresh ones
+    STATUS[0] = status_line(w.applied, spots, t.strftime("%H:%M")) or ""
     stale = [n for n in notes if "stale" in n]
     if stale and state.get("stale_warned") != w.date:
         state["stale_warned"] = w.date

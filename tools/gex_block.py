@@ -50,8 +50,10 @@ def profile_line(sym: str, strikes: list[dict], spot: float, span: float = 0.03)
     return f"{sym.replace('^', '')}#G: " + " ".join(f"{fmt(k)}={v / 1e6:.3g}" for k, v in pts)
 
 
-def build(base: str, symbols: list[str] | None, basis: str, profiles: dict | None = None) -> tuple[str, list[str]]:
-    """The levels block. With `profiles` (a dict), also fills {symbol: strip line} from the same requests."""
+def build(base: str, symbols: list[str] | None, basis: str, profiles: dict | None = None,
+          spots: dict | None = None) -> tuple[str, list[str]]:
+    """The levels block. With `profiles` (a dict), also fills {symbol: strip line} from the same requests; with `spots`,
+    {symbol: price} (for the watch table)."""
     if not symbols:
         symbols = [s["symbol"] for s in get(f"{base}/api/symbols")["symbols"] if s.get("ok")]
     rows, notes, dates = {}, [], set()
@@ -66,6 +68,8 @@ def build(base: str, symbols: list[str] | None, basis: str, profiles: dict | Non
         rows[sym] = {k: lv.get(f) for k, f in FIELDS.items()}
         st = d.get("strikes") or []
         rows[sym]["CWOI"], rows[sym]["PWOI"] = oi_walls(st, d.get("spot") or 0.0)
+        if spots is not None and d.get("spot"):
+            spots[sym] = float(d["spot"])
         if profiles is not None:
             pl = profile_line(sym, st, d.get("spot") or 0.0)
             if pl:

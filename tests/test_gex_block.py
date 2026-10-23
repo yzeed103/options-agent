@@ -51,3 +51,17 @@ def test_round_trip():
     assert text == "DATE=2026-10-22\nSPX: CW=6800 PW=6700 FLIP=6755.5 PIN=6750"
     lv = parse_block(text, "SPX")
     assert lv["FLIP"] == 6755.5 and lv["DFLIP"] is None
+
+
+def test_wall_state_and_status_line():
+    from vzones.gex_block import wall_state, status_line
+    assert wall_state(110, 100, 90) == 1
+    assert wall_state(100.2, 100, 90) == 2
+    assert wall_state(95, 100, 90) == 3
+    assert wall_state(90.3, 100, 90) == 4
+    assert wall_state(80, 100, 90) == 5
+    assert wall_state(95, None, 90) == 0
+    lv = {"AAA": {"CW": 100, "PW": 90, "FLIP": 96}, "BBB": {"CW": 50, "PW": 40, "FLIP": 45}, "CCC": {"CW": 10, "PW": 8}}
+    s = status_line(lv, {"AAA": 95, "BBB": 55, "CCC": 9}, "14:35")
+    assert s == "#S: T=14:35 BBB=55|1|+ AAA=95|3|- CCC=9|3|"
+    assert status_line(lv, {}, "14:35") is None
