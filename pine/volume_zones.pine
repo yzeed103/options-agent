@@ -117,7 +117,12 @@ heatHighE = math.max(heatHigh, heatMidE)
 // ═══════════════ Real candles ═══════════════
 // Every measurement uses the real (standard) OHLC, so Heikin Ashi or other chart types only change how the chart
 // looks, not the levels or signals. On a normal candle chart these equal the built-in open / high / low / close.
-stdT = ticker.standard(syminfo.tickerid)
+// ⚠️ ticker.standard() also DROPS the chart's dividend adjustment. Found 2026-10-23 on UNH 15m in bar replay: the chart
+// (dividend-adjusted) showed the 07-29 14:45 high at 423.95 while every request.security(stdT) value was the unadjusted
+// 426.57, so the trendlines (and every other real-candle reading) sat 2.6$ above the candles on history. The chart's
+// adjustment is part of syminfo.tickerid, so it is put back here; a non-adjusted chart stays non-adjusted.
+stdT0 = ticker.standard(syminfo.tickerid)
+stdT = str.contains(syminfo.tickerid, "dividends") ? ticker.modify(stdT0, syminfo.session, adjustment.dividends) : stdT0
 [o_, h_, l_, c_] = request.security(stdT, timeframe.period, [open, high, low, close], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 trR = na(c_[1]) ? h_ - l_ : math.max(h_ - l_, math.max(math.abs(h_ - c_[1]), math.abs(l_ - c_[1])))
 
