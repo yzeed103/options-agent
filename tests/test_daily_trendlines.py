@@ -48,7 +48,9 @@ def test_break_ends_the_line():
 
 def test_small_lines_stay_inside_the_window():
     from vzones.daily_trendlines import small_lines
-    df = pd.concat([_day("2026-10-21", _zigzag_up()), _day("2026-10-22", _zigzag_up())], ignore_index=True)
+    # small swings (about 6 bars each) - what this mode is for; the daily test's 13-bar swings rarely fit in 15 bars
+    fast = list(np.linspace(100, 110, 60) + 1.0 * np.sin(np.arange(60) * 1.05))
+    df = pd.concat([_day("2026-10-21", fast), _day("2026-10-22", fast)], ignore_index=True)
     r = small_lines(df, k=1, window=15)
     c = df["close"].to_numpy()
     shown = [(i, ln) for i, ln in enumerate(r["green"]) if ln is not None]
