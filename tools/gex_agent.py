@@ -42,13 +42,16 @@ log = logging.getLogger("gex_agent")
 # Runs inside each chart page. Finds every Volume Zones study on every chart of the tab and its GEXRadar text input
 # (by input type + title, so it survives input reordering), and sets the block only where it differs.
 JS_APPLY = """
-((block) => {
+((block, prof) => {
   const a = window.TradingViewApi;
   if (!a) return {api: false};
   const out = {api: true, studies: 0, set: 0, same: 0};
   const n = a.chartsCount ? a.chartsCount() : 1;
   for (let i = 0; i < n; i++) {
     const ch = a.chartsCount ? a.chart(i) : a.activeChart();
+    // each chart gets the shared block + the gamma-strip line of its own symbol (keeps the block small)
+    const sym = ch.symbol().split(':').filter(x => x).pop().replace('^', '').toUpperCase();
+    const want = prof && prof[sym] ? block + '\\n' + prof[sym] : block;
     for (const s of ch.getAllStudies()) {
       if (!/Volume Zones/i.test(s.name)) continue;
       const st = ch.getStudyById(s.id);
@@ -56,14 +59,30 @@ JS_APPLY = """
       if (!info) continue;
       out.studies++;
       const cur = st.getInputValues().find(x => x.id === info.id);
-      if (cur && cur.value === block) { out.same++; continue; }
-      st.setInputValues([{id: info.id, value: block}]);
+      if (cur && cur.value === want) { out.same++; continue; }
+      st.setInputValues([{id: info.id, value: want}]);
       out.set++;
     }
   }
   return out;
-})(%s)
+})(%s, %s)
 """
+PROFILES_FILE = os.path.join(LOG_DIR, "gex_profiles.json")
+PROF: dict = {}          # symbol -> strip line, refreshed with the gamma levels (session start, 09:35 snapshot)
+
+
+def load_profiles() -> None:
+    try:
+        PROF.update(json.load(open(PROFILES_FILE, encoding="utf-8")).get("lines", {}))
+    except (OSError, ValueError):
+        pass
+
+
+def save_profiles(date: str) -> None:
+    try:
+        json.dump({"date": date, "lines": PROF}, open(PROFILES_FILE, "w", encoding="utf-8"))
+    except OSError:
+        log.warning("could not save gamma strip lines")
 
 
 def cdp_pages(port: int) -> list[dict]:
@@ -80,7 +99,7 @@ def push(block: str, port: int) -> dict:
             ws = websocket.create_connection(t["webSocketDebuggerUrl"], timeout=15, suppress_origin=True)
             try:
                 ws.send(json.dumps({"id": 1, "method": "Runtime.evaluate",
-                                    "params": {"expression": JS_APPLY % json.dumps(block), "returnByValue": True}}))
+                                    "params": {"expression": JS_APPLY % (json.dumps(block), json.dumps(PROF)), "returnByValue": True}}))
                 r = json.loads(ws.recv())
             finally:
                 ws.close()
@@ -126,8 +145,9 @@ def strike(state: dict, key: str, title: str, body: str) -> None:
 
 def poll(w: Watch, a, state: dict) -> bool:
     """One poll. Returns True when everything worked."""
+    fresh: dict = {}
     try:
-        text, notes = gex_block.build(a.url.rstrip("/"), [], a.basis)
+        text, notes = gex_block.build(a.url.rstrip("/"), [], a.basis, profiles=fresh)
     except Exception as e:  # noqa: BLE001 - GEXRadar down or still loading
         log.warning("GEXRadar not reachable: %s", type(e).__name__)
         strike(state, "gex_down", "وكيل GEX: GEXRadar لا يرد", "المستويات لن تتحدث حتى يعود GEXRadar")
@@ -138,6 +158,10 @@ def poll(w: Watch, a, state: dict) -> bool:
     if what and what[0].startswith("incomplete"):
         log.warning("%s | %s", what[0], "; ".join(notes))
         return False          # the chart keeps what it has; retry in RETRY seconds
+    # the gamma strip follows the gamma levels: refreshed when they are (first block, new session, 09:35 snapshot)
+    if fresh and (not PROF or any(x.startswith(("first block", "new session", "opening snapshot")) for x in what)):
+        PROF.clear(); PROF.update(fresh); save_profiles(w.date)
+        log.info("gamma strip lines refreshed for %d symbols", len(PROF))
     stale = [n for n in notes if "stale" in n]
     if stale and state.get("stale_warned") != w.date:
         state["stale_warned"] = w.date
@@ -200,6 +224,7 @@ def main() -> None:
         return
 
     w, state = Watch(confirm=a.confirm, live_gamma=a.live_gamma), {}
+    load_profiles()
     try:
         with open(STATE, encoding="utf-8") as f:
             w.load(json.load(f))

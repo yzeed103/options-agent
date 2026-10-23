@@ -39,7 +39,19 @@ def get(url: str, timeout: float = 20, tries: int = 4):
             time.sleep(10 * (i + 1))      # 10 + 20 + 30 s: spans the limiter's one-minute window
 
 
-def build(base: str, symbols: list[str] | None, basis: str) -> tuple[str, list[str]]:
+def profile_line(sym: str, strikes: list[dict], spot: float, span: float = 0.05) -> str | None:
+    """'MSFT#G: 505=-1.2 507.5=-3.4 ...': net gamma (millions) per strike within +-span of price, for the indicator's
+    gamma strip. Old indicator versions ignore it (the symbol 'MSFT#G' never matches a chart)."""
+    pts = sorted((s["strike"], s.get("net_gex") or 0.0) for s in strikes
+                 if spot and abs(s["strike"] / spot - 1) <= span)
+    if not pts:
+        return None
+    fmt = lambda x: f"{x:g}"  # noqa: E731
+    return f"{sym.replace('^', '')}#G: " + " ".join(f"{fmt(k)}={v / 1e6:.3g}" for k, v in pts)
+
+
+def build(base: str, symbols: list[str] | None, basis: str, profiles: dict | None = None) -> tuple[str, list[str]]:
+    """The levels block. With `profiles` (a dict), also fills {symbol: strip line} from the same requests."""
     if not symbols:
         symbols = [s["symbol"] for s in get(f"{base}/api/symbols")["symbols"] if s.get("ok")]
     rows, notes, dates = {}, [], set()
@@ -54,6 +66,10 @@ def build(base: str, symbols: list[str] | None, basis: str) -> tuple[str, list[s
         rows[sym] = {k: lv.get(f) for k, f in FIELDS.items()}
         st = d.get("strikes") or []
         rows[sym]["CWOI"], rows[sym]["PWOI"] = oi_walls(st, d.get("spot") or 0.0)
+        if profiles is not None:
+            pl = profile_line(sym, st, d.get("spot") or 0.0)
+            if pl:
+                profiles[sym.replace("^", "")] = pl
         # coverage check: the highest-OI strike GEXRadar reports must be among the strikes we received
         best = max(st, key=lambda s: (s.get("call_oi") or 0) + (s.get("put_oi") or 0), default=None)
         if lv.get("max_oi_strike") is not None and (best is None or best["strike"] != lv["max_oi_strike"]):
