@@ -936,9 +936,19 @@ tlHold  = input.bool(false, "ثبّت الخط حتى يُكسر", tooltip="مف
 cTlUp   = input.color(#00e676, "خط القيعان الصاعد", inline="tlc", group=G_TL)
 cTlDn   = input.color(#ff1744, "خط القمم الهابط", inline="tlc", group=G_TL)
 wTl     = input.int(2, "السماكة", minval=1, maxval=5, inline="tlc", group=G_TL)
+// ---- which candles the trendlines read ----
+// Everything else in this indicator reads the REAL candles (ticker.standard), so on a Heikin Ashi chart the lines
+// used to touch pivots the user cannot see. تلقائي: Heikin Ashi candles when the chart is Heikin Ashi (chart.is_heikinashi),
+// real candles otherwise; the other two force one source. Only the trendlines (pivots + breaks) use this.
+tlSrc = input.string("تلقائي", "شموع خطوط الترند", options=["تلقائي", "عادية", "هايكين آشي"], tooltip="تلقائي: إذا الشارت هايكين آشي تُقرأ القمم والقيعان من شموع الهايكين آشي الظاهرة، وإلا من الشموع العادية. يخص خطوط الترند فقط", group=G_TL)
+[haH, haL, haC] = request.security(ticker.heikinashi(stdT), timeframe.period, [high, low, close], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+bool tlUseHA = tlSrc == "هايكين آشي" or (tlSrc == "تلقائي" and chart.is_heikinashi)
+float tlH = tlUseHA ? haH : h_
+float tlL = tlUseHA ? haL : l_
+float tlC = tlUseHA ? haC : c_
 
-tPh = ta.pivothigh(h_, tlLen, tlLen)
-tPl = ta.pivotlow(l_, tlLen, tlLen)
+tPh = ta.pivothigh(tlH, tlLen, tlLen)
+tPl = ta.pivotlow(tlL, tlLen, tlLen)
 var float tLastPh = na
 var int   tLastPhB = na
 var float tLastPl = na
@@ -971,12 +981,12 @@ if not na(tPl)
     tLastPlB := pb
 dnNow = na(dnA) ? na : dnA + dnS * (bar_index - dnAB)
 upNow = na(upA) ? na : upA + upS * (bar_index - upAB)
-if not na(dnNow) and c_ > dnNow
+if not na(dnNow) and tlC > dnNow
     dnBroke := true
-if not na(upNow) and c_ < upNow
+if not na(upNow) and tlC < upNow
     upBroke := true
-bool tlBrkUpL = not na(dnNow) and c_ > dnNow and c_[1] <= dnNow - dnS
-bool tlBrkDnL = not na(upNow) and c_ < upNow and c_[1] >= upNow - upS
+bool tlBrkUpL = not na(dnNow) and tlC > dnNow and tlC[1] <= dnNow - dnS
+bool tlBrkDnL = not na(upNow) and tlC < upNow and tlC[1] >= upNow - upS
 
 // ---- DAILY trendlines (default on intraday charts; Python twin: vzones/daily_trendlines.py) ----
 // The user wanted lines that follow TODAY's trend, not lines from days ago reaching across the chart. Per side:
@@ -1001,7 +1011,7 @@ var int dSess = 0
 // function with c_[...] called inside an if can be inconsistent. TL_KEEP bars cover a 23-hour 1-minute session.
 TL_KEEP = 3000
 var float[] tlCl = array.new_float()
-array.push(tlCl, c_)
+array.push(tlCl, tlC)
 if array.size(tlCl) > TL_KEEP
     array.shift(tlCl)
 var int dHStart = 0
@@ -1061,8 +1071,8 @@ pickTL(int[] bs, float[] vs, bool hi) =>
 // 1) a close through the line drawn so far ends it and restarts that side's window
 float dRed = na(array.get(dLn, 0)) ? na : array.get(dLn, 1) + array.get(dLn, 2) * (bar_index - array.get(dLn, 0))
 float dGrn = na(array.get(dLn, 3)) ? na : array.get(dLn, 4) + array.get(dLn, 5) * (bar_index - array.get(dLn, 3))
-bool dBrkUp = dailyTL and not na(dRed) and c_ > dRed
-bool dBrkDn = dailyTL and not na(dGrn) and c_ < dGrn
+bool dBrkUp = dailyTL and not na(dRed) and tlC > dRed
+bool dBrkDn = dailyTL and not na(dGrn) and tlC < dGrn
 if dBrkUp
     dHStart := bar_index
     array.clear(dHb)
@@ -1120,8 +1130,8 @@ pickWin(int[] bs, float[] vs, bool hi) =>
         w := w * 2
         tries += 1
     [rb, rv, rs]
-tsPh = ta.pivothigh(h_, tsLen, tsLen)
-tsPl = ta.pivotlow(l_, tsLen, tsLen)
+tsPh = ta.pivothigh(tlH, tsLen, tsLen)
+tsPl = ta.pivotlow(tlL, tsLen, tsLen)
 var int[]   sHb = array.new_int()
 var float[] sHv = array.new_float()
 var int[]   sLb = array.new_int()
@@ -1129,8 +1139,8 @@ var float[] sLv = array.new_float()
 var float[] sLn = array.new_float(6, na)
 float sRed = na(array.get(sLn, 0)) ? na : array.get(sLn, 1) + array.get(sLn, 2) * (bar_index - array.get(sLn, 0))
 float sGrn = na(array.get(sLn, 3)) ? na : array.get(sLn, 4) + array.get(sLn, 5) * (bar_index - array.get(sLn, 3))
-bool sBrkUp = smallTL and not na(sRed) and c_ > sRed
-bool sBrkDn = smallTL and not na(sGrn) and c_ < sGrn
+bool sBrkUp = smallTL and not na(sRed) and tlC > sRed
+bool sBrkDn = smallTL and not na(sGrn) and tlC < sGrn
 if smallTL
     if not na(tsPh)
         array.push(sHb, bar_index - tsLen)
