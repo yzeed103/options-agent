@@ -1565,27 +1565,27 @@ if showSplit and barstate.islast and ready
                 array.push(splitBoxes, box.new(x0 + u, pLo + (r + 1) * step, x0 + u + d, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=fade(cdn, vpAlpha)))
 
 // ═══════════════ المتوسطات المتحركة ═══════════════
-// Same as TradingView's built-in "MA ribbon": four averages, each with on/off, type, source, length and color, on the
+// Same as TradingView's built-in "MA ribbon" plus Hull (HMA): four averages, each with on/off, type, source, length and color, on the
 // chart's own candles (Heikin Ashi on a Heikin Ashi chart, like the built-in). Optional higher timeframe; "wait for
 // the timeframe close" shows the last CLOSED higher-timeframe value (no repaint), otherwise the live one.
 G_MA = "المتوسطات المتحركة"
 ma1On = input.bool(false, "متوسط 1", inline="ma1", group=G_MA)
-ma1T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA"], inline="ma1", group=G_MA)
+ma1T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA"], inline="ma1", group=G_MA)
 ma1S  = input.source(close, "", inline="ma1", group=G_MA)
 ma1L  = input.int(20, "", minval=1, maxval=4999, inline="ma1", group=G_MA)
 ma1C  = input.color(#f6c309, "", inline="ma1", group=G_MA)
-ma2On = input.bool(false, "متوسط 2", inline="ma2", group=G_MA)
-ma2T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA"], inline="ma2", group=G_MA)
+ma2On = input.bool(true, "متوسط 2", inline="ma2", group=G_MA)
+ma2T  = input.string("HMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA"], inline="ma2", group=G_MA)
 ma2S  = input.source(close, "", inline="ma2", group=G_MA)
-ma2L  = input.int(50, "", minval=1, maxval=4999, inline="ma2", group=G_MA)
+ma2L  = input.int(68, "", minval=1, maxval=4999, tooltip="HMA 68: الأهدأ في قياس 30 سهما على 5 دقائق بنفس التأخر (reports/conviction_ma)، لكنه يتأخر عند انعكاس السعر", inline="ma2", group=G_MA)
 ma2C  = input.color(#fb9800, "", inline="ma2", group=G_MA)
 ma3On = input.bool(true, "متوسط 3", inline="ma3", group=G_MA)
-ma3T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA"], inline="ma3", group=G_MA)
+ma3T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA"], inline="ma3", group=G_MA)
 ma3S  = input.source(close, "", inline="ma3", group=G_MA)
 ma3L  = input.int(100, "", minval=1, maxval=4999, inline="ma3", group=G_MA)
 ma3C  = input.color(#fb6500, "", inline="ma3", group=G_MA)
 ma4On = input.bool(false, "متوسط 4", inline="ma4", group=G_MA)
-ma4T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA"], inline="ma4", group=G_MA)
+ma4T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA"], inline="ma4", group=G_MA)
 ma4S  = input.source(close, "", inline="ma4", group=G_MA)
 ma4L  = input.int(200, "", minval=1, maxval=4999, inline="ma4", group=G_MA)
 ma4C  = input.color(#f60c0c, "", inline="ma4", group=G_MA)
@@ -1593,14 +1593,15 @@ maTF   = input.timeframe("", "الإطار الزمني للمتوسطات", too
 maWait = input.bool(true, "انتظر إغلاق شمعة الإطار", tooltip="مفعّل: قيمة آخر شمعة مغلقة على الإطار الأكبر (لا تتغير بعد ظهورها). معطّل: القيمة الحية وتتحرك حتى تُغلق الشمعة", group=G_MA)
 maWid  = input.int(1, "سماكة الخطوط", minval=1, maxval=5, group=G_MA)
 
-// all five types computed every bar (Pine wants ta.* calls unconditional), then picked
+// all six types computed every bar (Pine wants ta.* calls unconditional), then picked
 maOf(string t, float s, simple int n) =>
     float vS = ta.sma(s, n)
     float vE = ta.ema(s, n)
     float vR = ta.rma(s, n)
     float vW = ta.wma(s, n)
     float vV = ta.vwma(s, n)
-    t == "EMA" ? vE : t == "SMMA (RMA)" ? vR : t == "WMA" ? vW : t == "VWMA" ? vV : vS
+    float vH = ta.hma(s, n)
+    t == "EMA" ? vE : t == "SMMA (RMA)" ? vR : t == "WMA" ? vW : t == "VWMA" ? vV : t == "HMA" ? vH : vS
 
 m1 = maOf(ma1T, ma1S, ma1L)
 m2 = maOf(ma2T, ma2S, ma2L)
