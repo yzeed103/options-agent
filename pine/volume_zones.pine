@@ -1,4 +1,4 @@
-//@version=5
+//@version=6
 // Volume Zones
 // Rolling volume profile (POC / VAH / VAL / HVN), ranked top-3 zones, heat-map ribbons and a buy / sell profile,
 // prior-day value area + trend alert, whale levels of every daily sideways range + whale bounce, Arabic status panel,
@@ -125,6 +125,9 @@ stdT0 = ticker.standard(syminfo.tickerid)
 stdT = str.contains(syminfo.tickerid, "dividends") ? ticker.modify(stdT0, syminfo.session, adjustment.dividends) : stdT0
 [o_, h_, l_, c_] = request.security(stdT, timeframe.period, [open, high, low, close], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
 trR = na(c_[1]) ? h_ - l_ : math.max(h_ - l_, math.max(math.abs(h_ - c_[1]), math.abs(l_ - c_[1])))
+// new trading day - computed once, globally (Pine v6 short-circuits `and`, so a ta.* call inside a condition
+// would not run on every bar)
+dayChg = ta.change(time("D")) != 0
 
 // DMI / ADX on the real candles (same formula as ta.dmi)
 dmiReal(int len) =>
@@ -194,7 +197,7 @@ var float[] hvnHi  = array.new_float()
 // bars mode: the previous `lookback` bars (past only)
 useSess = vpMode == "الجلسة الحالية" and timeframe.isintraday
 var int sessBar0 = 0
-if ta.change(time("D")) != 0
+if dayChg
     sessBar0 := bar_index
 int profLen = useSess ? math.min(bar_index - sessBar0 + 1, sessMax) : lookback
 int profOff = useSess ? 0 : 1
@@ -316,7 +319,7 @@ cTaDn    = input.color(color.new(#ff5252, 92), "هابط", inline="tb2", group="
 cTaLbl   = input.color(#00e676, "لون ملصق التنبيه صعود", inline="tl2", group="تنبيه الاتجاه")
 cTaLblDn = input.color(#ff5252, "هبوط", inline="tl2", group="تنبيه الاتجاه")
 
-newSess = timeframe.isintraday and ta.change(time("D")) != 0
+newSess = timeframe.isintraday and dayChg
 var float[] sH = array.new_float()
 var float[] sL = array.new_float()
 var float[] sV = array.new_float()
@@ -736,7 +739,7 @@ for k = 0 to 2
         array.push(lvNow, array.get(curVA, k))
 
 // session open / high / low (a new session = a new trading day)
-newDay = ta.change(time("D")) != 0
+newDay = dayChg
 var float dOpen = na
 var float dHigh = na
 var float dLow  = na
