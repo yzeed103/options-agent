@@ -82,4 +82,14 @@ rest of the day (IC or lift intervals do not overlap). H6 the indicator's 0.80 /
 where the lift is (the lift curve over vol/SMA(20) has no step there).
 
 ## Changes after writing
-(none yet)
+- 2026-10-24, measurement fixes found on the planted tests, **before any real-data run** (planted.json re-run after
+  each): (a) the IC "per symbol-day block" is biased for smoothed tools: inside a 78-bar block a lagging tool and a
+  leading target rank against each other (ATR alone scores IC −0.13 against T2 on iid data). Replaced by Spearman
+  with ranks taken within each symbol over the whole period, interval by block bootstrap of the rank sums
+  (`volume_tool.ic_pooled`). (b) The direction convention "unsigned tool × bar direction" restricted the top decile
+  to up bars; corrected: an unsigned tool is used as is against the bar-signed target, a signed tool against the raw
+  target with the hit signed by the tool (`dir_eval`). (c) P1 noise band: with 40 synthetic years the interval is
+  ±0.002 wide, so |IC| < 0.01 counts as clean even when the interval excludes 0. (d) P2 hazard check on r = 2..5: at
+  r = 1 the estimator's single false-strong bars (about 2% of normal bars) end at once and bias h(1) up (0.47 vs 0.35
+  planted); r = 2..5 recover 0.36. After the fixes P1 passes (no tool broken) and P2 passes (strength score recovers
+  83% of the planted lift, RVOL 95%).
