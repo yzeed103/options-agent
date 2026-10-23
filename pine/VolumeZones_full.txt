@@ -937,7 +937,7 @@ if barstate.islast
             if gpMax > 0 and v != 0
                 gc = v > 0 ? cGxCW : cGxPW
                 int x1 = gxR - math.max(1, int(math.round((gxStripW - 10) * math.sqrt(math.abs(v) / gpMax))))
-                array.push(gxLines, line.new(x1, k, gxR, k, color=gc, width=4))
+                array.push(gxLines, line.new(x1, k, gxR, k, color=gc, width=4, extend=extend.right))   // to the right without end
                 array.push(gxLines, line.new(x1, k, x1 + 1, k, color=gc, width=9))       // the dot at the tip
                 bool big = array.get(gpIsTop, j)
                 array.push(gxLbls, label.new(x1 - 1, k, str.tostring(k) + "  " + (v > 0 ? "+" : "") + str.tostring(v, "#.#") + "M",
