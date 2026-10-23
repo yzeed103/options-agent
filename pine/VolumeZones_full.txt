@@ -816,11 +816,12 @@ gexBord  = input.int(30, "شفافية حدود الصندوق", minval=0, maxva
 G_WT = "جدول أسهم الجدران"
 wtShow = input.bool(true, "إظهار جدول أسهم الجدران", tooltip="حالة كل سهم في كتلة GEX مقابل جدرانه: فوق الكول، عند الكول، بين الجدارين، عند البوت، تحت البوت. «عند» = أقل من 0.5% من الجدار.\nالقاما: + = السعر فوق انقلاب القاما (الحركة تهدأ عادة)، − = تحته (الحركة تتسارع).\nالأسعار من GEXRadar يكتبها وكيل GEX كل 5 دقائق؛ الوقت في رأس الجدول. الأسهم المخترقة أولا ثم اللي عند جدار", group=G_WT)
 wtPos  = input.string("أعلى اليمين", "موقعه", options=["أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "أسفل اليسار"], inline="wt", group=G_WT)
-wtCols = input.int(2, "أعمدة", minval=1, maxval=6, inline="wt", group=G_WT)
+wtLay  = input.string("بالعرض (صفّان)", "الشكل", options=["بالعرض (صفّان)", "بالطول (عمود)", "أعمدة"], inline="wtl", group=G_WT)
+wtCols = input.int(2, "عدد الأعمدة", minval=1, maxval=6, inline="wtl", tooltip="يُستخدم فقط مع الشكل «أعمدة»", group=G_WT)
 wtMax  = input.int(60, "أقصى عدد أسهم", minval=1, maxval=80, inline="wt2", group=G_WT)
 wtOnly = input.bool(true, "المخترقة واللي عند جدار فقط", inline="wt2", group=G_WT)
 wtSize = input.string("عادي", "حجم الخط", options=["صغير جدا", "صغير", "عادي"], inline="wt3", group=G_WT)
-wtGap  = input.int(15, "إزاحة للأسفل %", minval=0, maxval=60, inline="wt3", tooltip="في الموقعين العلويين: مسافة فارغة فوق الجدول بنسبة من ارتفاع الشارت، حتى لا يغطيه سطر أرقام المؤشرات أعلى الشارت. 0 = ملاصق للحافة", group=G_WT)
+wtGap  = input.int(0, "إزاحة للأسفل %", minval=0, maxval=60, inline="wt3", tooltip="في الموقعين العلويين: مسافة فارغة فوق الجدول بنسبة من ارتفاع الشارت، حتى لا يغطيه سطر أرقام المؤشرات أعلى الشارت. 0 = ملاصق للحافة", group=G_WT)
 
 gxKeys = array.from("CW", "PW", "FLIP", "PIN", "DFLIP", "MAXOI", "CWOI", "PWOI")
 // names drawn on the chart (the keys above stay for reading the block); the user asked for Arabic on these three
@@ -1595,9 +1596,11 @@ if showSplit and barstate.islast and ready
 // ═══════════════ جدول أسهم الجدران ═══════════════
 wtP = wtPos == "أعلى اليمين" ? position.top_right : wtPos == "أعلى اليسار" ? position.top_left : wtPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
 // no table background: the optional top gap row stays transparent; every cell paints its own background
-var table wtTbl = table.new(wtP, wtCols * 3, 3 + int(math.ceil(wtMax / wtCols)), border_color=cTblBd, border_width=1)
+// sized for the widest case of the chosen shape; each bar fills only what it needs
+wtGMax = wtLay == "بالعرض (صفّان)" ? int(math.ceil(wtMax / 2)) : wtLay == "بالطول (عمود)" ? 1 : wtCols
+var table wtTbl = table.new(wtP, wtGMax * 3, 3 + int(math.ceil(wtMax / wtGMax)), border_color=cTblBd, border_width=1)
 if barstate.islast and wtShow and showGex and array.size(wtSym) > 0
-    table.clear(wtTbl, 0, 0, wtCols * 3 - 1, 2 + int(math.ceil(wtMax / wtCols)))
+    table.clear(wtTbl, 0, 0, wtGMax * 3 - 1, 2 + int(math.ceil(wtMax / wtGMax)))
     wSz = wtSize == "عادي" ? size.normal : wtSize == "صغير" ? size.small : size.tiny
     meW = gxSym(syminfo.ticker)
     // which symbols: in the agent's order (broke out, at a wall, between), optionally the first two kinds only
@@ -1606,15 +1609,16 @@ if barstate.islast and wtShow and showGex and array.size(wtSym) > 0
         if array.size(wIdx) < wtMax and (not wtOnly or array.get(wtSt, i) != 3)
             array.push(wIdx, i)
     nW = array.size(wIdx)
+    nG = wtLay == "بالعرض (صفّان)" ? math.max(1, int(math.ceil(nW / 2))) : wtLay == "بالطول (عمود)" ? 1 : wtCols
     // top positions: a transparent spacer row first, so the indicators' values line at the top of the chart does not cover it
     int r0 = (wtP == position.top_right or wtP == position.top_left) and wtGap > 0 ? 1 : 0
     if r0 == 1
         table.cell(wtTbl, 0, 0, "", height=wtGap, bgcolor=color.new(color.black, 100))
-        table.merge_cells(wtTbl, 0, 0, wtCols * 3 - 1, 0)
+        table.merge_cells(wtTbl, 0, 0, nG * 3 - 1, 0)
     table.cell(wtTbl, 0, r0, "أسهم الجدران  " + array.get(wtT, 0) + "  (" + str.tostring(nW) + ")", text_color=cTblLbl, text_size=wSz, bgcolor=cTblBg)
-    table.merge_cells(wtTbl, 0, r0, wtCols * 3 - 1, r0)
+    table.merge_cells(wtTbl, 0, r0, nG * 3 - 1, r0)
     if nW > 0
-        nRows = int(math.ceil(nW / wtCols))
+        nRows = int(math.ceil(nW / nG))
         for k = 0 to nW - 1
             i = array.get(wIdx, k)
             c0 = int(math.floor(k / nRows)) * 3
