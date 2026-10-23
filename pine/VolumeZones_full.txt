@@ -818,8 +818,8 @@ wtShow = input.bool(true, "إظهار جدول أسهم الجدران", tooltip
 wtPos  = input.string("أعلى اليمين", "موقعه", options=["أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "أسفل اليسار"], inline="wt", group=G_WT)
 wtCols = input.int(2, "أعمدة", minval=1, maxval=6, inline="wt", group=G_WT)
 wtMax  = input.int(60, "أقصى عدد أسهم", minval=1, maxval=80, inline="wt2", group=G_WT)
-wtOnly = input.bool(false, "المخترقة واللي عند جدار فقط", inline="wt2", group=G_WT)
-wtSize = input.string("صغير جدا", "حجم الخط", options=["صغير جدا", "صغير"], group=G_WT)
+wtOnly = input.bool(true, "المخترقة واللي عند جدار فقط", inline="wt2", group=G_WT)
+wtSize = input.string("عادي", "حجم الخط", options=["صغير جدا", "صغير", "عادي"], group=G_WT)
 
 gxKeys = array.from("CW", "PW", "FLIP", "PIN", "DFLIP", "MAXOI", "CWOI", "PWOI")
 // names drawn on the chart (the keys above stay for reading the block); the user asked for Arabic on these three
@@ -1596,7 +1596,7 @@ wtP = wtPos == "أعلى اليمين" ? position.top_right : wtPos == "أعلى
 var table wtTbl = table.new(wtP, wtCols * 3, 2 + int(math.ceil(wtMax / wtCols)), bgcolor=cTblBg, border_color=cTblBd, border_width=1)
 if barstate.islast and wtShow and showGex and array.size(wtSym) > 0
     table.clear(wtTbl, 0, 0, wtCols * 3 - 1, 1 + int(math.ceil(wtMax / wtCols)))
-    wSz = wtSize == "صغير" ? size.small : size.tiny
+    wSz = wtSize == "عادي" ? size.normal : wtSize == "صغير" ? size.small : size.tiny
     meW = gxSym(syminfo.ticker)
     // which symbols: in the agent's order (broke out, at a wall, between), optionally the first two kinds only
     wIdx = array.new_int()
