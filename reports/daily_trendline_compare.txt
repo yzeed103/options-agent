@@ -1,0 +1,14 @@
+
+===== 5m =====
+mode              median distance (ATR)  median age (bars)  from today  touches/100  bars with a line
+long-latest k2                     2.14                 18         75%          3.5              100%
+long-hold k2                       7.07                 62         36%          1.6              100%
+daily k2                           1.73                 18        100%          5.7               21%
+daily k3                           2.00                 24        100%          4.5               18%
+
+===== 15m =====
+mode              median distance (ATR)  median age (bars)  from today  touches/100  bars with a line
+long-latest k2                     2.03                 18         38%          3.9              100%
+long-hold k2                       6.31                 66         14%          1.7              100%
+daily k2                           1.00                 13        100%         11.4               12%
+daily k3                           1.11                 16        100%          9.8                8%

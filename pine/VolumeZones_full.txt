@@ -971,16 +971,124 @@ if not na(dnNow) and c_ > dnNow
     dnBroke := true
 if not na(upNow) and c_ < upNow
     upBroke := true
-bool tlBrkUp = not na(dnNow) and c_ > dnNow and c_[1] <= dnNow - dnS
-bool tlBrkDn = not na(upNow) and c_ < upNow and c_[1] >= upNow - upS
+bool tlBrkUpL = not na(dnNow) and c_ > dnNow and c_[1] <= dnNow - dnS
+bool tlBrkDnL = not na(upNow) and c_ < upNow and c_[1] >= upNow - upS
+
+// ---- DAILY trendlines (default on intraday charts; Python twin: vzones/daily_trendlines.py) ----
+// The user wanted lines that follow TODAY's trend, not lines from days ago reaching across the chart. Per side:
+// pivots since max(session start, that side's last break); red = from the highest pivot high to the most recent
+// lower pivot high with no close above the line since; green mirrored. Re-picked at every new pivot, so the line moves
+// with the trend; a close through it ends it. Drawn to the current bar + a short extension, never across the chart.
+// Measured (reports/daily_trendline_compare.py, 7 stocks): 15m distance to price 1.0 ATR vs 6.3 for the held lines,
+// built from today 100% vs 14%, touches per 100 bars 11.4 vs 1.7 (5m: 1.7 ATR, 100%, 5.7).
+tlMode = input.string("يومي", "نوع خطوط الترند", options=["يومي", "ممتد"], tooltip="يومي: من قمم وقيعان اليوم فقط، تتحدث مع كل قمة أو قاع جديد وتمشي مع الترند، وتنتهي بالكسر. ممتد: الخطوط الطويلة الممتدة لليمين", group=G_TL)
+tlExt  = input.int(5, "امتداد الخط اليومي يمين (شموع)", minval=0, maxval=50, group=G_TL)
+dailyTL = tlMode == "يومي" and timeframe.isintraday
+var int[]   dHb = array.new_int()
+var float[] dHv = array.new_float()
+var int[]   dLb = array.new_int()
+var float[] dLv = array.new_float()
+var float[] dLn = array.new_float(6, na)     // red: anchor bar, anchor price, slope | green: the same
+var int dSess = 0
+var int dHStart = 0
+var int dLStart = 0
+if newDay
+    dSess := bar_index
+    dHStart := bar_index
+    dLStart := bar_index
+    array.clear(dHb)
+    array.clear(dHv)
+    array.clear(dLb)
+    array.clear(dLv)
+    array.fill(dLn, na)
+
+// highest (hi) / lowest pivot -> most recent later pivot on the trend side with no close through the line since
+pickTL(int[] bs, float[] vs, bool hi) =>
+    float rb = na
+    float rv = na
+    float rs = na
+    int n = array.size(bs)
+    if n >= 2
+        int ai = 0
+        for q = 1 to n - 1
+            bool better = hi ? array.get(vs, q) > array.get(vs, ai) : array.get(vs, q) < array.get(vs, ai)
+            if better
+                ai := q
+        int aB = array.get(bs, ai)
+        float aV = array.get(vs, ai)
+        bool found = false
+        int q2 = n - 1
+        while q2 > ai and not found
+            int bB = array.get(bs, q2)
+            float bV = array.get(vs, q2)
+            bool okB = hi ? bV < aV : bV > aV
+            if okB
+                float s = (bV - aV) / (bB - aB)
+                bool valid = true
+                int j = aB + 1
+                while j <= bar_index and valid
+                    float cj = c_[bar_index - j]
+                    float yj = aV + s * (j - aB)
+                    bool through = hi ? cj > yj : cj < yj
+                    if through
+                        valid := false
+                    j += 1
+                if valid
+                    rb := aB
+                    rv := aV
+                    rs := s
+                    found := true
+            q2 -= 1
+    [rb, rv, rs]
+
+// 1) a close through the line drawn so far ends it and restarts that side's window
+float dRed = na(array.get(dLn, 0)) ? na : array.get(dLn, 1) + array.get(dLn, 2) * (bar_index - array.get(dLn, 0))
+float dGrn = na(array.get(dLn, 3)) ? na : array.get(dLn, 4) + array.get(dLn, 5) * (bar_index - array.get(dLn, 3))
+bool dBrkUp = dailyTL and not na(dRed) and c_ > dRed
+bool dBrkDn = dailyTL and not na(dGrn) and c_ < dGrn
+if dBrkUp
+    dHStart := bar_index
+    array.clear(dHb)
+    array.clear(dHv)
+    array.set(dLn, 0, na)
+if dBrkDn
+    dLStart := bar_index
+    array.clear(dLb)
+    array.clear(dLv)
+    array.set(dLn, 3, na)
+// 2) a newly confirmed pivot inside the window re-picks the line
+if dailyTL and not dBrkUp and not na(tPh) and bar_index - tlLen >= math.max(dSess, dHStart)
+    array.push(dHb, bar_index - tlLen)
+    array.push(dHv, tPh)
+    [rb, rv, rs] = pickTL(dHb, dHv, true)
+    array.set(dLn, 0, rb)
+    array.set(dLn, 1, rv)
+    array.set(dLn, 2, rs)
+if dailyTL and not dBrkDn and not na(tPl) and bar_index - tlLen >= math.max(dSess, dLStart)
+    array.push(dLb, bar_index - tlLen)
+    array.push(dLv, tPl)
+    [gb, gv, gs] = pickTL(dLb, dLv, false)
+    array.set(dLn, 3, gb)
+    array.set(dLn, 4, gv)
+    array.set(dLn, 5, gs)
+
+bool tlBrkUp = dailyTL ? dBrkUp : tlBrkUpL
+bool tlBrkDn = dailyTL ? dBrkDn : tlBrkDnL
 var line tlDnLine = na
 var line tlUpLine = na
 if barstate.islast
     line.delete(tlDnLine)
     line.delete(tlUpLine)
-    if showTL and not na(dnA)
+    if showTL and dailyTL
+        if not na(array.get(dLn, 0))
+            rb0 = int(array.get(dLn, 0))
+            tlDnLine := line.new(rb0, array.get(dLn, 1), bar_index + tlExt, array.get(dLn, 1) + array.get(dLn, 2) * (bar_index + tlExt - rb0), width=wTl, color=cTlDn)
+        if not na(array.get(dLn, 3))
+            gb0 = int(array.get(dLn, 3))
+            tlUpLine := line.new(gb0, array.get(dLn, 4), bar_index + tlExt, array.get(dLn, 4) + array.get(dLn, 5) * (bar_index + tlExt - gb0), width=wTl, color=cTlUp)
+    if showTL and not dailyTL and not na(dnA)
         tlDnLine := line.new(dnAB, dnA, dnAB + 1, dnA + dnS, extend=extend.right, width=wTl, color=cTlDn)
-    if showTL and not na(upA)
+    if showTL and not dailyTL and not na(upA)
         tlUpLine := line.new(upAB, upA, upAB + 1, upA + upS, extend=extend.right, width=wTl, color=cTlUp)
 
 // ═══════════════ Status panel (Arabic) ═══════════════
