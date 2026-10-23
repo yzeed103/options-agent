@@ -232,16 +232,22 @@ def supersmoother(x, n):
     return np.array(out)
 
 
-def streak_ema(o, h, l, c, L_fast=8, L_slow=60):
-    """Speed by the Heikin Ashi colour-streak length only: |S| = min(streak, 10) / 10."""
+def streak_ema(o, h, l, c, L_fast=8, L_slow=60, cap=10, p=1.0):
+    """Speed by the Heikin Ashi colour-streak length only: |S| = (min(streak, cap) / cap) ** p.
+    streak = number of earlier candles in a row with the same colour as this one (0 on a colour change or doji)."""
     ho, hh, hl, hc = heikin_ashi(o, h, l, c)
     d = np.sign(hc - ho)
     streak = np.zeros(len(d))
     for i in range(1, len(d)):
         streak[i] = streak[i - 1] + 1 if d[i] == d[i - 1] and d[i] != 0 else 0
-    s = np.minimum(streak, 10) / 10
+    s = (np.minimum(streak, cap) / cap) ** p
     af, as_ = 2 / (L_fast + 1), 2 / (L_slow + 1)
     return adaptive(hc, as_ + (af - as_) * s)
+
+
+def trend_lag(M, P, segs, step) -> float:
+    """Lag in bars inside known trends: mean(P - M) * sign / step over the given (slice, sign) segments."""
+    return float(np.mean([np.mean(sg * (P[a] - M[a])) for a, sg in segs]) / step)
 
 
 BASELINES = {
