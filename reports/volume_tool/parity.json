@@ -1,0 +1,18 @@
+{
+ "version": "41.0",
+ "symbol": "BATS:SPY",
+ "tf": "5",
+ "bars": 10218,
+ "sessions": 131,
+ "compared": 9438,
+ "within_1e6": 1.0,
+ "within_1e3": 1.0,
+ "max_abs_diff": 0.0,
+ "error": false,
+ "volume_vs_alpaca": {
+  "bars": 10140,
+  "median_ratio_tv_over_alpaca": 0.1337,
+  "p10": 0.0859,
+  "p90": 0.1788
+ }
+}

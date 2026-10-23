@@ -14,11 +14,12 @@ rows       = input.int(40, "عدد صفوف البروفايل", minval=10, maxv
 vaPct      = input.float(0.70, "نسبة منطقة القيمة", minval=0.5, maxval=0.95, step=0.05, tooltip="نسبة الفوليوم داخل منطقة القيمة. المعتاد 0.70", group="البروفايل")
 hvnMult    = input.float(1.5, "منطقة فوليوم عالي = أكبر من المتوسط بـ", minval=1.0, maxval=3.0, step=0.1, group="البروفايل")
 
-volMaLen   = input.int(20, "متوسط الفوليوم (عدد الشموع)", group="الفوليوم")
+volMode    = input.string("حسب وقت اليوم (RVOL)", "قياس الفوليوم", options=["حسب وقت اليوم (RVOL)", "متوسط 20 شمعة (القديم)"], tooltip="RVOL = فوليوم الشمعة ÷ وسيط فوليوم نفس الدقيقة من اليوم في آخر 20 جلسة، فيزول شكل U (فوليوم الافتتاح والإغلاق). قياس 30 سهما على بيانات SIP، أيام اختبار منفصلة (reports/volume_tool): RVOL يتنبأ بتوسّع المدى في الشموع الست التالية (ارتباط 0.28) والقاعدة القديمة بالكاد (0.07). لا هذا ولا ذاك يتنبأ باتجاه السعر", group="الفوليوم")
+volMaLen   = input.int(20, "متوسط الفوليوم (عدد الشموع)", tooltip="للقياس القديم فقط", group="الفوليوم")
 udLen      = input.int(50, "فوليوم الاتجاه: عدد الشموع", minval=10, maxval=200, tooltip="فوليوم الشموع الصاعدة ÷ فوليوم الشموع الهابطة. أكبر من 1 = الشراء أقوى", group="الفوليوم")
 udBand     = input.float(0.05, "فوليوم الاتجاه: هامش الحياد", minval=0.0, maxval=0.5, step=0.05, tooltip="0.05 = بين 0.95 و 1.05 يعتبر محايد", group="الفوليوم")
-weakRatio  = input.float(0.80, "فوليوم ضعيف إذا أقل من المتوسط بنسبة", minval=0.3, maxval=1.0, step=0.05, tooltip="0.80 = أقل من 80% من المتوسط", group="الفوليوم")
-breakRatio = input.float(1.5, "فوليوم قوي إذا أكبر من المتوسط بنسبة", minval=1.0, maxval=5.0, step=0.1, tooltip="1.5 = مرة ونصف المتوسط", group="الفوليوم")
+weakRatio  = input.float(0.80, "فوليوم ضعيف إذا أقل من", minval=0.3, maxval=1.0, step=0.05, tooltip="0.80 = أقل من 80% من المعتاد (RVOL أو المتوسط حسب القياس)", group="الفوليوم")
+breakRatio = input.float(1.5, "فوليوم قوي إذا أكبر من", minval=1.0, maxval=5.0, step=0.1, tooltip="1.5 = مرة ونصف المعتاد. مقيس على RVOL 5 دقائق: فوق 1.5 احتمال توسّع المدى في الشموع الست التالية أعلى بـ37%، فوق 2.0 أعلى بـ48%. الاتجاه لا يتغيّر", group="الفوليوم")
 G_NOW = "الجدول: الاتجاه والفوليوم اللحظي"
 nowEmaF    = input.int(9, "متوسط سريع", minval=2, maxval=100, inline="ne", group=G_NOW)
 nowEmaS    = input.int(21, "متوسط بطيء", minval=3, maxval=200, inline="ne", group=G_NOW)
@@ -168,9 +169,37 @@ stReal(float factor, int len) =>
 // ═══════════════ Volume / trend ═══════════════
 atrV  = ta.rma(trR, 14)
 volMa = ta.sma(volume, volMaLen)
-vr    = volMa > 0 ? volume / volMa : 1.0
+// RVOL by slot: this bar's volume over the median volume of the same slot of the session in the previous 20
+// sessions (a ring buffer per slot, filled with confirmed bars only; needs 10 sessions). Same rule as
+// vzones/volume_tool.py (tested for parity against TradingView's values, reports/volume_tool/parity.json).
+int tfMin   = timeframe.isintraday ? (timeframe.isseconds ? 1 : timeframe.multiplier) : 390
+int nSlots  = timeframe.isintraday ? math.max(1, math.ceil(390.0 / tfMin)) : 1
+int minsIn  = hour(time, syminfo.timezone) * 60 + minute(time, syminfo.timezone) - 570
+int slotNow = timeframe.isintraday ? (minsIn < 0 or minsIn >= 390 ? -1 : math.min(nSlots - 1, math.floor(minsIn / tfMin))) : 0
+var matrix<float> rvBuf = matrix.new<float>(nSlots, 20, na)
+float rvBase = na
+if slotNow >= 0
+    rvVals = array.new_float()
+    for j = 0 to 19
+        rvx = matrix.get(rvBuf, slotNow, j)
+        if not na(rvx)
+            array.push(rvVals, rvx)
+    if array.size(rvVals) >= 10
+        rvBase := array.median(rvVals)
+float rvol = na(rvBase) or rvBase <= 0 ? na : volume / rvBase
+if barstate.isconfirmed and slotNow >= 0
+    for j = 0 to 18
+        matrix.set(rvBuf, slotNow, j, matrix.get(rvBuf, slotNow, j + 1))
+    matrix.set(rvBuf, slotNow, 19, volume)
+bool useRvol = volMode == "حسب وقت اليوم (RVOL)"
+vr    = useRvol ? (na(rvol) ? 1.0 : rvol) : volMa > 0 ? volume / volMa : 1.0
 weak  = vr < weakRatio
 strongVol = vr >= breakRatio
+// strong-volume run (does not cross sessions) and how long such runs usually go on, from the measured hazard curve
+var int rvRun = 0
+bool rvNewSess = ta.change(time("D")) != 0
+rvRun := strongVol and not na(rvol) ? (rvNewSess ? 1 : rvRun + 1) : 0
+plot(rvol, "RVOL (حسب وقت اليوم)", color=na, display=display.data_window)
 emaF = ta.ema(c_, 20)
 emaS = ta.ema(c_, 50)
 // up / down volume over the last udLen bars (tested: trend alerts with supporting volume did better in both halves)
@@ -1306,10 +1335,10 @@ if barstate.islast
 // Only the readings that survived testing: trend, volume, the sideways range and its whale levels, and the two
 // signals kept on the chart (whale bounce, trend alert).
 tPos = tblPos == "أعلى اليمين" ? position.top_right : tblPos == "أعلى اليسار" ? position.top_left : tblPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
-var table tbl = table.new(tPos, 3, 13, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
+var table tbl = table.new(tPos, 3, 14, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
 if barstate.isfirst
     table.merge_cells(tbl, 0, 0, 1, 0)
-    table.merge_cells(tbl, 0, 12, 2, 12)
+    table.merge_cells(tbl, 0, 13, 2, 13)
 tSz = tblSize == "صغير جدا" ? size.tiny : tblSize == "صغير" ? size.small : tblSize == "كبير" ? size.large : size.normal
 
 // last kept signal: 1 whale bounce, 2 trend alert; status 0 active, 1 target reached, -1 stopped / ended
@@ -1364,6 +1393,13 @@ if barstate.islast
     vTxt = udD > 0 ? "داعم للصعود" : udD < 0 ? "داعم للهبوط" : "محايد"
     vCol = udD > 0 ? cTblUp : udD < 0 ? cTblDn : cTblLbl
     vMet = na(udP) ? 1 : int(math.min(5, math.max(1, math.round(math.abs(math.log(udP)) * 10) + 1)))
+    // --- volume now: RVOL of the last completed bar, the strong run and its usual remaining length (measured: 5m / 15m / 1h hazard, reports/volume_tool)
+    rvExp = tfMin <= 5 ? array.from(1.45, 2.52, 3.47, 4.23, 4.85, 5.35, 5.67, 5.92, 6.06, 6.14) : tfMin <= 15 ? array.from(1.74, 2.96, 3.98, 4.77, 5.59, 6.26, 6.96, 7.26, 7.46, 7.42) : array.from(2.03, 3.21, 4.19, 4.64, 4.88, 4.92, 4.92, 4.92, 4.92, 4.92)
+    float rvP = rvol[1]
+    int   rvR = rvRun[1]
+    string nTxt = na(rvP) ? "لا بيانات بعد" : rvP >= breakRatio ? "قوي · " + str.tostring(rvP, "#.0") + "× المعتاد" : rvP < weakRatio ? "ضعيف · " + str.tostring(rvP, "#.0") + "× المعتاد" : "عادي · " + str.tostring(rvP, "#.0") + "× المعتاد"
+    color  nCol = na(rvP) ? cTblLbl : rvP >= breakRatio ? cTblUp : rvP < weakRatio ? cTblWeak : cTblLbl
+    string nSub = na(rvP) ? "-" : rvR >= 1 ? "قوي منذ " + str.tostring(rvR) + " شمعة · يستمر عادة " + str.tostring(array.get(rvExp, math.min(rvR, 10) - 1), "#.0") + " أخرى · المدى يتوسع غالبا، الاتجاه لا" : "حسب وقت اليوم · آخر 20 جلسة"
     vSub = "شراء ÷ بيع " + (na(udP) ? "-" : str.tostring(udP, "#.00")) + "   |   آخر " + str.tostring(nowUdLen) + " شمعة" + (nowDir != 0 and udD == -nowDir ? "\nعكس الترند" : "")
     // --- sideways range (daily)
     string rTxt = "لا توجد منطقة"
@@ -1476,16 +1512,16 @@ if barstate.islast
     // --- draw (column 2 = label on the right, column 1 = value, column 0 = meter)
     table.cell(tbl, 2, 0, "مناطق الفوليوم", text_color=cTblTxt, text_size=tSz, text_halign=text.align_right)
     table.cell(tbl, 0, 0, syminfo.ticker + " · " + timeframe.period + " · " + fmt(c_), text_color=cTblLbl, text_size=tSz, text_halign=text.align_left)
-    rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة", "أهداف الحيتان اليوم", "متجه إلى", "صمود الترند", "مستويات الخيارات")
-    vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub, gTxt + "\n" + gSub, hTxt + "\n" + hSub, kTxt + "\n" + kSub, xTxt + "\n" + xSub)
-    cols  = array.from(tCol, vCol, rCol, cWhLv, cWhLv, pCol, sCol, gCol, hCol, kCol, xCol)
-    for i = 0 to 10
+    rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "الفوليوم الآن", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة", "أهداف الحيتان اليوم", "متجه إلى", "صمود الترند", "مستويات الخيارات")
+    vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, nTxt + "\n" + nSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub, gTxt + "\n" + gSub, hTxt + "\n" + hSub, kTxt + "\n" + kSub, xTxt + "\n" + xSub)
+    cols  = array.from(tCol, vCol, nCol, rCol, cWhLv, cWhLv, pCol, sCol, gCol, hCol, kCol, xCol)
+    for i = 0 to 11
         table.cell(tbl, 2, i + 1, array.get(rowsL, i), text_color=cTblLbl, text_size=tSz, text_halign=text.align_right)
         table.cell(tbl, 1, i + 1, array.get(vals, i), text_color=array.get(cols, i), text_size=tSz, text_halign=text.align_right)
         table.cell(tbl, 0, i + 1, "", text_size=tSz)
     table.cell(tbl, 0, 1, meter(tMet, 5), text_color=tCol, text_size=tSz)
     table.cell(tbl, 0, 2, meter(vMet, 5), text_color=vCol, text_size=tSz)
-    table.cell(tbl, 0, 12, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
+    table.cell(tbl, 0, 13, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
 
 // ═══════════════ Heatmap: two-colour or five-colour ribbons, no smoothing ═══════════════
 // colour = volume at that price in the rolling profile (today's session or the last `lookback` bars), relative to the busiest row (0..1)
