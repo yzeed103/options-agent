@@ -121,7 +121,7 @@ def supertrend(df: pd.DataFrame, factor=3.0, n=10):
     return st, d                                               # d < 0 = up, as in Pine
 
 
-def trendline_breaks(df: pd.DataFrame, k: int = 2, hold: bool = True) -> np.ndarray:
+def trendline_breaks(df: pd.DataFrame, k: int = 2, hold: bool = False) -> np.ndarray:
     """+1 on the first close above the current red line, -1 on the first close below the current green line.
     k = pivot bars each side; hold = a new pivot pair replaces a line only after it was closed through
     (Pine defaults since 2026-10-23: k=2, hold=True - best line quality, reports/trendline_quality.py; the original was k=2, hold=False)."""

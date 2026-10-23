@@ -917,6 +917,10 @@ alertcondition(gxCross, "عبور مستوى خيارات", "السعر عبر �
 // Pivots on the real highs / lows, tlLen bars each side. Red = latest pair of consecutive pivot highs where the
 // second is lower; green = latest pair of consecutive pivot lows where the second is higher. Drawn from the first
 // pivot and extended right. A broken line stays as drawn until a new pair replaces it.
+// 2026-10-23 VERIFIED against the user's other indicator ("مكنى مؤشر الزخم", closed source): its red line ran through
+// the last two 2-bar pivot highs (UNH 15m: 12:00 426.25 -> 12:45 426.15) and its green through the last two 2-bar pivot
+// lows (previous day 15:45 416.69 -> 14:30 423.43), from the first pivot, extended right - exactly the rule below with
+// tlLen = 2 and tlHold off. So that is the default again ("ممتد"); the other modes stay as options.
 // 2026-10-23 "heavier" lines (the user found them jumping): 5-bar pivots and a line that HOLDS until price closes
 // through it. Measured on 7 symbols, 15m (reports/trendline_stability.py): 3.5 -> 0.49 line changes a day, median
 // life 12 -> 44 bars, lines touched 2+ times before the break 9% -> 12%. 2 bars + hold off = the original behaviour.
@@ -928,7 +932,7 @@ alertcondition(gxCross, "عبور مستوى خيارات", "السعر عبر �
 G_TL = "خطوط الترند"
 showTL  = input.bool(true, "إظهار خطوط الترند", group=G_TL)
 tlLen   = input.int(2, "طول القمة / القاع (شموع يمين ويسار)", minval=1, maxval=20, tooltip="مقيس على 7 أسهم 5د و15د: 2 مع التثبيت يعطي أكثر خطوط يحترمها السعر وأقل كسر كاذب. أكبر = أهدى لكن أقل احتراما", group=G_TL)
-tlHold  = input.bool(true, "ثبّت الخط حتى يُكسر", tooltip="مفعّل: الخط لا يتبدّل بقمة أو قاع جديد إلا بعد إغلاق السعر خلفه. مقيس: تغيّرات أقل 7 مرات وعمر أطول 3.5 مرات", group=G_TL)
+tlHold  = input.bool(false, "ثبّت الخط حتى يُكسر", tooltip="مفعّل: الخط لا يتبدّل بقمة أو قاع جديد إلا بعد إغلاق السعر خلفه (خطوط أثقل وأطول). معطّل = مثل مؤشر القراءة الفنية: آخر قمتين / قاعين دائما", group=G_TL)
 cTlUp   = input.color(#00e676, "خط القيعان الصاعد", inline="tlc", group=G_TL)
 cTlDn   = input.color(#ff1744, "خط القمم الهابط", inline="tlc", group=G_TL)
 wTl     = input.int(2, "السماكة", minval=1, maxval=5, inline="tlc", group=G_TL)
@@ -981,7 +985,7 @@ bool tlBrkDnL = not na(upNow) and c_ < upNow and c_[1] >= upNow - upS
 // with the trend; a close through it ends it. Drawn to the current bar + a short extension, never across the chart.
 // Measured (reports/daily_trendline_compare.py, 7 stocks): 15m distance to price 1.0 ATR vs 6.3 for the held lines,
 // built from today 100% vs 14%, touches per 100 bars 11.4 vs 1.7 (5m: 1.7 ATR, 100%, 5.7).
-tlMode = input.string("صغير", "نوع خطوط الترند", options=["صغير", "يومي", "ممتد"], tooltip="صغير: الترندات الصغيرة من آخر شموع قليلة، تتحدث كل شمعة (الأفضل في القياس لصيد الموجات الصغيرة). يومي: من قمم وقيعان اليوم كله. ممتد: الخطوط الطويلة الممتدة لليمين", group=G_TL)
+tlMode = input.string("ممتد", "نوع خطوط الترند", options=["ممتد", "صغير", "يومي"], tooltip="ممتد (الافتراضي): خط القمم من آخر قمتين (الثانية أدنى) وخط القيعان من آخر قاعين (الثاني أعلى)، يبدأ من القمة الأولى ويمتد لليمين — هو نفس قاعدة خطوط الاتجاه في مؤشر القراءة الفنية (مُتحقق منه نقطة بنقطة على UNH). صغير: نافذة آخر شموع قليلة. يومي: من قمم وقيعان اليوم", group=G_TL)
 tsLen  = input.int(1, "الترند الصغير: طول القمة / القاع", minval=1, maxval=5, tooltip="مقيس على 7 أسهم 5د و15د: 1 مع نافذة 15 شمعة هو الأفضل", group=G_TL)
 tsWin  = input.int(15, "الترند الصغير: عدد الشموع الأخيرة", minval=6, maxval=60, tooltip="أقل = ترندات أصغر وأقرب للسعر. أكثر = خطوط تظهر وقتا أطول", group=G_TL)
 tsWiden = input.int(3, "الترند الصغير: توسيع تلقائي (مرات)", minval=1, maxval=4, tooltip="إذا ما فيه خط في آخر N شمعة يجرّب 2N ثم 4N. مقيس على 5د و15د وساعة: الخط يظهر نحو 90% من الوقت بدل 58%. 1 = بدون توسيع", group=G_TL)

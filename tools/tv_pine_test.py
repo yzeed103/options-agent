@@ -73,7 +73,7 @@ READ = """(async () => { const ch = window.TradingViewApi.activeChart();
     if (o instanceof Map) { for (const v of o.values()) walk(v, d + 1); return; }
     if ("x1" in o && "y1" in o && "ci" in o) { recs.push(o); return; } for (const k of Object.keys(o)) walk(o[k], d + 1); };
   walk(g.dwglines(), 0);
-  const pick = c => recs.filter(r => (r.ci >>> 0) === c && r.w === 2 && r.st === "sol" && r.ex === "n").map(r => r.x2 - r.x1);
+  const pick = c => recs.filter(r => (r.ci >>> 0) === c && r.w === 2 && r.st === "sol" && (r.ex === "n" || r.ex === "r")).map(r => r.x2 - r.x1);
   return JSON.stringify({tf: ch.resolution(), symbol: ch.symbol(), error: s0.hasError(),
                          green: pick(0xFF76E600), red: pick(0xFF4417FF)}); })()"""      # ABGR of #00e676 / #ff1744
 
