@@ -27,6 +27,44 @@ def _pivots(x: np.ndarray, k: int, high: bool) -> np.ndarray:
     return out
 
 
+def small_lines(df: pd.DataFrame, k: int = 2, window: int = 20) -> dict:
+    """SMALL trends: the same line rule as daily_lines, but over the last `window` bars only (rolling), re-picked every
+    bar, no session reset and no waiting after a break - lines for every small swing.
+
+    red   : A = highest pivot high among pivots of the last `window` bars; B = most recent later lower pivot high
+            with no close above the line A->B since A.  green mirrored.
+    """
+    h, l, c = (df[x].to_numpy(float) for x in ("high", "low", "close")); n = len(c)
+    ph, pl = _pivots(h, k, True), _pivots(l, k, False)
+    out = {"red": [None] * n, "green": [None] * n,
+           "break_red": np.zeros(n, bool), "break_green": np.zeros(n, bool)}
+    line = {"red": None, "green": None}
+    for i in range(n):
+        for side, x, piv, sgn in (("red", h, ph, 1), ("green", l, pl, -1)):
+            ln = line[side]
+            if ln is not None:
+                y = ln[1] + ln[2] * (i - ln[0])
+                if (sgn == 1 and c[i] > y) or (sgn == -1 and c[i] < y):
+                    out["break_" + side][i] = True
+                    ln = None
+            out[side][i] = ln
+            lo = max(0, i - window + 1)
+            cand = [p for p in range(lo, i - k + 1) if piv[p]]
+            best = None
+            if len(cand) >= 2:
+                a = max(cand, key=lambda p: x[p]) if sgn == 1 else min(cand, key=lambda p: x[p])
+                for b in reversed([p for p in cand if p > a]):
+                    if (sgn == 1 and x[b] >= x[a]) or (sgn == -1 and x[b] <= x[a]):
+                        continue
+                    s = (x[b] - x[a]) / (b - a)
+                    js = np.arange(a + 1, i + 1)
+                    if (sgn == 1 and (c[js] <= x[a] + s * (js - a)).all()) or \
+                       (sgn == -1 and (c[js] >= x[a] + s * (js - a)).all()):
+                        best = (a, x[a], s); break
+            line[side] = best
+    return out
+
+
 def daily_lines(df: pd.DataFrame, k: int = 2) -> dict:
     """Per bar the active line of each side as (anchor bar, anchor price, slope) or None, plus break bars.
 

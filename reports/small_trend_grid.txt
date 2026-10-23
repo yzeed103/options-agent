@@ -1,0 +1,38 @@
+
+===== 5m =====
+           setting  coverage%  distance  touches  fakeouts%  breaks/100  score  rank A  rank B
+      small k1 N15      58.48      1.18     9.30      35.58        9.78   3.38    1.00    1.00
+      small k1 N20      68.05      1.31     8.32      35.80       10.82   2.11    2.00    2.00
+      small k1 N30      77.97      1.55     7.16      36.18       11.35   0.45    3.00    3.00
+      small k1 N40      82.74      1.75     6.42      36.62       11.26  -0.73    4.00    4.00
+      small k2 N30      61.61      1.75     5.64      36.21        6.75  -1.49    5.00    5.00
+      small k2 N40      69.83      1.98     5.01      36.97        7.13  -2.65    6.00    6.00
+      small k3 N40      58.17      2.17     4.15      37.42        4.83  -3.92    7.00    7.00
+      small k1 N10      40.42      1.05    10.70      35.13        6.84    NaN     NaN     NaN
+      small k2 N10      12.96      1.20     8.68      34.91        1.39    NaN     NaN     NaN
+      small k2 N15      31.75      1.34     7.52      35.31        3.90    NaN     NaN     NaN
+      small k2 N20      45.51      1.49     6.73      35.62        5.47    NaN     NaN     NaN
+      small k3 N10       2.90      1.33     7.57      38.53        0.16    NaN     NaN     NaN
+      small k3 N15      14.70      1.48     6.36      35.38        1.37    NaN     NaN     NaN
+      small k3 N20      27.63      1.64     5.57      35.93        2.68    NaN     NaN     NaN
+      small k3 N30      46.95      1.92     4.72      36.59        4.21    NaN     NaN     NaN
+daily k2 (current)      39.73      1.73     5.70      34.38        4.21    NaN     NaN     NaN
+
+===== 15m =====
+           setting  coverage%  distance  touches  fakeouts%  breaks/100  score  rank A  rank B
+      small k1 N15      58.11      1.01    12.47      34.59       10.11   6.99    1.00    1.00
+      small k1 N20      67.18      1.15    10.92      34.98       11.16   5.13    2.00    2.00
+      small k1 N30      78.35      1.45     9.04      36.43       11.47   2.50    3.00    3.00
+      small k1 N40      85.64      1.68     7.90      36.69       11.22   0.87    4.00    4.00
+      small k2 N30      61.46      1.68     7.21      37.31        6.60   0.11    5.00    5.00
+      small k2 N40      73.45      1.94     6.03      37.42        6.90  -1.58    6.00    6.00
+      small k3 N40      61.10      2.12     4.99      38.47        4.59  -3.08    7.00    7.00
+      small k1 N10      40.46      0.88    13.95      34.24        6.92    NaN     NaN     NaN
+      small k2 N10      12.99      1.01    11.18      35.59        1.37    NaN     NaN     NaN
+      small k2 N15      31.79      1.17     9.88      35.72        3.95    NaN     NaN     NaN
+      small k2 N20      45.02      1.33     8.86      35.39        5.56    NaN     NaN     NaN
+      small k3 N10       2.91      1.19     8.41      37.25        0.14    NaN     NaN     NaN
+      small k3 N15      14.69      1.31     8.08      35.85        1.40    NaN     NaN     NaN
+      small k3 N20      27.14      1.47     7.30      36.07        2.69    NaN     NaN     NaN
+      small k3 N30      45.72      1.86     5.96      39.38        3.96    NaN     NaN     NaN
+daily k2 (current)      22.31      1.00    11.41      36.14        3.13    NaN     NaN     NaN

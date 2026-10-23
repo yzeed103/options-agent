@@ -981,8 +981,10 @@ bool tlBrkDnL = not na(upNow) and c_ < upNow and c_[1] >= upNow - upS
 // with the trend; a close through it ends it. Drawn to the current bar + a short extension, never across the chart.
 // Measured (reports/daily_trendline_compare.py, 7 stocks): 15m distance to price 1.0 ATR vs 6.3 for the held lines,
 // built from today 100% vs 14%, touches per 100 bars 11.4 vs 1.7 (5m: 1.7 ATR, 100%, 5.7).
-tlMode = input.string("يومي", "نوع خطوط الترند", options=["يومي", "ممتد"], tooltip="يومي: من قمم وقيعان اليوم فقط، تتحدث مع كل قمة أو قاع جديد وتمشي مع الترند، وتنتهي بالكسر. ممتد: الخطوط الطويلة الممتدة لليمين", group=G_TL)
-tlExt  = input.int(5, "امتداد الخط اليومي يمين (شموع)", minval=0, maxval=50, group=G_TL)
+tlMode = input.string("صغير", "نوع خطوط الترند", options=["صغير", "يومي", "ممتد"], tooltip="صغير: الترندات الصغيرة من آخر شموع قليلة، تتحدث كل شمعة (الأفضل في القياس لصيد الموجات الصغيرة). يومي: من قمم وقيعان اليوم كله. ممتد: الخطوط الطويلة الممتدة لليمين", group=G_TL)
+tsLen  = input.int(1, "الترند الصغير: طول القمة / القاع", minval=1, maxval=5, tooltip="مقيس على 7 أسهم 5د و15د: 1 مع نافذة 15 شمعة هو الأفضل", group=G_TL)
+tsWin  = input.int(15, "الترند الصغير: عدد الشموع الأخيرة", minval=6, maxval=60, tooltip="أقل = ترندات أصغر وأقرب للسعر. أكثر = خطوط تظهر وقتا أطول", group=G_TL)
+tlExt  = input.int(5, "امتداد الخط يمين (شموع) للصغير واليومي", minval=0, maxval=50, group=G_TL)
 dailyTL = tlMode == "يومي" and timeframe.isintraday
 var int[]   dHb = array.new_int()
 var float[] dHv = array.new_float()
@@ -1072,13 +1074,71 @@ if dailyTL and not dBrkDn and not na(tPl) and bar_index - tlLen >= math.max(dSes
     array.set(dLn, 4, gv)
     array.set(dLn, 5, gs)
 
-bool tlBrkUp = dailyTL ? dBrkUp : tlBrkUpL
-bool tlBrkDn = dailyTL ? dBrkDn : tlBrkDnL
+// ---- SMALL trendlines (default; Python twin: vzones/daily_trendlines.small_lines) ----
+// Same line rule as the daily lines, over a ROLLING window of the last tsWin bars with tsLen-bar pivots, re-picked
+// every bar: a line for every small swing. reports/small_trend_grid.py (7 stocks, 5m + 15m, 15 settings): pivot 1 +
+// window 15 ranked #1 on both timeframes and both halves of the dates; 15m: on screen 58% of bars (daily 22%),
+// 1.0 ATR from price, 12.5 touches per 100 bars.
+smallTL = tlMode == "صغير"
+tsPh = ta.pivothigh(h_, tsLen, tsLen)
+tsPl = ta.pivotlow(l_, tsLen, tsLen)
+var int[]   sHb = array.new_int()
+var float[] sHv = array.new_float()
+var int[]   sLb = array.new_int()
+var float[] sLv = array.new_float()
+var float[] sLn = array.new_float(6, na)
+float sRed = na(array.get(sLn, 0)) ? na : array.get(sLn, 1) + array.get(sLn, 2) * (bar_index - array.get(sLn, 0))
+float sGrn = na(array.get(sLn, 3)) ? na : array.get(sLn, 4) + array.get(sLn, 5) * (bar_index - array.get(sLn, 3))
+bool sBrkUp = smallTL and not na(sRed) and c_ > sRed
+bool sBrkDn = smallTL and not na(sGrn) and c_ < sGrn
+if smallTL
+    if not na(tsPh)
+        array.push(sHb, bar_index - tsLen)
+        array.push(sHv, tsPh)
+    if not na(tsPl)
+        array.push(sLb, bar_index - tsLen)
+        array.push(sLv, tsPl)
+    // drop pivots that left the window (size test and array.get kept in separate ifs - Pine pitfall)
+    int oldest = bar_index - tsWin + 1
+    bool more = true
+    while more
+        more := false
+        if array.size(sHb) > 0
+            if array.get(sHb, 0) < oldest
+                array.shift(sHb)
+                array.shift(sHv)
+                more := true
+    more := true
+    while more
+        more := false
+        if array.size(sLb) > 0
+            if array.get(sLb, 0) < oldest
+                array.shift(sLb)
+                array.shift(sLv)
+                more := true
+    [srb, srv, srs] = pickTL(sHb, sHv, true)
+    array.set(sLn, 0, srb)
+    array.set(sLn, 1, srv)
+    array.set(sLn, 2, srs)
+    [sgb, sgv, sgs] = pickTL(sLb, sLv, false)
+    array.set(sLn, 3, sgb)
+    array.set(sLn, 4, sgv)
+    array.set(sLn, 5, sgs)
+
+bool tlBrkUp = smallTL ? sBrkUp : dailyTL ? dBrkUp : tlBrkUpL
+bool tlBrkDn = smallTL ? sBrkDn : dailyTL ? dBrkDn : tlBrkDnL
 var line tlDnLine = na
 var line tlUpLine = na
 if barstate.islast
     line.delete(tlDnLine)
     line.delete(tlUpLine)
+    if showTL and smallTL
+        if not na(array.get(sLn, 0))
+            sr0 = int(array.get(sLn, 0))
+            tlDnLine := line.new(sr0, array.get(sLn, 1), bar_index + tlExt, array.get(sLn, 1) + array.get(sLn, 2) * (bar_index + tlExt - sr0), width=wTl, color=cTlDn)
+        if not na(array.get(sLn, 3))
+            sg0 = int(array.get(sLn, 3))
+            tlUpLine := line.new(sg0, array.get(sLn, 4), bar_index + tlExt, array.get(sLn, 4) + array.get(sLn, 5) * (bar_index + tlExt - sg0), width=wTl, color=cTlUp)
     if showTL and dailyTL
         if not na(array.get(dLn, 0))
             rb0 = int(array.get(dLn, 0))
@@ -1086,9 +1146,9 @@ if barstate.islast
         if not na(array.get(dLn, 3))
             gb0 = int(array.get(dLn, 3))
             tlUpLine := line.new(gb0, array.get(dLn, 4), bar_index + tlExt, array.get(dLn, 4) + array.get(dLn, 5) * (bar_index + tlExt - gb0), width=wTl, color=cTlUp)
-    if showTL and not dailyTL and not na(dnA)
+    if showTL and not dailyTL and not smallTL and not na(dnA)
         tlDnLine := line.new(dnAB, dnA, dnAB + 1, dnA + dnS, extend=extend.right, width=wTl, color=cTlDn)
-    if showTL and not dailyTL and not na(upA)
+    if showTL and not dailyTL and not smallTL and not na(upA)
         tlUpLine := line.new(upAB, upA, upAB + 1, upA + upS, extend=extend.right, width=wTl, color=cTlUp)
 
 // ═══════════════ Status panel (Arabic) ═══════════════

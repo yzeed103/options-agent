@@ -6,7 +6,7 @@ import numpy as np, pandas as pd, matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-from vzones.daily_trendlines import daily_lines
+from vzones.daily_trendlines import daily_lines, small_lines
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from daily_trendline_compare import long_lines
 
@@ -33,8 +33,13 @@ def segments(lines):
 
 BG, GR, TX, MUT = "#0b0e14", "#2a2e39", "#d1d4dc", "#8a8f9c"
 fig, axs = plt.subplots(2, 1, figsize=(16, 12), facecolor=BG)
-for ax, (title, lines) in zip(axs, (("before: long lines held until broken", long_lines(d, 2, True)),
-                                    ("after: DAILY lines - today's swing only, re-picked as the trend develops", daily_lines(d, 2)))):
+MODE = sys.argv[2] if len(sys.argv) > 2 else "daily"
+panels = ((("before: long lines held until broken", long_lines(d, 2, True)),
+           ("after: DAILY lines - today's swing only, re-picked as the trend develops", daily_lines(d, 2)))
+          if MODE == "daily" else
+          (("before: daily lines (whole session)", daily_lines(d, 2)),
+           ("after: SMALL lines - pivot 1, last 15 bars, re-picked every bar", small_lines(d, 1, 15))))
+for ax, (title, lines) in zip(axs, panels):
     ax.set_facecolor(BG); ax.tick_params(colors=MUT); [s.set_color(GR) for s in ax.spines.values()]
     for i in range(N):
         col = "#26a69a" if C[i] >= O[i] else "#ef5350"
@@ -48,5 +53,5 @@ for ax, (title, lines) in zip(axs, (("before: long lines held until broken", lon
         ax.plot(xs, ys, color="#ff1744" if side == "red" else "#00e676", lw=1.6, alpha=.9)
     ax.set_xlim(-1, N + 3); ax.set_ylim(L.min() * .998, H.max() * 1.002); ax.set_xticks([])
     ax.set_title(f"{sym} 5m · last 3 sessions · {title}", color=TX, fontsize=13)
-fig.tight_layout(); out = ROOT / f"reports/styles/daily_trendlines_{sym}.png"
+fig.tight_layout(); out = ROOT / f"reports/styles/{MODE}_trendlines_{sym}.png"
 fig.savefig(out, dpi=85, facecolor=BG); print(out)

@@ -44,3 +44,15 @@ def test_break_ends_the_line():
     assert r["break_green"].any()
     b = int(np.argmax(r["break_green"]))
     assert r["green"][b] is None
+
+
+def test_small_lines_stay_inside_the_window():
+    from vzones.daily_trendlines import small_lines
+    df = pd.concat([_day("2026-10-21", _zigzag_up()), _day("2026-10-22", _zigzag_up())], ignore_index=True)
+    r = small_lines(df, k=1, window=15)
+    c = df["close"].to_numpy()
+    shown = [(i, ln) for i, ln in enumerate(r["green"]) if ln is not None]
+    assert len(shown) > len(df) * 0.3, "small lines should be on screen much of the time"
+    for i, (a, y0, s) in shown:
+        assert i - a <= 15                            # anchor inside the last 15 bars
+        assert all(c[j] >= y0 + s * (j - a) - 1e-9 for j in range(a + 1, i))
