@@ -1,0 +1,23 @@
+{
+ "version": "38.0",
+ "length": 68,
+ "g": 0.85,
+ "regular": {
+  "bars": 2421,
+  "compared": 2285,
+  "within_1e6": 1.0,
+  "max_abs_diff": 3.410605131648481e-13,
+  "chart_type": 1,
+  "error": false,
+  "plot_col": 32
+ },
+ "ha": {
+  "bars": 2421,
+  "compared": 2285,
+  "within_1e6": 1.0,
+  "max_abs_diff": 3.410605131648481e-13,
+  "chart_type": 8,
+  "error": false,
+  "plot_col": 32
+ }
+}

@@ -1643,30 +1643,31 @@ if barstate.islast and wtShow and showGex and array.size(wtSym) > 0
 // the timeframe close" shows the last CLOSED higher-timeframe value (no repaint), otherwise the live one.
 G_MA = "المتوسطات المتحركة"
 ma1On = input.bool(false, "متوسط 1", inline="ma1", group=G_MA)
-ma1T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA"], inline="ma1", group=G_MA)
+ma1T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA", "HMA مخمّد"], inline="ma1", group=G_MA)
 ma1S  = input.source(close, "", inline="ma1", group=G_MA)
 ma1L  = input.int(20, "", minval=1, maxval=4999, inline="ma1", group=G_MA)
 ma1C  = input.color(#f6c309, "", inline="ma1", group=G_MA)
 ma2On = input.bool(true, "متوسط 2", inline="ma2", group=G_MA)
-ma2T  = input.string("HMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA"], inline="ma2", group=G_MA)
+ma2T  = input.string("HMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA", "HMA مخمّد"], inline="ma2", group=G_MA)
 ma2S  = input.source(close, "", inline="ma2", group=G_MA)
 ma2L  = input.int(68, "", minval=1, maxval=4999, tooltip="HMA 68: الأهدأ في قياس 30 سهما على 5 دقائق بنفس التأخر (reports/conviction_ma)، لكنه يتأخر عند انعكاس السعر", inline="ma2", group=G_MA)
 ma2C  = input.color(#fb9800, "", inline="ma2", group=G_MA)
 ma3On = input.bool(true, "متوسط 3", inline="ma3", group=G_MA)
-ma3T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA"], inline="ma3", group=G_MA)
+ma3T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA", "HMA مخمّد"], inline="ma3", group=G_MA)
 ma3S  = input.source(close, "", inline="ma3", group=G_MA)
 ma3L  = input.int(100, "", minval=1, maxval=4999, inline="ma3", group=G_MA)
 ma3C  = input.color(#fb6500, "", inline="ma3", group=G_MA)
 ma4On = input.bool(false, "متوسط 4", inline="ma4", group=G_MA)
-ma4T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA"], inline="ma4", group=G_MA)
+ma4T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA", "HMA مخمّد"], inline="ma4", group=G_MA)
 ma4S  = input.source(close, "", inline="ma4", group=G_MA)
 ma4L  = input.int(200, "", minval=1, maxval=4999, inline="ma4", group=G_MA)
 ma4C  = input.color(#f60c0c, "", inline="ma4", group=G_MA)
 maTF   = input.timeframe("", "الإطار الزمني للمتوسطات", tooltip="فارغ = نفس فريم الشارت. إطار أكبر من الشارت فقط؛ الأصغر يُتجاهل", group=G_MA)
 maWait = input.bool(true, "انتظر إغلاق شمعة الإطار", tooltip="مفعّل: قيمة آخر شمعة مغلقة على الإطار الأكبر (لا تتغير بعد ظهورها). معطّل: القيمة الحية وتتحرك حتى تُغلق الشمعة", group=G_MA)
 maWid  = input.int(1, "سماكة الخطوط", minval=1, maxval=5, group=G_MA)
+maG    = input.float(0.85, "تخميد HMA المخمّد (g)", minval=0.5, maxval=1.0, step=0.05, tooltip="HMA يمدّ الاتجاه الأخير قدّامه، فيتجاوز نقطة الانعكاس ويرجع متأخرا. g يخفف هذا المدّ: 1.0 = HMA العادي، 0.85 = تجاوز أقل بنحو الثلثين مقابل قلبات أكثر بنحو 8% في النطاق، 0.6 = شبه بلا تجاوز مقابل قلبات أكثر 20%.\nغير مثبت: قياس استكشافي على 30 سهما 5 دقائق بعد الحكم، وليس اختبارا مسجلا مسبقا (reports/hma_successor)", group=G_MA)
 
-// all six types computed every bar (Pine wants ta.* calls unconditional), then picked
+// all seven types computed every bar (Pine wants ta.* calls unconditional), then picked
 maOf(string t, float s, simple int n) =>
     float vS = ta.sma(s, n)
     float vE = ta.ema(s, n)
@@ -1674,7 +1675,9 @@ maOf(string t, float s, simple int n) =>
     float vW = ta.wma(s, n)
     float vV = ta.vwma(s, n)
     float vH = ta.hma(s, n)
-    t == "EMA" ? vE : t == "SMMA (RMA)" ? vR : t == "WMA" ? vW : t == "VWMA" ? vV : t == "HMA" ? vH : vS
+    // damped Hull: WMA((2 WMA(n/2) - g WMA(n)) / (2 - g), sqrt n); g = 1 is the plain HMA (vzones/hma_successor.py)
+    float vD = ta.wma((2 * ta.wma(s, math.max(1, int(n / 2))) - maG * ta.wma(s, n)) / (2 - maG), math.max(1, int(math.round(math.sqrt(n)))))
+    t == "EMA" ? vE : t == "SMMA (RMA)" ? vR : t == "WMA" ? vW : t == "VWMA" ? vV : t == "HMA" ? vH : t == "HMA مخمّد" ? vD : vS
 
 m1 = maOf(ma1T, ma1S, ma1L)
 m2 = maOf(ma2T, ma2S, ma2L)

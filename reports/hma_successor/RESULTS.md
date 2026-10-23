@@ -63,3 +63,9 @@ Pine line, parity, screenshot: conditional on "better" or "equal" on all four ti
 ![side by side](side_by_side.png)
 ![close-up](reversal_closeup.png)
 ![heat map](heatmap.png)
+
+## Added to the indicator as an option (2026-10-24, by request, labelled unverified)
+`HMA مخمّد` is a seventh type in the moving-average list of pine/volume_zones.pine (v38) with one input `g`
+(default 0.85). The default averages are unchanged (average 2 = plain HMA 68). Parity against TradingView's own values
+(`tools/dhma_parity.py`, `parity.json`): 2,285 of 2,285 bars within 1e-6 on a regular chart and on a Heikin Ashi chart
+(max difference 3e-13). Screenshot: `tv_damped_hma.png`.
