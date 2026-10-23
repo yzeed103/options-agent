@@ -920,11 +920,14 @@ alertcondition(gxCross, "عبور مستوى خيارات", "السعر عبر �
 // 2026-10-23 "heavier" lines (the user found them jumping): 5-bar pivots and a line that HOLDS until price closes
 // through it. Measured on 7 symbols, 15m (reports/trendline_stability.py): 3.5 -> 0.49 line changes a day, median
 // life 12 -> 44 bars, lines touched 2+ times before the break 9% -> 12%. 2 bars + hold off = the original behaviour.
+// Line QUALITY (reports/trendline_quality.py, 7 stocks, 5m + 15m, 18 settings, both halves of the dates): the best
+// lines - most often respected (2+ touches before the break) and fewest fakeouts - come from k = 2 WITH hold, #1 on
+// both timeframes and both halves (15m: respected 14% vs 8% without hold, fakeouts 31% vs 28-38%). Default k = 2, hold.
 // Backtest (reports/trendline_backtest.py, 7 stocks, 5m + 15m, 36 settings, held-out last 40%): NO setting's breaks
 // beat random entries out of sample (best p = 0.25, gross edge ~0). The lines are a picture of structure, not a signal.
 G_TL = "خطوط الترند"
 showTL  = input.bool(true, "إظهار خطوط الترند", group=G_TL)
-tlLen   = input.int(5, "طول القمة / القاع (شموع يمين ويسار)", minval=1, maxval=20, tooltip="أكبر = خطوط أثقل وأقل تغيرا. كان 2", group=G_TL)
+tlLen   = input.int(2, "طول القمة / القاع (شموع يمين ويسار)", minval=1, maxval=20, tooltip="مقيس على 7 أسهم 5د و15د: 2 مع التثبيت يعطي أكثر خطوط يحترمها السعر وأقل كسر كاذب. أكبر = أهدى لكن أقل احتراما", group=G_TL)
 tlHold  = input.bool(true, "ثبّت الخط حتى يُكسر", tooltip="مفعّل: الخط لا يتبدّل بقمة أو قاع جديد إلا بعد إغلاق السعر خلفه. مقيس: تغيّرات أقل 7 مرات وعمر أطول 3.5 مرات", group=G_TL)
 cTlUp   = input.color(#00e676, "خط القيعان الصاعد", inline="tlc", group=G_TL)
 cTlDn   = input.color(#ff1744, "خط القمم الهابط", inline="tlc", group=G_TL)

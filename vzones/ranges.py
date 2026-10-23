@@ -4,7 +4,7 @@
   daily close outside completes the range (breakout day included) and starts the next one on the breakout day.
 - whale levels of a range: hidden 200-row volume profile of the source bars, tall columns + POC / VAH / VAL.
 - levels per trading day: last `keep` completed ranges + the forming one, built from completed days only.
-- instant trend (EMA 9/21 + DMI 7), Supertrend(10, 3), trendlines (5-bar pivots, lower-high / higher-low pair held until closed through; was 2-bar latest pair).
+- instant trend (EMA 9/21 + DMI 7), Supertrend(10, 3), trendlines (2-bar pivots, lower-high / higher-low pair held until closed through; was replaced by every new pair).
 Volume is spread evenly over each bar's high-low range, as in the Pine code.
 """
 from __future__ import annotations
@@ -121,10 +121,10 @@ def supertrend(df: pd.DataFrame, factor=3.0, n=10):
     return st, d                                               # d < 0 = up, as in Pine
 
 
-def trendline_breaks(df: pd.DataFrame, k: int = 5, hold: bool = True) -> np.ndarray:
+def trendline_breaks(df: pd.DataFrame, k: int = 2, hold: bool = True) -> np.ndarray:
     """+1 on the first close above the current red line, -1 on the first close below the current green line.
     k = pivot bars each side; hold = a new pivot pair replaces a line only after it was closed through
-    (Pine defaults since 2026-10-23: k=5, hold=True; the original was k=2, hold=False)."""
+    (Pine defaults since 2026-10-23: k=2, hold=True - best line quality, reports/trendline_quality.py; the original was k=2, hold=False)."""
     h, l, c = (df[x].to_numpy(float) for x in ("high", "low", "close")); n = len(c); out = np.zeros(n, int)
     lastH = lastL = None; dn = up = None; dnBroke = upBroke = True
     for i in range(2 * k, n):

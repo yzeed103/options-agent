@@ -37,7 +37,7 @@ def segments(k, hold):
 BG, GR, TX, MUT = "#0b0e14", "#2a2e39", "#d1d4dc", "#8a8f9c"
 fig, axs = plt.subplots(2, 1, figsize=(16, 12), facecolor=BG)
 for ax, (k, hold, title) in zip(axs, ((2, False, "before: 2-bar pivots, every new pair replaces the line"),
-                                       (5, True, "after: 5-bar pivots, line held until price closes through it"))):
+                                       (2, True, "after: 2-bar pivots, line held until price closes through it (best quality)"))):
     ax.set_facecolor(BG); ax.tick_params(colors=MUT); [s.set_color(GR) for s in ax.spines.values()]
     for i in range(N):
         col = "#26a69a" if C[i] >= O[i] else "#ef5350"
