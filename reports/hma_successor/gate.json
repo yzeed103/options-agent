@@ -1,0 +1,80 @@
+{
+ "ref": {
+  "len": {
+   "n": 166
+  },
+  "overshoot": 0.889362406938128,
+  "delay": 19.0,
+  "flips": 52.0
+ },
+ "candidates": {
+  "DHMA": {
+   "shape": 0.6,
+   "lens": {
+    "n": 76
+   },
+   "lag_seen": 10.04,
+   "fresh_lag": 10.35,
+   "overshoot": 0.0,
+   "delay": 11.0,
+   "flips": 27.429,
+   "overshoot_reduction": 0.87,
+   "lo": 0.808,
+   "hi": 0.919,
+   "pass": true
+  },
+  "CHMA": {
+   "pass": false,
+   "why": "no shape value met the step-1 constraints"
+  },
+  "HOLT": {
+   "shape": 0.8,
+   "lens": {
+    "n": 22
+   },
+   "lag_seen": 10.19,
+   "fresh_lag": 10.45,
+   "overshoot": 0.0,
+   "delay": 7.0,
+   "flips": 12.571,
+   "overshoot_reduction": 0.948,
+   "lo": 0.906,
+   "hi": 0.978,
+   "pass": true
+  },
+  "MED3": {
+   "shape": null,
+   "lens": {
+    "HMA": 166,
+    "SS": 44,
+    "ALMA": 48
+   },
+   "lag_seen": 10.0,
+   "fresh_lag": 10.21,
+   "overshoot": 0.0,
+   "delay": 9.5,
+   "flips": 6.571,
+   "overshoot_reduction": 0.905,
+   "lo": 0.854,
+   "hi": 0.946,
+   "pass": true
+  },
+  "BLEND": {
+   "shape": 3.0,
+   "lens": {
+    "HMA": 166,
+    "SS": 44
+   },
+   "lag_seen": 10.7,
+   "fresh_lag": 11.15,
+   "overshoot": 0.0,
+   "delay": 9.25,
+   "flips": 55.143,
+   "overshoot_reduction": 0.879,
+   "lo": 0.821,
+   "hi": 0.925,
+   "pass": true
+  }
+ },
+ "any_pass": true
+}
