@@ -13,7 +13,8 @@ import pandas as pd
 from .data import ROOT, RUNTIME
 from .sim import NAMES_AR
 
-OUT = os.path.join(ROOT, "reports", "paper")
+from .data import REPORTS  # noqa: E402
+OUT = os.path.join(REPORTS, "paper")
 VIEW = os.path.join(RUNTIME, "paper_view.html")
 NY = ZoneInfo("America/New_York")
 VERDICT_AR = {"promoted": "معتمدة", "candidate": "مرشّحة", "watching": "تحت المراقبة", "dead": "ميتة", "demoted": "سقطت"}

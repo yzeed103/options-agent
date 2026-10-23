@@ -17,7 +17,13 @@ import numpy as np
 import pandas as pd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-RUNTIME = os.path.join(ROOT, "runtime")
+# data source: default = Alpaca IEX (what the live agent uses). VZ_TAG=sip runs the same code on the consolidated
+# SIP feed (every US exchange; historical only, the free plan withholds the last 15 minutes) with its own runtime and
+# reports folders, so the two never mix.
+TAG = os.environ.get("VZ_TAG", "")
+RUNTIME = os.path.join(ROOT, "runtime" if not TAG else f"runtime_{TAG}")
+REPORTS = os.path.join(ROOT, "reports") if not TAG else os.path.join(ROOT, "reports", TAG)
+FEED = "sip" if TAG == "sip" else "iex"
 BARS = os.path.join(RUNTIME, "bars")
 GEX_DB = r"C:/project/gex_radar/data/snapshots.db"
 GEX_RADAR = r"C:\project\gex_radar"
@@ -50,7 +56,8 @@ def _fetch(cl, syms: list[str], start: datetime, end: datetime | None) -> dict[s
     from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
     from alpaca.data.enums import DataFeed, Adjustment
     res = cl.get_stock_bars(StockBarsRequest(symbol_or_symbols=syms, timeframe=TimeFrame(5, TimeFrameUnit.Minute),
-                                             start=start, end=end, feed=DataFeed.IEX, adjustment=Adjustment.SPLIT))
+                                             start=start, end=end, feed=DataFeed.SIP if FEED == "sip" else DataFeed.IEX,
+                                             adjustment=Adjustment.SPLIT))
     df = res.df
     out = {}
     if df is None or df.empty:
@@ -98,7 +105,8 @@ def update_bars(syms: list[str], now: datetime | None = None, batch: int = 10) -
         start = datetime.fromisoformat(start_iso)
         for i in range(0, len(ss), batch):
             part = ss[i:i + batch]
-            got = _fetch(cl, part, start, None)
+            # the free plan withholds the last 15 minutes of SIP data
+            got = _fetch(cl, part, start, (now - timedelta(minutes=16)) if FEED == "sip" else None)
             for s in part:
                 new = got.get(s)
                 if new is None or new.empty:

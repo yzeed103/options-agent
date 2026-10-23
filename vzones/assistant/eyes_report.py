@@ -10,7 +10,8 @@ import pandas as pd
 from .data import ROOT
 from .eyes import WALLS, boot_diff, boot_excess, boot_two_sets, group_of
 
-OUT = os.path.join(ROOT, "reports", "eyes")
+from .data import REPORTS  # noqa: E402
+OUT = os.path.join(REPORTS, "eyes")
 TINY_RATE, TINY_ATR = 0.02, 0.10
 V_AR = {"holds": "ثابتة", "partly": "جزئيًا", "does not hold": "لا تثبت", "does not hold (opposite)": "لا تثبت (العكس)"}
 TYPE_AR = {"cw": "جدار الكول CW", "pw": "جدار البوت PW", "cwoi": "جدار الفائدة CWOI", "pwoi": "جدار الفائدة PWOI",

@@ -17,7 +17,8 @@ from . import eyes
 from .data import ROOT, RUNTIME
 
 NY = ZoneInfo("America/New_York")
-OUT = os.path.join(ROOT, "reports", "eyes")
+from .data import REPORTS  # noqa: E402
+OUT = os.path.join(REPORTS, "eyes")
 VIEW = os.path.join(RUNTIME, "eyes_view.html")
 OBS_STORE = os.path.join(OUT, "observations.json")
 SCHEMA = """create table if not exists eyes_obs (

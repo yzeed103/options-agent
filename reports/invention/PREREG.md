@@ -54,4 +54,16 @@ If claim 1 succeeds and claim 2 fails, the finding is "the forecast is real but 
 - No lookahead (features at t use bars closed by t and levels known before the open), restart of the live engine.
 
 ## Changes after writing
-(none yet)
+(none to the tests above)
+
+## Addendum A, 2026-10-23, written before running: HAR baseline (paper 2406.08041, "HARd to Beat")
+The first round's verdict stands as it was. This adds a stronger baseline and re-asks claim 1 against it.
+- Daily realized variance RV_d = sum of squared 5-minute log returns of the regular session (the first bar uses
+  open-to-close). HAR components known before day d's open, each as log(RV mean) - 2 log(daily ATR / price):
+  `har1` (day d-1), `har5` (mean of d-5..d-1), `har22` (mean of d-22..d-1).
+- **B4** = B3 + har1, har5, har22. **P4** = B4 + the same positioning features as P. Same ridge, same fit on train
+  dates only, same test dates, same metric and interval.
+- Questions, each with the claim-1 rule (lowest test MAE, interval of the difference above zero, >= 2%):
+  (a) does HAR improve the plain forecast (B4 vs B3)? (b) does positioning add anything on top of HAR (P4 vs B4)?
+- Run on both data sources: IEX (as before) and SIP (the consolidated feed). The SIP run is the one that counts,
+  because its bars hold the whole market's trading.

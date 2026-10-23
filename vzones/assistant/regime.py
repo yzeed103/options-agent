@@ -15,6 +15,20 @@ from .eyes import group_of
 TIMES = {"10:00": 25, "11:00": 85, "12:00": 145}       # minute of the last bar closed by that time
 B3_COLS = ["lvix", "latr", "lmorn", "gap", "g_index", "g_mega"]
 P_COLS = B3_COLS + ["side", "dflip", "dwall", "regime", "gexn"]
+HAR_COLS = ["har1", "har5", "har22"]                    # PREREG addendum A
+B4_COLS = B3_COLS + HAR_COLS
+P4_COLS = B4_COLS + ["side", "dflip", "dwall", "regime", "gexn"]
+MODELS = {"B3": B3_COLS, "P": P_COLS, "B4": B4_COLS, "P4": P4_COLS}
+
+
+def realized_var(d5: pd.DataFrame) -> pd.Series:
+    """Session -> sum of squared 5-minute log returns (first bar: open to close)."""
+    c, o = d5["close"].to_numpy(float), d5["open"].to_numpy(float)
+    sess = d5["session"].to_numpy()
+    prev = np.r_[np.nan, c[:-1]]
+    first = np.r_[True, sess[1:] != sess[:-1]]
+    r = np.where(first, np.log(c / o), np.log(c / prev))
+    return pd.Series(r ** 2).groupby(sess).sum()
 RIDGE = 1.0
 COST_BP = 2.0                                          # per side
 
@@ -55,10 +69,21 @@ def rows_for_symbol(sym: str, d5: pd.DataFrame, live_day=None) -> list[dict]:
     minute = d5["minute"].to_numpy()
     bounds = np.r_[0, np.flatnonzero(sess[1:] != sess[:-1]) + 1, len(d5)]
     grp = group_of(sym)
+    rv = realized_var(d5)
+    rv_days = list(rv.index)
+    rv_pos = {d: k for k, d in enumerate(rv_days)}
+    rvv = rv.to_numpy(float)
     for b0, b1 in zip(bounds[:-1], bounds[1:]):
         day = sess[b0]
         if live_day is not None and day != live_day:
             continue
+        k = rv_pos[day]
+        har = {}
+        if k >= 22:
+            for name, w in (("har1", 1), ("har5", 5), ("har22", 22)):
+                har[name] = np.log(rvv[k - w:k].mean())       # days before d only
+        else:
+            har = {"har1": np.nan, "har5": np.nan, "har22": np.nan}
         datr, F = float(d5["datr"].iat[b0]), float(d5["flip"].iat[b0])
         if not (np.isfinite(datr) and datr > 0 and np.isfinite(F)):
             continue
@@ -80,7 +105,8 @@ def rows_for_symbol(sym: str, d5: pd.DataFrame, live_day=None) -> list[dict]:
                             g_index=float(grp == "index"), g_mega=float(grp == "mega"),
                             side=1.0 if ct > F else -1.0, dflip=abs(ct - F) / datr,
                             dwall=min(abs(ct - w) for w in walls) / datr if walls else np.nan,
-                            regime=gs.get(day, np.nan), gexn=gn.get(day, np.nan)))
+                            regime=gs.get(day, np.nan), gexn=gn.get(day, np.nan),
+                            **{n: v - 2 * np.log(datr / ct) for n, v in har.items()}))
     return out
 
 
@@ -112,40 +138,45 @@ class Ridge:
         return r
 
 
-def fit_all(train: pd.DataFrame) -> dict:
-    """{time: {'B1': median, 'B2': {sym: median}, 'B3': Ridge, 'P': Ridge}} fitted on train rows."""
+def fit_all(train: pd.DataFrame, har: bool = False) -> dict:
+    """{time: {'B1': median, 'B2': {sym: median}, 'B3': Ridge, 'P': Ridge (+ 'B4', 'P4' with har=True)}},
+    fitted on train rows."""
     m = {}
     for t, g in train.groupby("time"):
         b2 = {s: float(x.y.median()) for s, x in g.groupby("sym") if len(x) >= 20}
         m[t] = {"B1": float(g.y.median()), "B2": b2, "B3": Ridge(B3_COLS).fit(g), "P": Ridge(P_COLS).fit(g)}
+        if har:
+            m[t]["B4"], m[t]["P4"] = Ridge(B4_COLS).fit(g), Ridge(P4_COLS).fit(g)
     return m
 
 
 def predict(models: dict, df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
-    for k in ("B1", "B2", "B3", "P"):
+    for k in ("B1", "B2", "B3", "P", "B4", "P4"):
         out[f"f_{k}"] = np.nan
     for t, g in df.groupby("time"):
         mm = models[t]
         out.loc[g.index, "f_B1"] = mm["B1"]
         out.loc[g.index, "f_B2"] = [mm["B2"].get(s, mm["B1"]) for s in g.sym]
-        out.loc[g.index, "f_B3"] = mm["B3"].predict(g)
-        out.loc[g.index, "f_P"] = mm["P"].predict(g)
+        for k in ("B3", "P", "B4", "P4"):
+            if k in mm:
+                out.loc[g.index, f"f_{k}"] = mm[k].predict(g)
     return out
 
 
-def usable(df: pd.DataFrame) -> pd.DataFrame:
-    return df.dropna(subset=["y"] + P_COLS)
+def usable(df: pd.DataFrame, har: bool = False) -> pd.DataFrame:
+    return df.dropna(subset=["y"] + (P4_COLS if har else P_COLS))
 
 
 def save_models(models: dict, path: str) -> None:
-    json.dump({t: {"B1": m["B1"], "B2": m["B2"], "B3": m["B3"].to_dict(), "P": m["P"].to_dict()} for t, m in models.items()},
-              open(path, "w", encoding="utf-8"), indent=1)
+    json.dump({t: {"B1": m["B1"], "B2": m["B2"], **{k: m[k].to_dict() for k in ("B3", "P", "B4", "P4") if k in m}}
+               for t, m in models.items()}, open(path, "w", encoding="utf-8"), indent=1)
 
 
 def load_models(path: str) -> dict:
     d = json.load(open(path, encoding="utf-8"))
-    return {t: {"B1": m["B1"], "B2": m["B2"], "B3": Ridge.from_dict(m["B3"]), "P": Ridge.from_dict(m["P"])} for t, m in d.items()}
+    return {t: {"B1": m["B1"], "B2": m["B2"], **{k: Ridge.from_dict(m[k]) for k in ("B3", "P", "B4", "P4") if k in m}}
+            for t, m in d.items()}
 
 
 def boot_mae_diff(df, a, b, n=2000, seed=0):
