@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from vzones.assistant import data, eyes, eyes_live, journal, learn, live, report  # noqa: E402
+from vzones.assistant import data, eyes, eyes_live, journal, learn, live, regime_live, report  # noqa: E402
 
 NY = ZoneInfo("America/New_York")
 LOCK_PORT = 47232
@@ -78,6 +78,7 @@ def cycle(c) -> dict:
         h["errors"].append(f"bars: {type(e).__name__}")
     h["eyes"] = 0
     eyes_live.connect_schema(c)
+    models = regime_live.load()                # the regime engine (reports/invention): forecasts recorded, no trades
     for s in syms:
         try:
             b = data.load_bars(s)
@@ -93,6 +94,7 @@ def cycle(c) -> dict:
         try:                                   # the eyes: observations only, no trades
             fr = eyes.build(s, b, tfs=(5,), paths=False)
             h["eyes"] += eyes_live.upsert(c, eyes_live.observe_day(s, fr), seen)
+            h["regime"] = h.get("regime", 0) + regime_live.record(c, s, fr[5], models, seen)
         except Exception as e:  # noqa: BLE001
             h["errors"].append(f"eyes {s}: {type(e).__name__}: {str(e)[:80]}")
     try:

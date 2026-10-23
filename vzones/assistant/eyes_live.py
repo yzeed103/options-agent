@@ -291,6 +291,14 @@ def daily_report(c, day: str) -> str:
         f = lambda x: "—" if x is None or not np.isfinite(x) else f"{100 * x:.0f}%"  # noqa: E731
         md += ["## الحصيلة الحيّة مقابل التاريخ", "", "| البند | حيّ (عدد) | حيّ | عشوائي حيّ | التاريخ | عشوائي التاريخ |", "|---|---|---|---|---|---|"]
         md += [f"| {r['what']} | {r['live_n']} | {f(r['live'])} | {f(r['live_base'])} | {f(r['hist'])} | {f(r['hist_base'])} |" for r in tl] + [""]
+    try:
+        from . import regime_live
+        rs = regime_live.summary(c)
+        if rs.get("n"):
+            md += ["## محرك المدى (بدون صفقات)", "", "| الوقت | أيام | خطأ النموذج العادي | خطأ نموذج التموضع |", "|---|---|---|---|"]
+            md += [f"| {t} | {v['n']} | {v['mae_b3']:.3f} | {v['mae_p']:.3f} |" for t, v in rs.items() if t != "n"] + [""]
+    except Exception:  # noqa: BLE001 - the report must not fail on the engine section
+        pass
     os.makedirs(OUT, exist_ok=True)
     text = "\n".join(md)
     open(os.path.join(OUT, f"{day}.md"), "w", encoding="utf-8").write(text)
