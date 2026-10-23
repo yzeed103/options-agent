@@ -285,7 +285,94 @@ def compute(bars: pd.DataFrame, src15: pd.DataFrame, day_bars: pd.DataFrame | No
         wb_open, wb_t, wb_s, wb_b = s, best, c[i] - s * risk, i
     d["sig_tl"], d["sig_st"], d["sig_ta"], d["sig_wb"], d["wb_tgt"] = sig_tl, sig_st, sig_ta, sig_wb, wb_tgt
     d["sig_gx"] = 0
+    # readings for the eyes round: Supertrend state (+1 up), the panel's instant trend (EMA 9/21 + DMI 7, Pine
+    # nowDir), and the four simple averages of the indicator's MA section
+    d["st_state"] = np.where(st_dir < 0, 1, -1)
+    d["it_dir"] = instant_trend(h, l, c)
+    for k in (20, 50, 100, 200):
+        d[f"sma{k}"] = pd.Series(c).rolling(k).mean().to_numpy()
     return d
+
+
+def instant_trend(h, l, c, fast=9, slow=21, n=7) -> np.ndarray:
+    """Pine nowDir: EMA(9) vs EMA(21) and +DI vs -DI of dmiReal(7) agreeing -> +1 / -1, else 0."""
+    ef, es = ema(c, fast), ema(c, slow)
+    up = np.r_[np.nan, h[1:] - h[:-1]]
+    dn = np.r_[np.nan, l[:-1] - l[1:]]
+    pdm = np.where(np.isnan(up), 0.0, np.where((up > dn) & (up > 0), up, 0.0))
+    mdm = np.where(np.isnan(dn), 0.0, np.where((dn > up) & (dn > 0), dn, 0.0))
+    trs = rma(true_range(h, l, c), n)
+    pdi, mdi = 100 * rma(pdm, n) / trs, 100 * rma(mdm, n) / trs
+    return np.where((ef > es) & (pdi > mdi), 1, np.where((ef < es) & (mdi > pdi), -1, 0))
+
+
+def whale_va_by_day(day: pd.DataFrame, src: pd.DataFrame, cache: dict | None = None) -> dict:
+    """{session date -> [(poc, vah, val) of each range shown that day]}: same ranges as whale_levels_by_day
+    (the indicator draws POC / VAH / VAL lines for each). Cache keys ('va', t0, t1) for completed ranges."""
+    cache = {} if cache is None else cache
+    ranges = _ranges_by_day(day)
+    out = {}
+    for d, rs in ranges.items():
+        vas = []
+        for (a, b, done) in rs:
+            key = ("va", a, b)
+            if done and key in cache:
+                v = cache[key]
+            else:
+                v = _range_va(src, a, b)
+                if done:
+                    cache[key] = v
+            if v:
+                vas.append(v)
+        out[d] = vas
+    return out
+
+
+def _range_va(src, t0, t1):
+    m = (src.index >= t0) & (src.index < t1)
+    if m.sum() <= 10:
+        return None
+    b = src[m]
+    p = profile(b.high.to_numpy(float), b.low.to_numpy(float), b.volume.fillna(0).to_numpy(float), WH_ROWS)
+    if p is None:
+        return None
+    lo, st, pv = p
+    pi, a0, a1 = value_area(pv)
+    return (lo + (pi + .5) * st, lo + (a1 + 1) * st, lo + a0 * st)
+
+
+def _ranges_by_day(day: pd.DataFrame) -> dict:
+    """The ranges whale_levels_by_day draws on each day: {date -> [(t0, t1, completed)]} (same state machine)."""
+    H, L, C = day.high.to_numpy(float), day.low.to_numpy(float), day.close.to_numpy(float)
+    dates = list(day.index)
+    starts = [pd.Timestamp(d).tz_localize("America/New_York") for d in dates]
+    out = {}
+    datr = np.nan
+    r_idx = None; r_hi = r_lo = np.nan
+    rg0: list = []; rg1: list = []
+    for n in range(len(dates) - 1):
+        today = starts[n + 1]
+        pc = C[n - 1] if n > 0 else C[n]
+        trd = max(H[n] - L[n], abs(H[n] - pc), abs(L[n] - pc))
+        datr = trd if np.isnan(datr) else datr + (trd - datr) / 14
+        if r_idx is None:
+            r_idx, r_hi, r_lo = n, H[n], L[n]
+        elif n - r_idx < WH_LEN:
+            r_hi, r_lo = max(r_hi, H[n]), min(r_lo, L[n])
+            if r_hi - r_lo > WH_MULT * datr:
+                r_idx, r_hi, r_lo = n, H[n], L[n]
+        elif C[n] > r_hi or C[n] < r_lo:
+            rg0.append(starts[r_idx]); rg1.append(today)
+            while len(rg0) > WH_KEEP:
+                rg0.pop(0); rg1.pop(0)
+            r_idx, r_hi, r_lo = n, H[n], L[n]
+        else:
+            r_hi, r_lo = max(r_hi, H[n]), min(r_lo, L[n])
+        rs = [(a, b, True) for a, b in zip(rg0, rg1)]
+        if (n + 1) - r_idx >= WH_LEN:
+            rs.append((starts[r_idx], today, False))
+        out[dates[n + 1]] = rs
+    return out
 
 
 def add_gex_signal(d: pd.DataFrame, lv: pd.DataFrame) -> pd.DataFrame:

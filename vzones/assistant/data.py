@@ -170,10 +170,65 @@ def gex_levels(sym: str) -> pd.DataFrame:
     return q
 
 
+LEVEL_COLS = ["cw", "pw", "flip", "pin", "dflip", "maxoi", "cwoi", "pwoi"]
+
+
+def _decode(blob):
+    import gzip
+    import json
+    import zlib
+    raw = bytes(blob)
+    for f in (lambda b: b, zlib.decompress, gzip.decompress):
+        try:
+            return json.loads(f(raw))
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+def gex_levels_full(sym: str) -> pd.DataFrame:
+    """All stored market dates (basis 'oi') with CW PW FLIP PIN DFLIP MAXOI and the open-interest walls CWOI / PWOI
+    rebuilt from the row's strike table (vzones.gex_block.oi_walls, as the GEX block does). Cached in
+    runtime/cache/gex_<SYM>.csv; rebuilt when GEXRadar has a newer or different set of rows."""
+    if not os.path.exists(GEX_DB):
+        return pd.DataFrame(columns=LEVEL_COLS)
+    c = sqlite3.connect(f"file:{GEX_DB}?mode=ro", uri=True)
+    try:
+        sig = c.execute("select count(*), max(market_date), max(updated_at) from daily_levels where symbol=? and basis='oi'",
+                        (sym,)).fetchone()
+        cp = os.path.join(RUNTIME, "cache", f"gex_{sym}.csv")
+        tag = f"{sig[0]}|{sig[1]}|{sig[2]}"
+        if os.path.exists(cp):
+            cached = pd.read_csv(cp, index_col=0)
+            if "tag" in cached and len(cached) and str(cached["tag"].iloc[0]) == tag:
+                cached.index = [pd.Timestamp(x).date() for x in cached.index]
+                return cached[LEVEL_COLS]
+        from vzones.gex_block import oi_walls
+        rows = {}
+        for md, cw, pw, fl, pin, dfl, blob in c.execute(
+                "select market_date, call_wall, put_wall, gamma_flip, pin, delta_flip, payload from daily_levels "
+                "where symbol=? and basis='oi' order by market_date", (sym,)):
+            p = _decode(blob) or {}
+            lv = p.get("levels") or {}
+            st = p.get("strikes") or []
+            spot = p.get("spot") or 0.0
+            cwoi, pwoi = oi_walls(st, spot) if st and spot else (None, None)
+            rows[md] = dict(cw=cw, pw=pw, flip=fl, pin=pin, dfl=dfl, maxoi=lv.get("max_oi_strike"), cwoi=cwoi, pwoi=pwoi)
+    finally:
+        c.close()
+    out = pd.DataFrame.from_dict(rows, orient="index").rename(columns={"dfl": "dflip"})
+    out = out.reindex(columns=LEVEL_COLS).astype(float)
+    os.makedirs(os.path.dirname(cp), exist_ok=True)
+    w = out.copy(); w["tag"] = tag
+    w.to_csv(cp)
+    out.index = [pd.Timestamp(x).date() for x in out.index]
+    return out
+
+
 def levels_for_days(sym: str, days: list) -> pd.DataFrame:
     """Row per day in `days`: the levels of the latest market date strictly before it (NaN if none within 5 days)."""
-    g = gex_levels(sym)
-    out = pd.DataFrame(index=days, columns=["cw", "pw", "flip", "pin", "dflip"], dtype=float)
+    g = gex_levels_full(sym)
+    out = pd.DataFrame(index=days, columns=LEVEL_COLS, dtype=float)
     if g.empty:
         return out
     gd = sorted(g.index)
@@ -181,7 +236,7 @@ def levels_for_days(sym: str, days: list) -> pd.DataFrame:
     for d in days:
         j = bisect.bisect_left(gd, d) - 1
         if j >= 0 and (d - gd[j]).days <= 5:
-            out.loc[d] = g.loc[gd[j], ["cw", "pw", "flip", "pin", "dflip"]].astype(float).to_numpy()
+            out.loc[d] = g.loc[gd[j], LEVEL_COLS].astype(float).to_numpy()
     return out
 
 

@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from vzones.assistant import data, journal, learn, live, report  # noqa: E402
+from vzones.assistant import data, eyes, eyes_live, journal, learn, live, report  # noqa: E402
 
 NY = ZoneInfo("America/New_York")
 LOCK_PORT = 47232
@@ -76,6 +76,8 @@ def cycle(c) -> dict:
         h["bars_added"] = sum(added.values())
     except Exception as e:  # noqa: BLE001 - data feed down: keep the cached bars, try again next cycle
         h["errors"].append(f"bars: {type(e).__name__}")
+    h["eyes"] = 0
+    eyes_live.connect_schema(c)
     for s in syms:
         try:
             b = data.load_bars(s)
@@ -87,6 +89,19 @@ def cycle(c) -> dict:
             h["ok"] += 1
         except Exception as e:  # noqa: BLE001 - one symbol must not stop the others
             h["errors"].append(f"{s}: {type(e).__name__}: {str(e)[:80]}")
+            continue
+        try:                                   # the eyes: observations only, no trades
+            fr = eyes.build(s, b, tfs=(5,), paths=False)
+            h["eyes"] += eyes_live.upsert(c, eyes_live.observe_day(s, fr), seen)
+        except Exception as e:  # noqa: BLE001
+            h["errors"].append(f"eyes {s}: {type(e).__name__}: {str(e)[:80]}")
+    try:
+        last = c.execute("select max(date) from eyes_obs").fetchone()[0]
+        if last:
+            eyes_live.group_sync(c, last, seen)
+            eyes_live.view(c, last)
+    except Exception as e:  # noqa: BLE001
+        h["errors"].append(f"eyes view: {type(e).__name__}")
     h["open"] = c.execute("select count(*) from trades where status='open'").fetchone()[0]
     h["seconds"] = round(time.time() - t0, 1)
     try:
@@ -102,6 +117,10 @@ def end_of_day(c, st: dict) -> None:
         report.history_report(c, ev, lst)
         report.graveyard(ev)
     report.daily_report(c)
+    last = c.execute("select max(date) from eyes_obs").fetchone()[0]
+    if last:
+        eyes_live.daily_report(c, last)
+        eyes_live.update_observations(c)
     st["last_eod"] = datetime.now(NY).date().isoformat()
     save_state(st)
     log.info("end of day: verdicts %s", lst.get("counts"))

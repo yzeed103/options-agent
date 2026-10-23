@@ -96,4 +96,14 @@ when the bars come; nothing decided at bar t uses bars after t. Unusual-day flag
 - an index group in sync: at least 80% of the symbols moved the same way from the open by more than 0.3 daily ATR.
 
 ## Changes after writing
-(none yet)
+- 2026-10-23, measurement fix (not a result-driven change): "range before / after a change of flip side" was first
+  computed as the window's high-low range divided by its number of bars. That penalises the longer window (a range
+  grows slower than the number of bars), so "after" always looked quieter. It is now the average bar range
+  (high - low) in daily ATR, which is comparable between windows of different length.
+- 2026-10-23, detail not stated above: a bar that reaches both first-passage barriers counts as adverse first (the
+  simulator's stop-first rule).
+- 2026-10-23, reporting only (the rule is unchanged): "a whale level passed through on its first touch with no
+  rejection bar" turned out to be common (about three quarters of first touches pass within 4 bars in history; 45
+  in a single day). The daily report counts it against that rate instead of listing each one as unusual.
+- 2026-10-23: live tallies count only days from the first live day on (runtime/eyes_state.json); days filled in
+  after the fact are labelled and left out.
