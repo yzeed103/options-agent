@@ -70,3 +70,13 @@ price-only climax bars. H6 the first 30 minutes do not show what the rest of the
 
 ## Changes after writing
 (none yet)
+- 2026-10-24, measurement fixes found on the planted tests, **before any real-data run**: (a) the first synthetic
+  generator planted the volume on its own "resumption" bars, which the detector almost never selected as events
+  (2% overlap); replaced by planting on the detector's own events: prices first, events, then volume assigned per
+  event (pullback 0.6×, resumption 2× with an outcome-dependent probability in Q2, outcome-independent in Q1).
+  (b) The synthetic world's price pattern itself predicts continuation (noise pullbacks inside long legs resume more
+  often), so "no lift interval excludes 1" and "the control's lift interval includes 1" cannot hold even with no
+  volume effect. Q1 pass is now: no measure **beats** the control (paired lower bound > 0 for none of them). Q2 pass:
+  the pattern score recovers ≥ 70% of the planted lift and the control's lift is unchanged between Q1 and Q2 (same
+  prices, same events, within 0.01). (c) After a resumption the new leg must again reach 5 bars before a pullback can
+  start (the first version allowed 1-bar legs).
