@@ -76,3 +76,20 @@ breaks continue more than swing breaks. H6 the excess over random grows with the
 
 ## Changes after writing
 (none yet)
+- 2026-10-24, found on the planted tests before any real-data result was seen: the synthetic world with trend / range
+  regimes has mean-reverting ranges, so breaks there continue **less** than random by construction (−10 points), which
+  makes "every excess interval includes 0" impossible even with no planted effect. Y1 / Y2 now use a pure random walk
+  (a martingale, where no break can carry information unless planted); the regime world is kept as Y0, a sanity
+  check that the detector sees that known mean reversion. The plant is 0.6 ATR of drift over the next 10 bars
+  (0.3 was too small to measure recovery with 40 seeds).
+- 2026-10-24, same session, still before any real-data result: (a) pseudo-entries drawn within ±30 bars of the break
+  were conditioned on the move that caused it (bars just before an up-break sit inside the rally): on a pure random
+  walk they scored 55% against the real breaks' 50%. Pseudo-entries are now drawn from the whole series of the
+  symbol (same direction, not within 3 bars of any break), which is the unconditioned base the control was meant
+  to be. (b) The Y2 gate is recovery ≥ 70% with unchanged pseudo rates; "Σ beats age alone" is hypothesis H2 on
+  real data, reported in Y2 but not gated (in a random walk the plant sits on Σ's top quintile, which age alone
+  largely shares). (c) The micro-break control rows lacked a date (crash at the daily split); fixed.
+- 2026-10-24, on the re-run of the planted tests (Y1 passes on the random walk: real 49.5% vs pseudo 49.1%): the Y2
+  plant is applied to 70% of the top-quintile events, so the quintile can show at most 0.7 × the planted excess;
+  the measured 0.111 against a planted 0.166 is 67% of the planted and 96% of the achievable. The gate is now
+  "≥ 70% of the achievable maximum" (the first wording compared to a ceiling the plant itself cannot reach).

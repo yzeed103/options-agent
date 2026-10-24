@@ -172,11 +172,14 @@ def trend_rule(F, t, dr, opp_breaks: np.ndarray, cost_bp: float, max_bars: int =
     return (dr * (c[k] - c[t]) / a0) - 2 * cost_bp / 1e4 * c[t] / a0, k - t
 
 
-def pseudo_entries(n: int, t: int, dr: int, break_bars: np.ndarray, rng, m: int = 20, span: int = 30):
+def pseudo_entries(n: int, t: int, dr: int, break_bars: np.ndarray, rng, m: int = 20, span: int = 0):
+    """random bars of the same series, not within 3 bars of any break, same direction as the real event. They are
+    drawn from the whole series: a window around the break would be conditioned on the move that caused the break
+    (bars just before an up-break sit inside the rally), which biased the first version by +5 points."""
     out = []
-    lo, hi = max(1, t - span), min(n - 2, t + span)
+    lo, hi = 1, n - 2
     tries = 0
-    while len(out) < m and tries < 200:
+    while len(out) < m and tries < 400:
         j = int(rng.integers(lo, hi + 1)); tries += 1
         if not break_bars[max(0, j - 3):j + 4].any():
             out.append(j)
