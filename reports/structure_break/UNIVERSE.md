@@ -1,0 +1,19 @@
+# Daily universe (pre-registered before fetching, 2026-10-24)
+
+Current members of the S&P 100 and the Nasdaq-100 (as known at writing; **survivorship bias acknowledged**: names
+that left the indexes are missing, so daily results lean toward survivors) plus the 30 SIP symbols. Yahoo daily bars
+2010-01-01 to now, split-adjusted, not dividend-adjusted. Symbols Yahoo cannot deliver are listed in RESULTS.md.
+
+S&P 100: AAPL ABBV ABT ACN ADBE AIG AMD AMGN AMT AMZN AVGO AXP BA BAC BK BKNG BLK BMY BRK-B C CAT CHTR CL CMCSA COF
+COP COST CRM CSCO CVS CVX DE DHR DIS DUK EMR FDX GD GE GILD GM GOOG GOOGL GS HD HON IBM INTC INTU ISRG JNJ JPM KO LIN
+LLY LMT LOW MA MCD MDLZ MDT MET META MMM MO MRK MS MSFT NEE NFLX NKE NOW NVDA ORCL PEP PFE PG PLTR PM PYPL QCOM RTX
+SBUX SCHW SO SPG T TGT TMO TMUS TSLA TXN UNH UNP UPS USB V VZ WFC WMT XOM
+
+Nasdaq-100 (not already above): ADI ADP ADSK AEP ALGN AMAT ANSS APP ARM ASML AZN BIIB BKR CCEP CDNS CDW CEG CPRT CRWD
+CSGP CSX CTAS CTSH DASH DDOG DLTR DXCM EA EXC FANG FAST FTNT GEHC GFS HON IDXX ILMN KDP KHC KLAC LRCX LULU MAR MCHP
+MELI MNST MRNA MRVL MU NXPI ODFL ON ORLY PANW PAYX PCAR PDD PEP REGN ROP ROST SNPS TEAM TTD TTWO VRSK VRTX WBD WDAY
+XEL ZS
+
+SIP symbols (not already above): COIN HOOD MARA MSTR RIOT RIVN RKLB SMCI SOFI
+
+ETFs for context and the control: SPY QQQ
