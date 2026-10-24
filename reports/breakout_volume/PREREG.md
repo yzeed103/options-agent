@@ -70,3 +70,6 @@ than up-breaks. H6 levels touched 3+ times break-and-hold more often than levels
   quintile (69%) because the threshold admits noise bars; the pass stays on the pre-registered top-quintile recovery.
   At 69.1% vs the 70% line, a second plant at 3× (W2b, same seeds, same prices) is added to tell the synthetic volume
   noise from a pipeline fault: the pipeline is taken as validated if W2b recovers ≥ 70%.
+- 2026-10-24, after the run: on 15m the swing-level breaks with a 12-bar outcome are too few to measure (18 and 35
+  test events: a level needs 10 bars of age and the hold needs 12 more, inside a 26-bar session), so the "5m and
+  15m" clauses cannot be met by any label; the formal label is "no" and the 5m evidence is reported as it is.
