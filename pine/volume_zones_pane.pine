@@ -5,6 +5,7 @@ indicator("Volume Zones · لوحة", "VZ لوحة", overlay=false, format=forma
 
 // ═══════════════ المدخلات ═══════════════
 G_P = "اللوحة"
+pMode = input.string("الكلّ في نافذة واحدة", "محتوى النافذة", options=["الكلّ في نافذة واحدة", "الفوليوم الآن فقط", "الحركة المتوقّعة والانضغاط فقط", "شريط الحرارة فقط"], tooltip="أضف السكربت أكثر من مرّة واختر في كلّ نسخة أداة واحدة، فتصير كلّ أداة في نافذتها وبمقياسها الحقيقي", group=G_P)
 pRvol  = input.bool(true, "أعمدة الفوليوم الآن (RVOL)", tooltip="حجم الشمعة ÷ وسيط حجم نفس الدقيقة في آخر 20 جلسة. مقيس 2026-10-24 على 30 سهمًا: يتنبّأ باتّساع المدى (IC 0.28 على 5 دقائق) لا بالاتجاه. رمادي عادي، أخضر ≥ 1.2×، أصفر ≥ 2×", group=G_P)
 pMove  = input.bool(true, "خطّ الحركة المتوقّعة", tooltip="±1σ للشموع القادمة (24 على 5 دقائق) كنسبة مئوية من السعر، مضروبة في المضاعف لتُرى بجانب الأعمدة؛ الرقم الحقيقي في الجدول على اليمين", group=G_P)
 pMoveX = input.float(10, "مضاعف عرض الحركة المتوقّعة", minval=1, maxval=100, step=1, group=G_P)
@@ -67,20 +68,27 @@ float veVixPct = request.security("CBOE:VIX", "D", ta.percentrank(close, 500), l
 float veV3 = request.security("CBOE:VIX3M", "D", close, lookahead=barmerge.lookahead_off)
 
 // ═══════════════ الرسم ═══════════════
+bool mAll  = pMode == "الكلّ في نافذة واحدة"
+bool mRvol = pRvol and (mAll or pMode == "الفوليوم الآن فقط")
+bool mMove = pMove and (mAll or pMode == "الحركة المتوقّعة والانضغاط فقط")
+bool mSqz  = pSqz and (mAll or pMode == "الحركة المتوقّعة والانضغاط فقط")
+bool mHeat = pHeat and (mAll or pMode == "شريط الحرارة فقط")
 color rvCol = na(rvol) ? cNorm : rvol >= 2 ? cHot : rvol >= 1.2 ? cUp : cNorm
-plot(pRvol ? rvol : na, "الفوليوم الآن RVOL", color=rvCol, style=plot.style_columns)
-hline(1, "RVOL = 1", color=color.new(#9598a1, 40), linestyle=hline.style_dashed)
-hline(0, "الصفر", color=color.new(#9598a1, 70))
-plot(pMove ? veMovePct * pMoveX : na, "الحركة المتوقّعة % × المضاعف", color=cMove, linewidth=2)
+plot(mRvol ? rvol : na, "الفوليوم الآن RVOL", color=rvCol, style=plot.style_columns)
+plot(mRvol ? 1 : na, "RVOL = 1", color=color.new(#9598a1, 40), style=plot.style_line, linewidth=1)
+plot(mAll or pMode == "شريط الحرارة فقط" ? 0 : na, "الصفر", color=color.new(#9598a1, 70))
+// in its own pane the expected move is drawn in true percent; beside the RVOL columns it is scaled by the multiplier
+plot(mMove ? veMovePct * (mAll ? pMoveX : 1) : na, "الحركة المتوقّعة %" + " (× المضاعف في النافذة المشتركة)", color=cMove, linewidth=2)
 plot(veMovePct, "الحركة المتوقّعة %", color=na, display=display.data_window)
 plot(veMove, "الحركة المتوقّعة (سعر)", color=na, display=display.data_window)
 plot(veComp, "انضغاط ATR14/ATR100", color=na, display=display.data_window)
-bgcolor(pSqz and veSqzOn ? color.new(cSqz, 70) : na, title="الانضغاط")
+bgcolor(mSqz and veSqzOn ? color.new(cSqz, 70) : na, title="الانضغاط")
 // heat strip: a column per bar below the zero line
 color heatCol = veSqzOn ? cSqz : na(vePct) ? cNorm : vePct < 50 ? color.from_gradient(vePct, 0, 50, #1a1a2e, #1e88e5) : color.from_gradient(vePct, 50, 100, #1e88e5, #ffd600)
-plot(pHeat ? -0.15 : na, "حرارة التذبذب", color=heatCol, style=plot.style_columns, histbase=-0.45)
-plotshape(pHeat and exitUp, "خروج فوق النطاق", style=shape.triangleup, location=location.bottom, color=cUp, size=size.tiny)
-plotshape(pHeat and exitDn, "خروج تحت النطاق", style=shape.triangledown, location=location.bottom, color=#ef5350, size=size.tiny)
+// alone in a pane the strip fills it (0..1); under the columns it sits below zero
+plot(mHeat ? (mAll ? -0.15 : 1) : na, "حرارة التذبذب", color=heatCol, style=plot.style_columns, histbase=mAll ? -0.45 : 0)
+plotshape(mHeat and exitUp, "خروج فوق النطاق", style=shape.triangleup, location=location.bottom, color=cUp, size=size.tiny)
+plotshape(mHeat and exitDn, "خروج تحت النطاق", style=shape.triangledown, location=location.bottom, color=#ef5350, size=size.tiny)
 // numbers table
 tPos = pTblPos == "أعلى اليمين" ? position.top_right : pTblPos == "أعلى اليسار" ? position.top_left : pTblPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
 var table tb = table.new(tPos, 2, 4, bgcolor=color.new(#1e222d, 10), border_color=color.new(#2a2e39, 0), border_width=1)
@@ -89,13 +97,17 @@ if pTbl and barstate.islast
     string sMv = na(veMove) ? "-" : "±" + str.tostring(veMove, format.mintick) + " (" + str.tostring(veMovePct, "#.00") + "%) / " + str.tostring(veK) + " شمعة"
     string sStop = na(veMove) ? "-" : "≥ " + str.tostring(0.75 * veMove, format.mintick) + " (0.75×) · ATR واحد يُضرب 41%"
     string sVix = na(veVixPct) ? "-" : "VIX " + str.tostring(veVixPct, "#") + "% " + (veVixPct >= 80 ? "خوف عالٍ · ميل 60 يومًا +3.8 SPY" : veVixPct <= 20 ? "هدوء" : "عادي") + (not na(veV3) and veVix > veV3 ? " · VIX فوق VIX3M" : "") + (veSqzOn ? " · انضغاط" : "")
-    table.cell(tb, 1, 0, "الفوليوم الآن", text_color=#9598a1, text_size=size.small, text_halign=text.align_right)
-    table.cell(tb, 0, 0, sVol, text_color=rvCol == cNorm ? #d1d4dc : rvCol, text_size=size.small, text_halign=text.align_right)
-    table.cell(tb, 1, 1, "الحركة المتوقّعة", text_color=#9598a1, text_size=size.small, text_halign=text.align_right)
-    table.cell(tb, 0, 1, sMv, text_color=cMove, text_size=size.small, text_halign=text.align_right)
-    table.cell(tb, 1, 2, "وقف يصمد للضجيج", text_color=#9598a1, text_size=size.small, text_halign=text.align_right)
-    table.cell(tb, 0, 2, sStop, text_color=#d1d4dc, text_size=size.small, text_halign=text.align_right)
-    table.cell(tb, 1, 3, "السياق", text_color=#9598a1, text_size=size.small, text_halign=text.align_right)
-    table.cell(tb, 0, 3, sVix, text_color=veSqzOn ? cSqz : #d1d4dc, text_size=size.small, text_halign=text.align_right)
+    table.clear(tb, 0, 0, 1, 3)
+    if mRvol
+        table.cell(tb, 1, 0, "الفوليوم الآن", text_color=#9598a1, text_size=size.small, text_halign=text.align_right)
+        table.cell(tb, 0, 0, sVol, text_color=rvCol == cNorm ? #d1d4dc : rvCol, text_size=size.small, text_halign=text.align_right)
+    if mMove
+        table.cell(tb, 1, 1, "الحركة المتوقّعة", text_color=#9598a1, text_size=size.small, text_halign=text.align_right)
+        table.cell(tb, 0, 1, sMv, text_color=cMove, text_size=size.small, text_halign=text.align_right)
+        table.cell(tb, 1, 2, "وقف يصمد للضجيج", text_color=#9598a1, text_size=size.small, text_halign=text.align_right)
+        table.cell(tb, 0, 2, sStop, text_color=#d1d4dc, text_size=size.small, text_halign=text.align_right)
+    if mMove or mHeat
+        table.cell(tb, 1, 3, "السياق", text_color=#9598a1, text_size=size.small, text_halign=text.align_right)
+        table.cell(tb, 0, 3, sVix, text_color=veSqzOn ? cSqz : #d1d4dc, text_size=size.small, text_halign=text.align_right)
 alertcondition(veSqzOn and not veSqzOn[1], "انضغاط", "دخل السعر في انضغاط (ATR14/ATR100 تحت عُشره المعتاد)")
 alertcondition(not na(rvol) and rvol >= 2, "فوليوم عالٍ جدًا", "RVOL ≥ 2× لنفس الدقيقة")
