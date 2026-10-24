@@ -11,8 +11,8 @@ inputs = '''
 G_F = "المربّع الأزرق أسفل الشارت"
 pBoxOn  = input.bool(true, "إظهار المربّع الأزرق", tooltip="مربّع في أسفل نافذة الشارت نفسها، فيه آخر N شمعة مصغّرة مع المروحة الموسمية والسلّم ومدى اليوم والمتبقّي حتى الإغلاق والوقف المتحرّك وأسهم الخروج، وتحتها شريطا الحرارة والانضغاط. يُرسم على مقياس السعر تحت أدنى سعر معروض، ويضاف هامش أسفل الشارت تلقائيًّا", group=G_F)
 pWin    = input.int(50, "عدد الشموع داخل المربّع", minval=20, maxval=200, group=G_F)
-pBoxH   = input.float(35, "ارتفاع المربّع (% من مدى الشارت)", minval=10, maxval=80, step=5, tooltip="نسبة من المدى الذي يرسمه المؤشّر نفسه (من أدنى مستوى مرسوم إلى أعلاه: الشموع، خطوط الحيتان، مستويات الخيارات، مناطق القيمة). 35 = نحو ثلث الشاشة. المربّع يجلس دائمًا تحت أدنى مستوى مرسوم", group=G_F)
-pBoxGap = input.float(4, "المسافة تحت أدنى مستوى (% من المدى)", minval=0, maxval=30, step=1, group=G_F)
+pBoxH   = input.float(1.5, "ارتفاع المربّع (% من السعر)", minval=0.3, maxval=10, step=0.1, tooltip="نسبة من السعر: 1.5% على سهم بـ524 = نحو 8 نقاط. ثابتة مهما كان الفريم، فتناسب المساحة الفارغة أسفل الشارت. المربّع يجلس تحت الشموع وتحت أيّ مستوى قريب منها؛ المستويات البعيدة تُتجاهل", group=G_F)
+pBoxGap = input.float(0.25, "المسافة تحت الشموع (% من السعر)", minval=0, maxval=5, step=0.05, group=G_F)
 pBoxAhead = input.int(30, "مساحة المروحة يمين المربّع (شموع)", minval=24, maxval=120, group=G_F)
 pFan    = input.bool(true, "المروحة الموسمية ±1σ و±2σ", group=G_F)
 pLadder = input.bool(true, "سلّم الوقف والهدف", group=G_F)
@@ -44,27 +44,26 @@ draw = r'''
 // include it (boxes alone do not stretch the scale).
 float wLo = ta.lowest(l_, pWin)
 float wHi = ta.highest(h_, pWin)
-// the range the indicator itself draws (candles of the window, whale levels, option strikes, value areas): the box sits under it
-float lvMin = wLo
-float lvMax = wHi
+float wSpan = math.max(wHi - wLo, 4 * atrV)
+// only levels NEAR the candles (within 1.5 spans below the lowest low) push the box down; far ones are ignored
+float nearMin = wLo
 for x in lvNow
-    if not na(x)
-        lvMin := math.min(lvMin, x), lvMax := math.max(lvMax, x)
+    if not na(x) and x < wLo and x > wLo - 0.01 * c_
+        nearMin := math.min(nearMin, x)
 for x in gpK
-    lvMin := math.min(lvMin, x), lvMax := math.max(lvMax, x)
+    if x < wLo and x > wLo - 0.01 * c_
+        nearMin := math.min(nearMin, x)
 for i = 0 to 7
     float gxx = array.get(gxV, i)
-    if not na(gxx)
-        lvMin := math.min(lvMin, gxx), lvMax := math.max(lvMax, gxx)
-if not na(pdVAL)
-    lvMin := math.min(lvMin, pdVAL), lvMax := math.max(lvMax, pdVAH)
-if not na(val)
-    lvMin := math.min(lvMin, val), lvMax := math.max(lvMax, vah)
-float rangeAll = math.max(lvMax - lvMin, 4 * atrV)
-float boxH = pBoxH / 100 * rangeAll
-float boxTop = lvMin - pBoxGap / 100 * rangeAll
+    if not na(gxx) and gxx < wLo and gxx > wLo - 0.01 * c_
+        nearMin := math.min(nearMin, gxx)
+if not na(pdVAL) and pdVAL < wLo and pdVAL > wLo - 0.01 * c_
+    nearMin := math.min(nearMin, pdVAL)
+if not na(val) and val < wLo and val > wLo - 0.01 * c_
+    nearMin := math.min(nearMin, val)
+float boxH = pBoxH / 100 * c_
+float boxTop = nearMin - pBoxGap / 100 * c_
 float boxBot = boxTop - boxH
-float wSpan = math.max(wHi - wLo, 4 * atrV)
 plot(pBoxOn ? boxBot - 0.03 * boxH : na, "قاع المربّع الأزرق", color=color.new(cWinB, 85), linewidth=1)
 var box winBox = na
 var line[] wLines = array.new_line()
