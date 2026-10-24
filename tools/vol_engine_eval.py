@@ -195,15 +195,15 @@ def tf_block(tf):
     for k in kk:
         fits = fit_models([S[s]["r"][S[s]["train"]] for s in syms], k, lags, lam_grid)
         # control scale c for ATR and the slot-range control (5m)
-        num = den = 0.0
+        num = den = 0.0                                    # ATR control in return units: c x (ATR / close)^2
         for s in syms:
-            A = VT.atr(S[s]["h"], S[s]["l"], S[s]["c"]); V = VE.forward_var(S[s]["r"], k); tr = S[s]["train"]
+            A = VT.atr(S[s]["h"], S[s]["l"], S[s]["c"]) / S[s]["c"]; V = VE.forward_var(S[s]["r"], k); tr = S[s]["train"]
             ok = tr & np.isfinite(V) & np.isfinite(A); num += np.nansum(V[ok]); den += np.nansum(A[ok] ** 2)
         c_atr = num / den
         rows = {m: [] for m in ("EWMA", "GARCH", "HAR", "ATR")}; cov = {m: {1: [], 2: []} for m in rows}; blocks = []; Vs = []; grp = []
         from vzones.assistant.eyes import group_of
         for s in syms:
-            A = VT.atr(S[s]["h"], S[s]["l"], S[s]["c"]); V = VE.forward_var(S[s]["r"], k); mv = VE.forward_move(S[s]["c"], k)
+            A = VT.atr(S[s]["h"], S[s]["l"], S[s]["c"]) / S[s]["c"]; V = VE.forward_var(S[s]["r"], k); mv = VE.forward_move(S[s]["c"], k)
             F = apply_fits(S[s]["r"], fits, k, lags); F["ATR"] = c_atr * A ** 2
             te = (~S[s]["train"]) if tf == "5m" else S[s]["test"]; te = te & np.isfinite(V) & (V > 0)
             te[:300] = False

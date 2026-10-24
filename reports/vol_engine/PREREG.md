@@ -107,3 +107,7 @@ the interval excluding 0.
   +17 points, about 7 standard errors); the gate line of +20 points was set before knowing how much of the 45-bar
   expansion a 48-bar window starting at the crossing can contain, and is set to +10 points. This is the last change
   to the planted gates; the real-data rule is untouched.
+- 2026-10-24, on the first real-data pass (5m only had printed): the ATR control was scaled in price units with one
+  constant across symbols, which is wrong by the square of the price level (QLIKE 50 vs −7.6 for the forecasts);
+  the control is now c × (ATR / close)², in return units like the forecasts. The slot-range control is not built
+  (the ATR control is the stronger of the two and is the one the rule names).
