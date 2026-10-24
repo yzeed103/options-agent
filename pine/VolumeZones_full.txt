@@ -295,7 +295,7 @@ alertcondition(tvBreakDir != 0 and tvFlag, "تحذير كسر كاذب", "اخت
 // over 60 days (test), QQQ +5.9. Stops: a 1-ATR stop is hit by noise in 41% of right 24-bar trades on 5m.
 // v2 (reports/vol_engine_dev, 2026-10-24, 27 pre-registered hypotheses, 8 passed): the fan variance follows a
 // 78-slot intraday profile (QLIKE -0.28, coverage 67% vs 70%; the plain band covered 60% at the open and 34% in the
-// last 45 min); the day range adds 0.05 x gap^2 to the first-bar variance; the remaining move to the close uses a
+// last 45 min); the gap term (0.05 x gap^2, 12-bar horizon) is measured but not drawn; the remaining move to the close uses a
 // per-slot table (sqrt(remaining bars) covered 85%); target odds depend on trend strength (31% strong up, 21% weakest
 // fifth); a trailing stop at 0.75x earns +0.03% per trade over the fixed one; heat is ranked against the same time of
 // day (ic 0.15 vs -0.04 for a 500-bar rank) and its acceleration adds (ic 0.08); squeezes are calmest at lunch (34%)
@@ -398,9 +398,10 @@ var float veDayHi = na
 var float veDayLo = na
 var line veDayL1 = na
 var line veDayL2 = na
+// (the measured gap term 0.05 x gap^2 was validated for the next 12 bars only; extrapolated to 78 it doubled the day
+// range on gap days, so it is NOT drawn here: reports/vol_engine_dev H3.3)
 if veDay and timeframe.isintraday and rvNewSess and not na(veS2)
-    float veGap = na(c_[1]) ? 0.0 : math.log(o_ / c_[1])
-    veDm = math.sqrt(veBarsDay * (veS2 + 0.05 * veGap * veGap)) * o_
+    veDm = math.sqrt(veBarsDay * veS2) * o_
     veDayHi := o_ + veDm
     veDayLo := o_ - veDm
     line.delete(veDayL1), line.delete(veDayL2)
