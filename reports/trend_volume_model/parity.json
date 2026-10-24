@@ -1,0 +1,33 @@
+{
+ "version": "43.0",
+ "symbol": "BATS:SPY",
+ "tf": "5",
+ "bars": 10218,
+ "sessions": 131,
+ "S0": {
+  "compared": 9918,
+  "within_1e6": 1.0,
+  "within_1e3": 1.0,
+  "max_abs_diff": 4.1651682103349685e-12
+ },
+ "I": {
+  "compared": 9918,
+  "within_1e6": 1.0,
+  "within_1e3": 1.0,
+  "max_abs_diff": 0.0
+ },
+ "state": {
+  "compared": 9918,
+  "agree": 1.0
+ },
+ "breaks": {
+  "tv": 452,
+  "py": 452,
+  "same_bar_same_dir": 452,
+  "jaccard": 1.0
+ },
+ "mismatch": {
+  "only_tv": [],
+  "only_py": []
+ }
+}

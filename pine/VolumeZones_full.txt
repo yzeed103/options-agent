@@ -200,6 +200,90 @@ var int rvRun = 0
 bool rvNewSess = ta.change(time("D")) != 0
 rvRun := strongVol and not na(rvol) ? (rvNewSess ? 1 : rvRun + 1) : 0
 plot(rvol, "RVOL (حسب وقت اليوم)", color=na, display=display.data_window)
+
+// ═══════════════ نموذج الاتجاه (سعر فقط) ═══════════════
+// reports/trend_volume_model (2026-10-24, 30 symbols, SIP 5m, test days): every volume part of the model lost to its
+// price-only twin, so this section is price only. Hull trend state; strength S0 = 1/2 inertia (Kaufman efficiency
+// ratio, 20) + 1/2 clipped price impulse (10-bar body sum in ATR); P(trend alive 12 bars later | direction, S0
+// quintile) from the train table; swing breaks (pivots 2/2, level age >= 10 bars, same session) graded by the
+// breaking bar's size tercile with P(hold); false-break warnings: absorption, wick, exhausted inertia.
+G_TVM = "نموذج الاتجاه"
+tvmOn   = input.bool(true, "إظهار نموذج الاتجاه", tooltip="قياس 2026-10-24 على 30 سهما (SIP، 5 دقائق، أيام اختبار منفصلة). كل جزء فيه فوليوم خسر أمام توأمه السعري، فالنموذج سعر فقط.\nالقوة S0 = نصف القصور الذاتي (نسبة كوفمان 20) + نصف الدفع السعري (مجموع أجسام 10 شموع بوحدة ATR). الاتجاه القوي يستمر شموعا قليلة ثم ينتهي أبكر: حي بعد 12 شمعة 50% في أضعف خُمس و39% في أقواه", group=G_TVM)
+tvmMark = input.bool(true, "علامات الاختراق والتحذير", tooltip="اختراق قمة/قاع (pivot 2 شموع، عمر المستوى 10 شموع فأكثر، نفس الجلسة) مع احتمال الثبات 12 شمعة حسب حجم شمعة الاختراق: صغيرة 22% · متوسطة 26% · كبيرة 36% (صعودا)، 21% · 25% · 33% (هبوطا).\nتحذير كسر كاذب (يرجع خلال 3 شموع): امتصاص (فوليوم > 1.5× ومدى < 0.7 ATR) 55%، ذيل (الإغلاق يرجع أكثر من نصف الشمعة) 58%، قصور منهك 54%، مقابل 49% بدونها", group=G_TVM)
+cTvmUp  = input.color(#00e676, "صاعد", inline="tvmc", group=G_TVM)
+cTvmDn  = input.color(#ff1744, "هابط", inline="tvmc", group=G_TVM)
+cTvmWarn = input.color(#ffa726, "تحذير", inline="tvmc", group=G_TVM)
+int tvmLen = tfMin <= 5 ? 67 : tfMin <= 15 ? 66 : 56
+tvM  = ta.hma(c_, tvmLen)
+tvSl = tvM - tvM[1]
+int tvState = c_ > tvM and tvSl > 0 and tvSl[1] > 0 and tvSl[2] > 0 ? 1 : c_ < tvM and tvSl < 0 and tvSl[1] < 0 and tvSl[2] < 0 ? -1 : 0
+tvPath = math.sum(math.abs(ta.change(c_)), 20)
+float tvI = tvPath > 0 ? math.abs(c_ - c_[20]) / tvPath : 0.0
+float tvJ0 = math.sum((c_ - o_) / atrV, 10)
+float tvS0 = 0.5 * tvI + 0.5 * math.min(1.0, math.abs(tvJ0) / 3.0)
+int tvQ = (tvS0 > 0.2029 ? 1 : 0) + (tvS0 > 0.3216 ? 1 : 0) + (tvS0 > 0.4618 ? 1 : 0) + (tvS0 > 0.6344 ? 1 : 0)
+tvAliveUp = array.from(0.496, 0.420, 0.404, 0.408, 0.388)
+tvAliveDn = array.from(0.512, 0.440, 0.415, 0.401, 0.383)
+float tvAlive = tvState > 0 ? array.get(tvAliveUp, tvQ) : tvState < 0 ? array.get(tvAliveDn, tvQ) : na
+// swing levels of this session: price, origin bar, side (-1 = price below it), bars within +-0.1 ATR
+var float[] tvL = array.new_float()
+var int[]   tvO = array.new_int()
+var int[]   tvSd = array.new_int()
+var int tvBars = 0
+tvBars := rvNewSess ? 0 : tvBars + 1
+if rvNewSess
+    array.clear(tvL), array.clear(tvO), array.clear(tvSd)
+// pivots with strict comparisons on both sides (ta.pivothigh treats ties differently; the measurement used strict)
+bool tvPh = tvBars >= 4 and h_[2] > math.max(h_[3], h_[4]) and h_[2] > math.max(h_[1], h_)
+bool tvPl = tvBars >= 4 and l_[2] < math.min(l_[3], l_[4]) and l_[2] < math.min(l_[1], l_)
+if tvPh
+    array.push(tvL, h_[2]), array.push(tvO, bar_index - 2), array.push(tvSd, -1)
+if tvPl
+    array.push(tvL, l_[2]), array.push(tvO, bar_index - 2), array.push(tvSd, 1)
+int tvBreakDir = 0
+float tvBreakL = na
+float tvBestD = na
+if array.size(tvL) > 0
+    for j = array.size(tvL) - 1 to 0
+        Lj = array.get(tvL, j)
+        sd = array.get(tvSd, j)
+        if bar_index == array.get(tvO, j)
+            continue
+        crossed = sd < 0 ? c_ > Lj : c_ < Lj
+        if crossed
+            if bar_index - array.get(tvO, j) >= 10 and tvBars >= 5
+                dj = math.abs(c_[1] - Lj)
+                if na(tvBestD) or dj < tvBestD
+                    tvBestD := dj
+                    tvBreakDir := sd < 0 ? 1 : -1
+                    tvBreakL := Lj
+            array.remove(tvL, j), array.remove(tvO, j), array.remove(tvSd, j)
+float tvE0 = (h_ - l_) / atrV
+int tvE = (tvE0 > 0.9373 ? 1 : 0) + (tvE0 > 1.3175 ? 1 : 0)
+tvHoldUp = array.from(0.218, 0.260, 0.364)
+tvHoldDn = array.from(0.209, 0.250, 0.329)
+float tvHold = tvBreakDir > 0 ? array.get(tvHoldUp, tvE) : tvBreakDir < 0 ? array.get(tvHoldDn, tvE) : na
+bool tvAbs  = tvBreakDir != 0 and not na(rvol) and rvol > 1.5 and tvE0 < 0.7
+bool tvWick = tvBreakDir != 0 and (tvBreakDir > 0 ? (h_ - c_) : (c_ - l_)) / math.max(h_ - l_, syminfo.mintick) > 0.5
+bool tvExh  = tvBreakDir != 0 and tvI < 0.1064
+bool tvFlag = tvAbs or tvWick or tvExh
+var string tvLast = "-"
+var label[] tvLabels = array.new_label()
+if tvmOn and tvmMark and tvBreakDir != 0 and barstate.isconfirmed
+    string wtxt = (tvAbs ? " امتصاص" : "") + (tvWick ? " ذيل" : "") + (tvExh ? " قصور منهك" : "")
+    string btxt = (tvBreakDir > 0 ? "اختراق قمة ▲" : "كسر قاع ▼") + " · يثبت عادة " + str.tostring(tvHold * 100, "#") + "%" + (tvFlag ? "\n⚠ كسر كاذب غالبا:" + wtxt : "")
+    color bc = tvFlag ? cTvmWarn : tvE == 2 ? (tvBreakDir > 0 ? cTvmUp : cTvmDn) : cTblLbl
+    lb = label.new(bar_index, tvBreakDir > 0 ? h_ : l_, btxt, style=tvBreakDir > 0 ? label.style_label_down : label.style_label_up, color=color.new(bc, 100), textcolor=bc, size=size.small)
+    array.push(tvLabels, lb)
+    if array.size(tvLabels) > 60
+        label.delete(array.shift(tvLabels))
+    tvLast := (tvBreakDir > 0 ? "قمة ▲ " : "قاع ▼ ") + str.tostring(tvHold * 100, "#") + "%" + (tvFlag ? " ⚠" : "")
+plot(tvmOn ? tvS0 : na, "قوة الاتجاه S0", color=na, display=display.data_window)
+plot(tvmOn ? tvState : na, "حالة الاتجاه", color=na, display=display.data_window)
+plot(tvmOn ? tvI : na, "القصور الذاتي", color=na, display=display.data_window)
+plot(tvmOn ? tvBreakDir : na, "اختراق", color=na, display=display.data_window)
+alertcondition(tvBreakDir != 0 and tvE == 2 and not tvFlag, "اختراق بشمعة كبيرة", "اختراق قمة/قاع بشمعة كبيرة بدون تحذير")
+alertcondition(tvBreakDir != 0 and tvFlag, "تحذير كسر كاذب", "اختراق عليه تحذير كسر كاذب (امتصاص / ذيل / قصور منهك)")
 emaF = ta.ema(c_, 20)
 emaS = ta.ema(c_, 50)
 // up / down volume over the last udLen bars (tested: trend alerts with supporting volume did better in both halves)
@@ -1335,10 +1419,10 @@ if barstate.islast
 // Only the readings that survived testing: trend, volume, the sideways range and its whale levels, and the two
 // signals kept on the chart (whale bounce, trend alert).
 tPos = tblPos == "أعلى اليمين" ? position.top_right : tblPos == "أعلى اليسار" ? position.top_left : tblPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
-var table tbl = table.new(tPos, 3, 14, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
+var table tbl = table.new(tPos, 3, 15, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
 if barstate.isfirst
     table.merge_cells(tbl, 0, 0, 1, 0)
-    table.merge_cells(tbl, 0, 13, 2, 13)
+    table.merge_cells(tbl, 0, 14, 2, 14)
 tSz = tblSize == "صغير جدا" ? size.tiny : tblSize == "صغير" ? size.small : tblSize == "كبير" ? size.large : size.normal
 
 // last kept signal: 1 whale bounce, 2 trend alert; status 0 active, 1 target reached, -1 stopped / ended
@@ -1393,6 +1477,11 @@ if barstate.islast
     vTxt = udD > 0 ? "داعم للصعود" : udD < 0 ? "داعم للهبوط" : "محايد"
     vCol = udD > 0 ? cTblUp : udD < 0 ? cTblDn : cTblLbl
     vMet = na(udP) ? 1 : int(math.min(5, math.max(1, math.round(math.abs(math.log(udP)) * 10) + 1)))
+    // --- trend model (price only): state, strength quintile, P(alive 12 bars), last break
+    int tvQ1 = tvQ[1]
+    string mTxt = tvState[1] > 0 ? "صاعد · قوة " + str.tostring(tvS0[1], "#.00") + " (خُمس " + str.tostring(tvQ1 + 1) + ")" : tvState[1] < 0 ? "هابط · قوة " + str.tostring(tvS0[1], "#.00") + " (خُمس " + str.tostring(tvQ1 + 1) + ")" : "بلا اتجاه · قصور " + str.tostring(tvI[1], "#.00")
+    color  mCol = tvState[1] > 0 ? cTblUp : tvState[1] < 0 ? cTblDn : cTblLbl
+    string mSub = (na(tvAlive[1]) ? "القوي يستمر شموعا قليلة ثم ينتهي أبكر" : "يبقى 12 شمعة عادة " + str.tostring(tvAlive[1] * 100, "#") + "%") + "   |   آخر اختراق: " + tvLast
     // --- volume now: RVOL of the last completed bar, the strong run and its usual remaining length (measured: 5m / 15m / 1h hazard, reports/volume_tool)
     rvExp = tfMin <= 5 ? array.from(1.45, 2.52, 3.47, 4.23, 4.85, 5.35, 5.67, 5.92, 6.06, 6.14) : tfMin <= 15 ? array.from(1.74, 2.96, 3.98, 4.77, 5.59, 6.26, 6.96, 7.26, 7.46, 7.42) : array.from(2.03, 3.21, 4.19, 4.64, 4.88, 4.92, 4.92, 4.92, 4.92, 4.92)
     float rvP = rvol[1]
@@ -1512,16 +1601,16 @@ if barstate.islast
     // --- draw (column 2 = label on the right, column 1 = value, column 0 = meter)
     table.cell(tbl, 2, 0, "مناطق الفوليوم", text_color=cTblTxt, text_size=tSz, text_halign=text.align_right)
     table.cell(tbl, 0, 0, syminfo.ticker + " · " + timeframe.period + " · " + fmt(c_), text_color=cTblLbl, text_size=tSz, text_halign=text.align_left)
-    rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "الفوليوم الآن", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة", "أهداف الحيتان اليوم", "متجه إلى", "صمود الترند", "مستويات الخيارات")
-    vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, nTxt + "\n" + nSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub, gTxt + "\n" + gSub, hTxt + "\n" + hSub, kTxt + "\n" + kSub, xTxt + "\n" + xSub)
-    cols  = array.from(tCol, vCol, nCol, rCol, cWhLv, cWhLv, pCol, sCol, gCol, hCol, kCol, xCol)
-    for i = 0 to 11
+    rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "الفوليوم الآن", "نموذج الاتجاه", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة", "أهداف الحيتان اليوم", "متجه إلى", "صمود الترند", "مستويات الخيارات")
+    vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, nTxt + "\n" + nSub, mTxt + "\n" + mSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub, gTxt + "\n" + gSub, hTxt + "\n" + hSub, kTxt + "\n" + kSub, xTxt + "\n" + xSub)
+    cols  = array.from(tCol, vCol, nCol, mCol, rCol, cWhLv, cWhLv, pCol, sCol, gCol, hCol, kCol, xCol)
+    for i = 0 to 12
         table.cell(tbl, 2, i + 1, array.get(rowsL, i), text_color=cTblLbl, text_size=tSz, text_halign=text.align_right)
         table.cell(tbl, 1, i + 1, array.get(vals, i), text_color=array.get(cols, i), text_size=tSz, text_halign=text.align_right)
         table.cell(tbl, 0, i + 1, "", text_size=tSz)
     table.cell(tbl, 0, 1, meter(tMet, 5), text_color=tCol, text_size=tSz)
     table.cell(tbl, 0, 2, meter(vMet, 5), text_color=vCol, text_size=tSz)
-    table.cell(tbl, 0, 13, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
+    table.cell(tbl, 0, 14, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
 
 // ═══════════════ Heatmap: two-colour or five-colour ribbons, no smoothing ═══════════════
 // colour = volume at that price in the rolling profile (today's session or the last `lookback` bars), relative to the busiest row (0..1)
