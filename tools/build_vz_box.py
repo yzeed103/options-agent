@@ -11,8 +11,8 @@ inputs = '''
 G_F = "المربّع الأزرق أسفل الشارت"
 pBoxOn  = input.bool(true, "إظهار المربّع الأزرق", tooltip="مربّع في أسفل نافذة الشارت نفسها، فيه آخر N شمعة مصغّرة مع المروحة الموسمية والسلّم ومدى اليوم والمتبقّي حتى الإغلاق والوقف المتحرّك وأسهم الخروج، وتحتها شريطا الحرارة والانضغاط. يُرسم على مقياس السعر تحت أدنى سعر معروض، ويضاف هامش أسفل الشارت تلقائيًّا", group=G_F)
 pWin    = input.int(50, "عدد الشموع داخل المربّع", minval=20, maxval=200, group=G_F)
-pBoxH   = input.float(10, "ارتفاع المربّع (ATR)", minval=3, maxval=40, step=1, tooltip="بوحدات ATR14 للفريم. أكبر = مربّع أطول. اسحب مقياس السعر إن أردت تكبيره أكثر", group=G_F)
-pBoxGap = input.float(2, "المسافة تحت أدنى سعر (ATR)", minval=0.5, maxval=20, step=0.5, group=G_F)
+pBoxH   = input.float(35, "ارتفاع المربّع (% من مدى الشارت)", minval=10, maxval=80, step=5, tooltip="نسبة من المدى الذي يرسمه المؤشّر نفسه (من أدنى مستوى مرسوم إلى أعلاه: الشموع، خطوط الحيتان، مستويات الخيارات، مناطق القيمة). 35 = نحو ثلث الشاشة. المربّع يجلس دائمًا تحت أدنى مستوى مرسوم", group=G_F)
+pBoxGap = input.float(4, "المسافة تحت أدنى مستوى (% من المدى)", minval=0, maxval=30, step=1, group=G_F)
 pBoxAhead = input.int(30, "مساحة المروحة يمين المربّع (شموع)", minval=24, maxval=120, group=G_F)
 pFan    = input.bool(true, "المروحة الموسمية ±1σ و±2σ", group=G_F)
 pLadder = input.bool(true, "سلّم الوقف والهدف", group=G_F)
@@ -44,9 +44,28 @@ draw = r'''
 // include it (boxes alone do not stretch the scale).
 float wLo = ta.lowest(l_, pWin)
 float wHi = ta.highest(h_, pWin)
-float boxBot = wLo - (pBoxGap + pBoxH) * atrV
-float boxTop = wLo - pBoxGap * atrV
-plot(pBoxOn ? boxBot - 0.3 * atrV : na, "قاع المربّع الأزرق", color=color.new(cWinB, 85), linewidth=1)
+// the range the indicator itself draws (candles of the window, whale levels, option strikes, value areas): the box sits under it
+float lvMin = wLo
+float lvMax = wHi
+for x in lvNow
+    if not na(x)
+        lvMin := math.min(lvMin, x), lvMax := math.max(lvMax, x)
+for x in gpK
+    lvMin := math.min(lvMin, x), lvMax := math.max(lvMax, x)
+for i = 0 to 7
+    float gxx = array.get(gxV, i)
+    if not na(gxx)
+        lvMin := math.min(lvMin, gxx), lvMax := math.max(lvMax, gxx)
+if not na(pdVAL)
+    lvMin := math.min(lvMin, pdVAL), lvMax := math.max(lvMax, pdVAH)
+if not na(val)
+    lvMin := math.min(lvMin, val), lvMax := math.max(lvMax, vah)
+float rangeAll = math.max(lvMax - lvMin, 4 * atrV)
+float boxH = pBoxH / 100 * rangeAll
+float boxTop = lvMin - pBoxGap / 100 * rangeAll
+float boxBot = boxTop - boxH
+float wSpan = math.max(wHi - wLo, 4 * atrV)
+plot(pBoxOn ? boxBot - 0.03 * boxH : na, "قاع المربّع الأزرق", color=color.new(cWinB, 85), linewidth=1)
 var box winBox = na
 var line[] wLines = array.new_line()
 var box[] wBoxes = array.new_box()
@@ -79,8 +98,8 @@ if pBoxOn and barstate.islast and not na(veMove) and not na(atrV) and atrV > 0
         pMin := math.min(pMin, veDayLo), pMax := math.max(pMax, veDayHi)
     float span = math.max(pMax - pMin, syminfo.mintick)
     // leave room under the candles for the two strips (18% of the box) and a little air on top
-    float yb = boxBot + 0.20 * pBoxH * atrV
-    float yt = boxTop - 0.03 * pBoxH * atrV
+    float yb = boxBot + 0.20 * boxH
+    float yt = boxTop - 0.03 * boxH
     float kk = (yt - yb) / span
     int x0 = bar_index - pWin + 1
     int x1 = bar_index + pBoxAhead
@@ -154,17 +173,17 @@ if pBoxOn and barstate.islast and not na(veMove) and not na(atrV) and atrV > 0
         array.push(wLabels, label.new(xend, yr2, "حتى الإغلاق ±" + str.tostring(veRemMove, format.mintick), style=label.style_label_up, color=color.new(cMove, 100), textcolor=color.new(cMove, 10), size=size.tiny))
     // strips under the candles, inside the box
     if pStrips
-        float sTop = boxBot + 0.17 * pBoxH * atrV
-        float sMid = boxBot + 0.10 * pBoxH * atrV
-        float sBot = boxBot + 0.02 * pBoxH * atrV
+        float sTop = boxBot + 0.17 * boxH
+        float sMid = boxBot + 0.10 * boxH
+        float sBot = boxBot + 0.02 * boxH
         int nH = array.size(wHeat)
         for j = 0 to nH - 1
             int xb = bar_index - (nH - 1 - j)
             float hp = array.get(wHeat, j)
             bool sq = array.get(wSqz, j)
             color hc = sq ? cSqz : na(hp) ? cNorm : hp < 50 ? color.from_gradient(hp, 0, 50, #1a1a2e, #1e88e5) : color.from_gradient(hp, 50, 100, #1e88e5, #ffd600)
-            array.push(wBoxes, box.new(xb, sTop, xb + 1, sMid + 0.01 * pBoxH * atrV, border_color=color.new(hc, 100), bgcolor=hc))
-            array.push(wBoxes, box.new(xb, sMid - 0.01 * pBoxH * atrV, xb + 1, sBot, border_color=color.new(cSqz, 100), bgcolor=sq ? cSqz : color.new(#2a2e39, 0)))
+            array.push(wBoxes, box.new(xb, sTop, xb + 1, sMid + 0.01 * boxH, border_color=color.new(hc, 100), bgcolor=hc))
+            array.push(wBoxes, box.new(xb, sMid - 0.01 * boxH, xb + 1, sBot, border_color=color.new(cSqz, 100), bgcolor=sq ? cSqz : color.new(#2a2e39, 0)))
         array.push(wLabels, label.new(bar_index + 1, (sTop + sMid) / 2, "حرارة التذبذب حسب وقت اليوم" + (na(vePct) ? "" : ": الآن " + str.tostring(vePct, "#") + "%") + (veAccel ? " ↑ تتسارع" : ""), style=label.style_label_left, color=color.new(cHot, 100), textcolor=cHot, size=size.tiny))
         array.push(wLabels, label.new(bar_index + 1, (sMid + sBot) / 2, "الانضغاط" + (veSqzOn ? ": نعم منذ " + str.tostring(veSqzBars) + " شمعة · اصبر" : " (بنفسجي عند حدوثه)"), style=label.style_label_left, color=color.new(cSqz, 100), textcolor=cSqz, size=size.tiny))
 // the state box (compact, 6 rows)
