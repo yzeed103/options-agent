@@ -1,0 +1,18 @@
+{
+ "version": "44.0",
+ "symbol": "BATS:SPY",
+ "tf": "5",
+ "bars": 10218,
+ "s2": {
+  "compared": 9918,
+  "within_1e6_rel": 1.0,
+  "within_1e3_rel": 1.0,
+  "max_rel": 3.500218367113709e-13
+ },
+ "move": {
+  "compared": 9918,
+  "within_1e6_rel": 1.0,
+  "within_1e3_rel": 1.0,
+  "max_rel": 1.7500029396551693e-13
+ }
+}

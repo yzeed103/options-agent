@@ -284,6 +284,52 @@ plot(tvmOn ? tvI : na, "القصور الذاتي", color=na, display=display.da
 plot(tvmOn ? tvBreakDir : na, "اختراق", color=na, display=display.data_window)
 alertcondition(tvBreakDir != 0 and tvE == 2 and not tvFlag, "اختراق بشمعة كبيرة", "اختراق قمة/قاع بشمعة كبيرة بدون تحذير")
 alertcondition(tvBreakDir != 0 and tvFlag, "تحذير كسر كاذب", "اختراق عليه تحذير كسر كاذب (امتصاص / ذيل / قصور منهك)")
+
+// ═══════════════ محرّك التذبذب ═══════════════
+// reports/vol_engine (2026-10-24). Volatility is used for magnitude, timing, stops and a slow regime; never for
+// direction. Intraday: EWMA variance of session log returns (lambda 0.99 on 5m, measured: beats an ATR control on
+// QLIKE; the +-1 sigma fan covers 70% of 24-bar moves on test, 65% on SPY/QQQ). Daily: the ATR control is as
+// good as GARCH, so the fan is sqrt(c) x ATR with c from train (covers 72% at 5 days). Squeeze: after
+// ATR14/ATR100 drops below its train 10th percentile the next 12 bars expand LESS often (39% vs
+// 50% at random): calm persists, direction 50/50. Fear: top-quintile VIX -> SPY +3.8 points
+// over 60 days (test), QQQ +5.9. Stops: a 1-ATR stop is hit by noise in 41% of right 24-bar trades on 5m.
+G_VE = "محرّك التذبذب"
+veOn   = input.bool(true, "مروحة الحركة المتوقّعة", tooltip="من آخر شمعة: نطاق ±1σ و±2σ للشموع القادمة (24 على 5 دقائق، 8 على 15، 2 على الساعة، 5 على اليومي). قياس 2026-10-24: على 5 دقائق تبقى الحركة داخل ±1σ في 70% من الحالات (65% على SPY وQQQ)، وعلى اليومي 72%. يخبرك كم، لا إلى أين", group=G_VE)
+veSqz  = input.bool(true, "علامة الانضغاط", tooltip="أول شمعة ينزل فيها ATR14 ÷ ATR100 تحت عُشر قيمه المعتادة. مقيس: بعدها يبقى الهدوء غالبا (61% من الحالات لا يتوسع المدى خلال 12 شمعة، مقابل 50% عادة)، والاتجاه 50/50. ليست إشارة انفجار", group=G_VE)
+veFear = input.bool(true, "سطر نظام الخوف", tooltip="VIX كنسبة مئوية من آخر 500 يوم. مقيس على SPY وQQQ 2020-2026: الخُمس الأعلى من الخوف تبعه خلال 60 يوما عائد أعلى من المعتاد بـ3.8 نقطة (SPY) و5.9 (QQQ)؛ وVIX فوق VIX3M +6.5. سياق بطيء، ليس إشارة دخول", group=G_VE)
+cVeFan = input.color(#42a5f5, "لون المروحة", inline="vec", group=G_VE)
+cVeSqz = input.color(#ab47bc, "لون الانضغاط", inline="vec", group=G_VE)
+float veR = rvNewSess or na(c_[1]) ? math.log(c_ / o_) : math.log(c_ / c_[1])
+float veLam = tfMin <= 5 ? 0.99 : timeframe.isdwm ? 0.94 : 0.97
+var float veS2 = na
+veS2 := na(veS2) ? veR * veR : veLam * veS2 + (1 - veLam) * veR * veR
+int veK = tfMin <= 5 ? 24 : tfMin <= 15 ? 8 : tfMin <= 60 ? 2 : 5
+// one sigma of the next veK bars, in price: intraday from the EWMA variance; daily / weekly from the ATR control
+float veMove = timeframe.isdwm ? math.sqrt(2.701088) * atrV * math.sqrt(veK / 5.0) : math.sqrt(veK * veS2) * c_
+var line[] veLines = array.new_line()
+if veOn and barstate.islast and not na(veMove)
+    for ln in veLines
+        line.delete(ln)
+    array.clear(veLines)
+    for m = 1 to 2
+        array.push(veLines, line.new(bar_index, c_, bar_index + veK, c_ + m * veMove, color=color.new(cVeFan, m == 1 ? 20 : 60), width=m == 1 ? 2 : 1, style=line.style_dashed))
+        array.push(veLines, line.new(bar_index, c_, bar_index + veK, c_ - m * veMove, color=color.new(cVeFan, m == 1 ? 20 : 60), width=m == 1 ? 2 : 1, style=line.style_dashed))
+    array.push(veLines, line.new(bar_index + veK, c_ - 2 * veMove, bar_index + veK, c_ + 2 * veMove, color=color.new(cVeFan, 70), width=1))
+// squeeze: ATR14 / ATR100 below the train 10th percentile (5m 0.697, daily 0.883); first bar of the crossing
+float veA100 = ta.rma(trR, 100)
+float veComp = veA100 > 0 ? atrV / veA100 : na
+float veThr = timeframe.isdwm ? 0.8833 : 0.6967
+bool veSqzNow = veComp < veThr and not (veComp[1] < veThr)
+if veSqz and veSqzNow and barstate.isconfirmed
+    label.new(bar_index, l_, "انضغاط · الهدوء يستمر غالبا (61%)", style=label.style_label_up, color=color.new(cVeSqz, 100), textcolor=cVeSqz, size=size.tiny)
+// fear regime (daily VIX, percent rank over 500 days)
+float veVix = request.security("CBOE:VIX", "D", close, lookahead=barmerge.lookahead_off)
+float veVixPct = request.security("CBOE:VIX", "D", ta.percentrank(close, 500), lookahead=barmerge.lookahead_off)
+float veV3 = request.security("CBOE:VIX3M", "D", close, lookahead=barmerge.lookahead_off)
+plot(veOn ? veMove : na, "الحركة المتوقّعة (1σ)", color=na, display=display.data_window)
+plot(veOn ? veS2 : na, "تباين EWMA", color=na, display=display.data_window)
+plot(veComp, "انضغاط ATR14/ATR100", color=na, display=display.data_window)
+alertcondition(veSqzNow, "انضغاط", "دخل السعر في انضغاط (ATR14/ATR100 تحت عُشره المعتاد)")
 emaF = ta.ema(c_, 20)
 emaS = ta.ema(c_, 50)
 // up / down volume over the last udLen bars (tested: trend alerts with supporting volume did better in both halves)
@@ -1419,10 +1465,10 @@ if barstate.islast
 // Only the readings that survived testing: trend, volume, the sideways range and its whale levels, and the two
 // signals kept on the chart (whale bounce, trend alert).
 tPos = tblPos == "أعلى اليمين" ? position.top_right : tblPos == "أعلى اليسار" ? position.top_left : tblPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
-var table tbl = table.new(tPos, 3, 15, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
+var table tbl = table.new(tPos, 3, 16, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
 if barstate.isfirst
     table.merge_cells(tbl, 0, 0, 1, 0)
-    table.merge_cells(tbl, 0, 14, 2, 14)
+    table.merge_cells(tbl, 0, 15, 2, 15)
 tSz = tblSize == "صغير جدا" ? size.tiny : tblSize == "صغير" ? size.small : tblSize == "كبير" ? size.large : size.normal
 
 // last kept signal: 1 whale bounce, 2 trend alert; status 0 active, 1 target reached, -1 stopped / ended
@@ -1477,6 +1523,12 @@ if barstate.islast
     vTxt = udD > 0 ? "داعم للصعود" : udD < 0 ? "داعم للهبوط" : "محايد"
     vCol = udD > 0 ? cTblUp : udD < 0 ? cTblDn : cTblLbl
     vMet = na(udP) ? 1 : int(math.min(5, math.max(1, math.round(math.abs(math.log(udP)) * 10) + 1)))
+    // --- volatility engine: expected move, noise-proof stop, fear regime
+    float veMv = veMove[1]
+    string eTxt = na(veMv) ? "-" : "±" + str.tostring(veMv, format.mintick) + " (" + str.tostring(100 * veMv / c_, "#.0") + "%) خلال " + str.tostring(veK) + " شمعة"
+    string eFear = na(veVixPct) ? "" : "   |   VIX " + str.tostring(veVixPct, "#") + "% " + (veVixPct >= 80 ? "خوف عال: ميل 60 يوما SPY +3.8 QQQ +5.9" : veVixPct <= 20 ? "هدوء" : "عادي") + (not na(veV3) and veVix > veV3 ? " · VIX فوق VIX3M" : "")
+    string eSub = (na(veMv) ? "-" : "وقف يصمد للضجيج ≥ " + str.tostring(0.75 * veMv, format.mintick) + " (0.75×) · وقف ATR واحد يُضرب 41%") + (veFear ? eFear : "") + (veComp < veThr ? "   |   انضغاط: الهدوء يستمر غالبا" : "")
+    color  eCol = veComp < veThr ? cVeSqz : cTblTxt
     // --- trend model (price only): state, strength quintile, P(alive 12 bars), last break
     int tvQ1 = tvQ[1]
     string mTxt = tvState[1] > 0 ? "صاعد · قوة " + str.tostring(tvS0[1], "#.00") + " (خُمس " + str.tostring(tvQ1 + 1) + ")" : tvState[1] < 0 ? "هابط · قوة " + str.tostring(tvS0[1], "#.00") + " (خُمس " + str.tostring(tvQ1 + 1) + ")" : "بلا اتجاه · قصور " + str.tostring(tvI[1], "#.00")
@@ -1601,16 +1653,16 @@ if barstate.islast
     // --- draw (column 2 = label on the right, column 1 = value, column 0 = meter)
     table.cell(tbl, 2, 0, "مناطق الفوليوم", text_color=cTblTxt, text_size=tSz, text_halign=text.align_right)
     table.cell(tbl, 0, 0, syminfo.ticker + " · " + timeframe.period + " · " + fmt(c_), text_color=cTblLbl, text_size=tSz, text_halign=text.align_left)
-    rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "الفوليوم الآن", "نموذج الاتجاه", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة", "أهداف الحيتان اليوم", "متجه إلى", "صمود الترند", "مستويات الخيارات")
-    vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, nTxt + "\n" + nSub, mTxt + "\n" + mSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub, gTxt + "\n" + gSub, hTxt + "\n" + hSub, kTxt + "\n" + kSub, xTxt + "\n" + xSub)
-    cols  = array.from(tCol, vCol, nCol, mCol, rCol, cWhLv, cWhLv, pCol, sCol, gCol, hCol, kCol, xCol)
-    for i = 0 to 12
+    rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "الفوليوم الآن", "نموذج الاتجاه", "التذبذب", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة", "أهداف الحيتان اليوم", "متجه إلى", "صمود الترند", "مستويات الخيارات")
+    vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, nTxt + "\n" + nSub, mTxt + "\n" + mSub, eTxt + "\n" + eSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub, gTxt + "\n" + gSub, hTxt + "\n" + hSub, kTxt + "\n" + kSub, xTxt + "\n" + xSub)
+    cols  = array.from(tCol, vCol, nCol, mCol, eCol, rCol, cWhLv, cWhLv, pCol, sCol, gCol, hCol, kCol, xCol)
+    for i = 0 to 13
         table.cell(tbl, 2, i + 1, array.get(rowsL, i), text_color=cTblLbl, text_size=tSz, text_halign=text.align_right)
         table.cell(tbl, 1, i + 1, array.get(vals, i), text_color=array.get(cols, i), text_size=tSz, text_halign=text.align_right)
         table.cell(tbl, 0, i + 1, "", text_size=tSz)
     table.cell(tbl, 0, 1, meter(tMet, 5), text_color=tCol, text_size=tSz)
     table.cell(tbl, 0, 2, meter(vMet, 5), text_color=vCol, text_size=tSz)
-    table.cell(tbl, 0, 14, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
+    table.cell(tbl, 0, 15, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
 
 // ═══════════════ Heatmap: two-colour or five-colour ribbons, no smoothing ═══════════════
 // colour = volume at that price in the rolling profile (today's session or the last `lookback` bars), relative to the busiest row (0..1)
