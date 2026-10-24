@@ -14,7 +14,7 @@ pRem    = input.bool(true, "المتبقّي حتى الإغلاق (5 دقائق
 pTrail  = input.bool(true, "وقف متحرّك للاتجاه الحالي", group=G_F)
 pExits  = input.bool(true, "أسهم الخروج من النطاق ▲▼", group=G_F)
 pStrips = input.bool(true, "شريطا الحرارة والانضغاط تحت الرسم", group=G_F)
-pStripN = input.int(150, "طول الشريطين (شموع)", minval=30, maxval=400, group=G_F)
+pWin    = input.int(50, "عدد الشموع المعروضة", minval=20, maxval=400, tooltip="النافذة ثابتة على آخر N شمعة: لا تُرسم شموع أقدم، ومقياسها الرأسي يُحسب من هذه الشموع والمروحة فقط. مساحة المروحة إلى الأمام تأتي من إعداد الشارت «الهامش الأيمن» (30 شمعة أو أكثر)", group=G_F)
 pBox    = input.bool(true, "مربّع «الحالة الآن»", group=G_F)
 pBoxPos = input.string("وسط اليمين", "موقع المربّع", options=["وسط اليمين", "أعلى اليمين", "أسفل اليمين", "أعلى اليسار"], group=G_F)
 G_O = "الأوضاع الأخرى"
@@ -228,11 +228,12 @@ if mStack and barstate.islast
     array.push(sLbl, label.new(bar_index, 1.95, "الحركة المتوقّعة (ترتيبها) · بنفسجي = انضغاط", style=label.style_label_right, color=color.new(#1e222d, 30), textcolor=#9598a1, size=size.tiny))
     array.push(sLbl, label.new(bar_index, 0.95, "حرارة التذبذب · ▲▼ خروج من النطاق", style=label.style_label_right, color=color.new(#1e222d, 30), textcolor=#9598a1, size=size.tiny))
 
-// ═══════════════ النافذة الكاملة: الشموع والأدوات ═══════════════
-plotcandle(mFull ? o_ : na, mFull ? h_ : na, mFull ? l_ : na, mFull ? c_ : na, title="الشموع", color=c_ >= o_ ? cUp : cDn, wickcolor=c_ >= o_ ? cUp : cDn, bordercolor=c_ >= o_ ? cUp : cDn)
-plot(mFull and pTrail ? veTrailStop : na, "وقف متحرّك 0.75×", color=veHit ? color.new(#78909c, 20) : color.new(cTrail, 0), style=plot.style_linebr, linewidth=2)
-plotshape(mFull and pExits and exitUp, "خروج فوق النطاق", style=shape.triangleup, location=location.abovebar, color=cUp, size=size.tiny)
-plotshape(mFull and pExits and exitDn, "خروج تحت النطاق", style=shape.triangledown, location=location.belowbar, color=cDn, size=size.tiny)
+// ═══════════════ النافذة الكاملة: الشموع والأدوات (آخر pWin شمعة فقط) ═══════════════
+bool inWin = bar_index > last_bar_index - pWin
+plotcandle(mFull and inWin ? o_ : na, mFull and inWin ? h_ : na, mFull and inWin ? l_ : na, mFull and inWin ? c_ : na, title="الشموع", color=c_ >= o_ ? cUp : cDn, wickcolor=c_ >= o_ ? cUp : cDn, bordercolor=c_ >= o_ ? cUp : cDn)
+plot(mFull and pTrail and inWin ? veTrailStop : na, "وقف متحرّك 0.75×", color=veHit ? color.new(#78909c, 20) : color.new(cTrail, 0), style=plot.style_linebr, linewidth=2)
+plotshape(mFull and pExits and inWin and exitUp, "خروج فوق النطاق", style=shape.triangleup, location=location.abovebar, color=cUp, size=size.tiny)
+plotshape(mFull and pExits and inWin and exitDn, "خروج تحت النطاق", style=shape.triangledown, location=location.belowbar, color=cDn, size=size.tiny)
 plot(veMove, "الحركة المتوقّعة (1σ)", color=na, display=display.data_window)
 plot(vePct, "حرارة التذبذب (ترتيب وقت اليوم)", color=na, display=display.data_window)
 plot(veRemMove, "المتبقّي حتى الإغلاق (1σ)", color=na, display=display.data_window)
@@ -241,12 +242,13 @@ var line veDL1 = na
 var line veDL2 = na
 var label veDLb1 = na
 var label veDLb2 = na
-if mFull and pDay and timeframe.isintraday and newSess and not na(veDayHi)
+if mFull and pDay and timeframe.isintraday and barstate.islast and not na(veDayHi)
     line.delete(veDL1), line.delete(veDL2), label.delete(veDLb1), label.delete(veDLb2)
-    veDL1 := line.new(bar_index, veDayHi, bar_index + 1, veDayHi, extend=extend.right, color=color.new(cDay, 20), style=line.style_dashed, width=2)
-    veDL2 := line.new(bar_index, veDayLo, bar_index + 1, veDayLo, extend=extend.right, color=color.new(cDay, 20), style=line.style_dashed, width=2)
-    veDLb1 := label.new(bar_index, veDayHi, "أعلى اليوم المتوقّع", style=label.style_label_lower_right, color=color.new(cDay, 100), textcolor=cDay, size=size.small)
-    veDLb2 := label.new(bar_index, veDayLo, "أدنى اليوم المتوقّع", style=label.style_label_upper_right, color=color.new(cDay, 100), textcolor=cDay, size=size.small)
+    int xw = bar_index - pWin + 1
+    veDL1 := line.new(xw, veDayHi, bar_index + 1, veDayHi, extend=extend.right, color=color.new(cDay, 20), style=line.style_dashed, width=2)
+    veDL2 := line.new(xw, veDayLo, bar_index + 1, veDayLo, extend=extend.right, color=color.new(cDay, 20), style=line.style_dashed, width=2)
+    veDLb1 := label.new(xw, veDayHi, "أعلى اليوم المتوقّع", style=label.style_label_lower_right, color=color.new(cDay, 100), textcolor=cDay, size=size.small)
+    veDLb2 := label.new(xw, veDayLo, "أدنى اليوم المتوقّع", style=label.style_label_upper_right, color=color.new(cDay, 100), textcolor=cDay, size=size.small)
 // fan + ladder + remaining, redrawn on the last bar
 var line[] fLines = array.new_line()
 var box[] fBoxes = array.new_box()
@@ -287,13 +289,13 @@ if mFull and barstate.islast and not na(veMove)
 // strips under the drawing: one box per bar below the lowest low of the window; colour = heat, purple = squeeze
 var box[] stripHeat = array.new_box()
 var box[] stripSqz = array.new_box()
-float sY0 = ta.lowest(l_, pStripN) - 1.4 * atrV
+float sY0 = ta.lowest(l_, pWin) - 1.4 * atrV
 float sH = 0.45 * atrV
 color heatC = veSqzOn ? cSqz : na(vePct) ? cNorm : vePct < 50 ? color.from_gradient(vePct, 0, 50, #1a1a2e, #1e88e5) : color.from_gradient(vePct, 50, 100, #1e88e5, #ffd600)
 if mFull and pStrips and barstate.isconfirmed and not na(sY0)
     array.push(stripHeat, box.new(bar_index, sY0 + sH, bar_index + 1, sY0, border_color=color.new(heatC, 100), bgcolor=heatC))
     array.push(stripSqz, box.new(bar_index, sY0 - 0.3 * atrV, bar_index + 1, sY0 - 0.3 * atrV - sH, border_color=color.new(cSqz, 100), bgcolor=veSqzOn ? cSqz : color.new(#2a2e39, 0)))
-    if array.size(stripHeat) > pStripN
+    if array.size(stripHeat) > pWin
         box.delete(array.shift(stripHeat))
         box.delete(array.shift(stripSqz))
     for bx in stripHeat
@@ -301,7 +303,7 @@ if mFull and pStrips and barstate.isconfirmed and not na(sY0)
     for bx in stripSqz
         box.set_top(bx, sY0 - 0.3 * atrV), box.set_bottom(bx, sY0 - 0.3 * atrV - sH)
 // an invisible plot at the strips' floor so the pane's auto-scale includes them (boxes alone do not stretch it)
-plot(mFull and pStrips ? sY0 - 0.3 * atrV - sH - 0.2 * atrV : na, "قاع الشريطين", color=color.new(#2a2e39, 60), linewidth=1)
+plot(mFull and pStrips and inWin ? sY0 - 0.3 * atrV - sH - 0.2 * atrV : na, "قاع الشريطين", color=color.new(#2a2e39, 60), linewidth=1)
 var label sLb1 = na
 var label sLb2 = na
 if mFull and pStrips and barstate.islast and not na(sY0)
