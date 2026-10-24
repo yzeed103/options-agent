@@ -297,6 +297,10 @@ G_VE = "محرّك التذبذب"
 veOn   = input.bool(true, "مروحة الحركة المتوقّعة", tooltip="من آخر شمعة: نطاق ±1σ و±2σ للشموع القادمة (24 على 5 دقائق، 8 على 15، 2 على الساعة، 5 على اليومي). قياس 2026-10-24: على 5 دقائق تبقى الحركة داخل ±1σ في 70% من الحالات (65% على SPY وQQQ)، وعلى اليومي 72%. يخبرك كم، لا إلى أين", group=G_VE)
 veSqz  = input.bool(true, "علامة الانضغاط", tooltip="أول شمعة ينزل فيها ATR14 ÷ ATR100 تحت عُشر قيمه المعتادة. مقيس: بعدها يبقى الهدوء غالبا (61% من الحالات لا يتوسع المدى خلال 12 شمعة، مقابل 50% عادة)، والاتجاه 50/50. ليست إشارة انفجار", group=G_VE)
 veFear = input.bool(true, "سطر نظام الخوف", tooltip="VIX كنسبة مئوية من آخر 500 يوم. مقيس على SPY وQQQ 2020-2026: الخُمس الأعلى من الخوف تبعه خلال 60 يوما عائد أعلى من المعتاد بـ3.8 نقطة (SPY) و5.9 (QQQ)؛ وVIX فوق VIX3M +6.5. سياق بطيء، ليس إشارة دخول", group=G_VE)
+veLadder = input.bool(true, "سلّم الوقف والهدف داخل المروحة", tooltip="من آخر شمعة: وقف 0.75× الحركة المتوقّعة (يُضرب بالضجيج 5% من الصفقات الصحيحة، مقابل 41% لوقف ATR واحد)، هدف 1× (يُصاب قبل الوقف 25%) وهدف 2× (8%). مقيس على 5 دقائق، 24 شمعة", group=G_VE)
+veDay    = input.bool(true, "خطّا مدى اليوم", tooltip="±1σ لليوم كلّه من سعر الافتتاح، من تباين EWMA عند أول شمعة. نفس فكرة الحركة المتوقّعة عند متداولي الخيارات", group=G_VE)
+veStrip  = input.bool(true, "شريط التذبذب أسفل الشموع", tooltip="مربّع لكل شمعة أسفل الشموع: اللون = حرارة التذبذب مقارنة بآخر 500 شمعة (داكن هادئ، أصفر عالٍ)، بنفسجي = انضغاط، ▲▼ = الإغلاق خرج من النطاق الذي رُسم قبل k شمعة", group=G_VE)
+veStripN = input.int(120, "طول الشريط (شموع)", minval=30, maxval=300, group=G_VE)
 cVeFan = input.color(#42a5f5, "لون المروحة", inline="vec", group=G_VE)
 cVeSqz = input.color(#ab47bc, "لون الانضغاط", inline="vec", group=G_VE)
 float veR = rvNewSess or na(c_[1]) ? math.log(c_ / o_) : math.log(c_ / c_[1])
@@ -307,6 +311,7 @@ int veK = tfMin <= 5 ? 24 : tfMin <= 15 ? 8 : tfMin <= 60 ? 2 : 5
 // one sigma of the next veK bars, in price: intraday from the EWMA variance; daily / weekly from the ATR control
 float veMove = timeframe.isdwm ? math.sqrt(2.701088) * atrV * math.sqrt(veK / 5.0) : math.sqrt(veK * veS2) * c_
 var line[] veLines = array.new_line()
+var label[] veLadderLbl = array.new_label()
 if veOn and barstate.islast and not na(veMove)
     for ln in veLines
         line.delete(ln)
@@ -315,10 +320,51 @@ if veOn and barstate.islast and not na(veMove)
         array.push(veLines, line.new(bar_index, c_, bar_index + veK, c_ + m * veMove, color=color.new(cVeFan, m == 1 ? 20 : 60), width=m == 1 ? 2 : 1, style=line.style_dashed))
         array.push(veLines, line.new(bar_index, c_, bar_index + veK, c_ - m * veMove, color=color.new(cVeFan, m == 1 ? 20 : 60), width=m == 1 ? 2 : 1, style=line.style_dashed))
     array.push(veLines, line.new(bar_index + veK, c_ - 2 * veMove, bar_index + veK, c_ + 2 * veMove, color=color.new(cVeFan, 70), width=1))
-// squeeze: ATR14 / ATR100 below the train 10th percentile (5m 0.697, daily 0.883); first bar of the crossing
+    if veLadder
+        for lb in veLadderLbl
+            label.delete(lb)
+        array.clear(veLadderLbl)
+        array.push(veLines, line.new(bar_index, c_ - 0.75 * veMove, bar_index + veK, c_ - 0.75 * veMove, color=cTblDn, width=2))
+        array.push(veLadderLbl, label.new(bar_index + veK, c_ - 0.75 * veMove, "وقف 0.75× · يُضرب 5%", style=label.style_label_left, color=color.new(cTblDn, 100), textcolor=cTblDn, size=size.small))
+        array.push(veLadderLbl, label.new(bar_index + veK, c_ + veMove, "هدف 1× · 25%", style=label.style_label_left, color=color.new(cTblUp, 100), textcolor=cTblUp, size=size.small))
+        array.push(veLadderLbl, label.new(bar_index + veK, c_ + 2 * veMove, "هدف 2× · 8%", style=label.style_label_left, color=color.new(cTblUp, 100), textcolor=color.new(cTblUp, 30), size=size.small))
 float veA100 = ta.rma(trR, 100)
 float veComp = veA100 > 0 ? atrV / veA100 : na
 float veThr = timeframe.isdwm ? 0.8833 : 0.6967
+// day range: +-1 sigma for the whole session from the open, from the EWMA variance at the first bar
+int veBarsDay = timeframe.isintraday ? math.max(1, math.ceil(390.0 / tfMin)) : 1
+var float veDayHi = na
+var float veDayLo = na
+var line veDayL1 = na
+var line veDayL2 = na
+if veDay and timeframe.isintraday and rvNewSess and not na(veS2)
+    veDm = math.sqrt(veBarsDay * veS2) * o_
+    veDayHi := o_ + veDm
+    veDayLo := o_ - veDm
+    line.delete(veDayL1), line.delete(veDayL2)
+    veDayL1 := line.new(bar_index, veDayHi, bar_index + 1, veDayHi, extend=extend.right, color=color.new(cVeFan, 40), style=line.style_dashed)
+    veDayL2 := line.new(bar_index, veDayLo, bar_index + 1, veDayLo, extend=extend.right, color=color.new(cVeFan, 40), style=line.style_dashed)
+// the strip: one box per bar at the bottom of the recent price range; colour = heat (percent rank of the expected
+// move over 500 bars), purple = squeeze; a tiny arrow when the close left the band drawn veK bars ago
+var box[] veBoxes = array.new_box()
+var label[] veArrows = array.new_label()
+float vePct = ta.percentrank(veMove / c_, 500)
+bool veSqzOn = veComp < veThr
+float veY0 = ta.lowest(l_, 100) - 1.2 * atrV
+if veStrip and barstate.isconfirmed and not na(veY0)
+    color vc = veSqzOn ? cVeSqz : (nz(vePct, 50) < 50 ? color.from_gradient(nz(vePct, 50), 0, 50, #1a1a2e, #1e88e5) : color.from_gradient(nz(vePct, 50), 50, 100, #1e88e5, #ffd600))
+    array.push(veBoxes, box.new(bar_index, veY0 + 0.5 * atrV, bar_index + 1, veY0, border_color=color.new(vc, 100), bgcolor=vc))
+    if array.size(veBoxes) > veStripN
+        box.delete(array.shift(veBoxes))
+    for bx in veBoxes
+        box.set_top(bx, veY0 + 0.5 * atrV), box.set_bottom(bx, veY0)
+    if not na(veMove[veK]) and c_ > c_[veK] + veMove[veK]
+        array.push(veArrows, label.new(bar_index, veY0 + 0.6 * atrV, "▲", style=label.style_none, textcolor=cTblUp, size=size.tiny))
+    if not na(veMove[veK]) and c_ < c_[veK] - veMove[veK]
+        array.push(veArrows, label.new(bar_index, veY0 - 0.1 * atrV, "▼", style=label.style_none, textcolor=cTblDn, size=size.tiny))
+    if array.size(veArrows) > 80
+        label.delete(array.shift(veArrows))
+// squeeze: ATR14 / ATR100 below the train 10th percentile (5m 0.697, daily 0.883); first bar of the crossing
 bool veSqzNow = veComp < veThr and not (veComp[1] < veThr)
 if veSqz and veSqzNow and barstate.isconfirmed
     label.new(bar_index, l_, "انضغاط · الهدوء يستمر غالبا (61%)", style=label.style_label_up, color=color.new(cVeSqz, 100), textcolor=cVeSqz, size=size.tiny)
