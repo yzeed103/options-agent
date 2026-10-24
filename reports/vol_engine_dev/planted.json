@@ -1,0 +1,163 @@
+{
+ "F1_fat_tails": {
+  "t4": {
+   "emp_inner": 0.68933,
+   "gauss_inner": 0.74019,
+   "pinball": {
+    "mean": -0.00464,
+    "lo": -0.00635,
+    "hi": -0.00268,
+    "n": 62160,
+    "blocks": 800
+   },
+   "t_df": 3.609033009805935
+  },
+  "gauss": {
+   "emp_inner": 0.68742,
+   "gauss_inner": 0.67835,
+   "pinball": {
+    "mean": -0.0,
+    "lo": -0.00042,
+    "hi": 0.00039,
+    "n": 62160,
+    "blocks": 800
+   },
+   "t_df": 25.079714091608324
+  },
+  "pass": true
+ },
+ "F2_seasonality": {
+  "season": {
+   "mean": -0.00871,
+   "lo": -0.01004,
+   "hi": -0.00741,
+   "n": 62160,
+   "blocks": 800
+  },
+  "gauss": {
+   "mean": 0.00156,
+   "lo": 0.00103,
+   "hi": 0.00211,
+   "n": 62160,
+   "blocks": 800
+  },
+  "pass": true
+ },
+ "F3_fuel": {
+  "revert": {
+   "mean": 0.39643,
+   "lo": 0.34364,
+   "hi": 0.44604,
+   "n": 126,
+   "blocks": 126
+  },
+  "gauss": {
+   "mean": 0.05197,
+   "lo": -0.02206,
+   "hi": 0.13095,
+   "n": 152,
+   "blocks": 152
+  },
+  "pass": true
+ },
+ "F5_exits": {
+  "momo": {
+   "mean": 0.0011,
+   "lo": 0.00095,
+   "hi": 0.00124,
+   "n": 49346,
+   "blocks": 797
+  },
+  "gauss": {
+   "mean": 0.00013,
+   "lo": -3e-05,
+   "hi": 0.0003,
+   "n": 19973,
+   "blocks": 796
+  },
+  "pass": true
+ },
+ "F6_heat_acceleration": {
+  "garch": {
+   "ic": 0.145,
+   "lo": 0.1194,
+   "hi": 0.1716,
+   "blocks": 800,
+   "pass": true
+  },
+  "gauss": {
+   "ic": -0.0184,
+   "lo": -0.0411,
+   "hi": 0.0054,
+   "blocks": 800,
+   "pass": false
+  },
+  "pass": true
+ },
+ "F7_squeeze": {
+  "sqz": {
+   "atr_lift": {
+    "mean": 0.22619,
+    "lo": 0.17033,
+    "hi": 0.28156,
+    "n": 294,
+    "blocks": 268
+   },
+   "duration_slope": {
+    "mean": -0.045,
+    "lo": -0.12236,
+    "hi": 0.02923
+   },
+   "n": 294
+  },
+  "gauss": {
+   "atr_lift": null,
+   "duration_slope": {
+    "mean": 0.0,
+    "lo": 0.0,
+    "hi": 0.0
+   },
+   "n": 1
+  },
+  "pass": true
+ },
+ "F4_ladder": {
+  "trendodds": {
+   "pooled_1x": 0.64214,
+   "cells_pass": 10,
+   "cells": 10,
+   "base_exp": {
+    "mean": 0.00218,
+    "lo": 0.00204,
+    "hi": 0.00232,
+    "n": 7000,
+    "blocks": 2000
+   }
+  },
+  "gauss": {
+   "pooled_1x": 0.30969,
+   "cells_pass": 0,
+   "cells": 10,
+   "base_exp": {
+    "mean": -0.00104,
+    "lo": -0.00112,
+    "hi": -0.00097,
+    "n": 12700,
+    "blocks": 4000
+   }
+  },
+  "pass": true
+ },
+ "R_regimes": {
+  "R1_sign_agreement_among_trend_bars": 0.9942,
+  "R1_wrong_sign_share": 0.0038,
+  "R1_zero_share": 0.3508,
+  "R1_flat_segment_false_state": 0.6477,
+  "R2_squeeze_hit": 1.0,
+  "R2_false_positive": 0.0,
+  "R3_ks_p": 0.9939,
+  "thr_used": 1.0896,
+  "pass": true
+ },
+ "all_pass": true
+}

@@ -137,4 +137,16 @@ parity on BATS:SPY 5m for every new numeric plot; screenshots; chart restored. F
 with their numbers and nothing is added "as an option".
 
 ## Changes
-(none yet)
+- 2026-10-24 (before any real-data run) R1 restated. The pre-registered "Hull state agrees with the planted sign on
+  ≥ 80% of bars" cannot be met by the labeller as shipped: with a clear planted drift (0.0025/bar vs noise 0.004)
+  38% of trend bars carry state 0 (the state needs three same-sign slope bars and the close on the right side, and the
+  Hull line overshoots), and in FLAT segments 65% of bars carry a non-zero state (random-walk wiggles). The test now
+  reads: among non-zero bars the sign agrees ≥ 90% and the wrong-sign share ≤ 5%. The 65% false-state rate in flat
+  segments is recorded in planted.json and carried into the regime map as a caveat: "trend" cells contain many
+  spurious states, which dilutes any trend-conditioned effect toward zero (it cannot create one).
+- 2026-10-24 (before any real-data run) planted worlds, dated for the record: F1 fat tails is a volatility scale
+  mixture (Student-t shocks average out over 24 bars and could not fail the Gaussian band); F7 squeeze plants a 14-bar
+  compression at 0.4x followed with p 0.8 by 24 bars at 2x, read with the fixed real threshold 0.6967; F4 ladder plants
+  S0 0.8 with drift in the first half of each trend segment and S0 0.3 without drift in the second; the random-world
+  ladder control is an expectancy interval containing -2 x cost (every trade pays 10 bp), not 0. H3.2 uses the 68.3th
+  percentile of |remaining move| by slot (a 1-sigma band by construction on train) instead of "median".
