@@ -10,7 +10,7 @@ pRvol  = input.bool(true, "أعمدة الفوليوم الآن (RVOL)", tooltip
 pMove  = input.bool(true, "خطّ الحركة المتوقّعة", tooltip="±1σ للشموع القادمة (24 على 5 دقائق) كنسبة مئوية من السعر، مضروبة في المضاعف لتُرى بجانب الأعمدة؛ الرقم الحقيقي في الجدول على اليمين", group=G_P)
 pMoveX = input.float(10, "مضاعف عرض الحركة المتوقّعة", minval=1, maxval=100, step=1, group=G_P)
 pSqz   = input.bool(true, "تظليل الانضغاط", tooltip="ATR14 ÷ ATR100 تحت عُشر قيمه المعتادة: الهدوء يستمرّ غالبًا (62% من الحالات لا يتّسع المدى خلال 12 شمعة)، الاتجاه 50/50", group=G_P)
-pHeat  = input.bool(true, "شريط حرارة التذبذب", tooltip="لون كل شمعة = ترتيب الحركة المتوقّعة بين آخر 500 شمعة (داكن هادئ، أزرق متوسّط، أصفر عالٍ)؛ بنفسجي = انضغاط؛ ▲▼ = الإغلاق خرج من النطاق الذي رُسم قبل k شمعة", group=G_P)
+pHeat  = input.bool(true, "شريط حرارة التذبذب", tooltip="لون كل شمعة = ترتيب الحركة المتوقّعة مقابل نفس وقت اليوم في آخر 20 جلسة (داكن هادئ، أزرق متوسّط، أصفر عالٍ). مقيس 2026-10-24: هذا الترتيب يتنبّأ باتّساع المدى (ic 0.15) بينما الترتيب على 500 شمعة لا (−0.04). بنفسجي = انضغاط؛ ▲▼ = الإغلاق خرج من النطاق الذي رُسم قبل k شمعة (بعده يتّسع المدى ولا يميل الاتجاه)", group=G_P)
 pTbl   = input.bool(true, "جدول الأرقام", group=G_P)
 pTblPos = input.string("أعلى اليمين", "موقع الجدول", options=["أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "أسفل اليسار"], group=G_P)
 cUp   = input.color(#26a69a, "فوليوم قوي", inline="pc", group=G_P)
@@ -60,7 +60,28 @@ float veA100 = ta.rma(trR, 100)
 float veComp = veA100 > 0 ? atrV / veA100 : na
 float veThr = timeframe.isdwm ? 0.8833 : 0.6967
 bool veSqzOn = veComp < veThr
-float vePct = ta.percentrank(veMovePct, 500)
+// heat: rank of the expected move (share of price) against the same slot of the previous 20 sessions (H6.1)
+var matrix<float> veHBuf = matrix.new<float>(nSlots, 20, na)
+float vePct = na
+if slotNow >= 0 and not na(veMove)
+    int veBelow = 0
+    int veCnt = 0
+    for j = 0 to 19
+        float hx = matrix.get(veHBuf, slotNow, j)
+        if not na(hx)
+            veCnt += 1
+            if hx < veMove / c_
+                veBelow += 1
+    if veCnt >= 10
+        vePct := 100.0 * veBelow / veCnt
+if barstate.isconfirmed and slotNow >= 0 and not na(veMove)
+    for j = 0 to 18
+        matrix.set(veHBuf, slotNow, j, matrix.get(veHBuf, slotNow, j + 1))
+    matrix.set(veHBuf, slotNow, 19, veMove / c_)
+bool veAccel = not na(vePct) and not na(vePct[12]) and vePct - vePct[12] >= 20
+var int veSqzBars = 0
+veSqzBars := veComp < veThr ? veSqzBars + 1 : 0
+bool veLunch = minsIn >= 150 and minsIn < 240
 bool exitUp = not na(veMove[veK]) and c_ > c_[veK] + veMove[veK]
 bool exitDn = not na(veMove[veK]) and c_ < c_[veK] - veMove[veK]
 float veVix = request.security("CBOE:VIX", "D", close, lookahead=barmerge.lookahead_off)
@@ -81,6 +102,7 @@ plot(mAll or pMode == "شريط الحرارة فقط" ? 0 : na, "الصفر", c
 // in its own pane the expected move is drawn in true percent; beside the RVOL columns it is scaled by the multiplier
 plot(mMove ? veMovePct * (mAll ? pMoveX : 1) : na, "الحركة المتوقّعة %" + " (× المضاعف في النافذة المشتركة)", color=cMove, linewidth=2)
 plot(veMovePct, "الحركة المتوقّعة %", color=na, display=display.data_window)
+plot(vePct, "حرارة التذبذب (ترتيب وقت اليوم)", color=na, display=display.data_window)
 plot(veMove, "الحركة المتوقّعة (سعر)", color=na, display=display.data_window)
 plot(veComp, "انضغاط ATR14/ATR100", color=na, display=display.data_window)
 bgcolor(mSqz and veSqzOn ? color.new(cSqz, 70) : na, title="الانضغاط")
@@ -122,7 +144,7 @@ if pTbl and barstate.islast
     string sVol = na(rvol) ? "-" : str.tostring(rvol, "#.0") + "× " + (rvol >= 2 ? "عالٍ جدًا" : rvol >= 1.2 ? "قوي" : "عادي")
     string sMv = na(veMove) ? "-" : "±" + str.tostring(veMove, format.mintick) + " (" + str.tostring(veMovePct, "#.00") + "%) / " + str.tostring(veK) + " شمعة"
     string sStop = na(veMove) ? "-" : "≥ " + str.tostring(0.75 * veMove, format.mintick) + " (0.75×) · ATR واحد يُضرب 41%"
-    string sVix = na(veVixPct) ? "-" : "VIX " + str.tostring(veVixPct, "#") + "% " + (veVixPct >= 80 ? "خوف عالٍ · ميل 60 يومًا +3.8 SPY" : veVixPct <= 20 ? "هدوء" : "عادي") + (not na(veV3) and veVix > veV3 ? " · VIX فوق VIX3M" : "") + (veSqzOn ? " · انضغاط" : "")
+    string sVix = (na(vePct) ? "" : "حرارة " + str.tostring(vePct, "#") + "%" + (veAccel ? " ↑ تتسارع" : "") + " · ") + (na(veVixPct) ? "-" : "VIX " + str.tostring(veVixPct, "#") + "% " + (veVixPct >= 80 ? "خوف عالٍ · ميل 60 يومًا +3.8 SPY" : veVixPct <= 20 ? "هدوء" : "عادي") + (not na(veV3) and veVix > veV3 ? " · VIX فوق VIX3M" : "")) + (veSqzOn ? " · انضغاط منذ " + str.tostring(veSqzBars) + (veLunch ? " (غداء: أهدأ)" : "") : (veComp[1] < veThr ? " · خرج من الانضغاط: ليس بداية حركة" : ""))
     table.clear(tb, 0, 0, 1, 3)
     if mRvol or sRvol
         table.cell(tb, 1, 0, "الفوليوم الآن", text_color=#9598a1, text_size=size.small, text_halign=text.align_right)

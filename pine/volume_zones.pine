@@ -293,14 +293,25 @@ alertcondition(tvBreakDir != 0 and tvFlag, "تحذير كسر كاذب", "اخت
 // ATR14/ATR100 drops below its train 10th percentile the next 12 bars expand LESS often (39% vs
 // 50% at random): calm persists, direction 50/50. Fear: top-quintile VIX -> SPY +3.8 points
 // over 60 days (test), QQQ +5.9. Stops: a 1-ATR stop is hit by noise in 41% of right 24-bar trades on 5m.
+// v2 (reports/vol_engine_dev, 2026-10-24, 27 pre-registered hypotheses, 8 passed): the fan variance follows a
+// 78-slot intraday profile (QLIKE -0.28, coverage 67% vs 70%; the plain band covered 60% at the open and 34% in the
+// last 45 min); the day range adds 0.05 x gap^2 to the first-bar variance; the remaining move to the close uses a
+// per-slot table (sqrt(remaining bars) covered 85%); target odds depend on trend strength (31% strong up, 21% weakest
+// fifth); a trailing stop at 0.75x earns +0.03% per trade over the fixed one; heat is ranked against the same time of
+// day (ic 0.15 vs -0.04 for a 500-bar rank) and its acceleration adds (ic 0.08); squeezes are calmest at lunch (34%)
+// and on low volume (31%), fade slowly with duration, and leaving one is not a move. Failed and NOT shipped: stop by
+// regime, structure-aware stop, time stop, intraday sizing, exit direction, fade rule, fuel, day-line touches.
 G_VE = "محرّك التذبذب"
 veOn   = input.bool(true, "مروحة الحركة المتوقّعة", tooltip="من آخر شمعة: نطاق ±1σ و±2σ للشموع القادمة (24 على 5 دقائق، 8 على 15، 2 على الساعة، 5 على اليومي). قياس 2026-10-24: على 5 دقائق تبقى الحركة داخل ±1σ في 70% من الحالات (65% على SPY وQQQ)، وعلى اليومي 72%. يخبرك كم، لا إلى أين", group=G_VE)
 veSqz  = input.bool(true, "علامة الانضغاط", tooltip="أول شمعة ينزل فيها ATR14 ÷ ATR100 تحت عُشر قيمه المعتادة. مقيس: بعدها يبقى الهدوء غالبا (61% من الحالات لا يتوسع المدى خلال 12 شمعة، مقابل 50% عادة)، والاتجاه 50/50. ليست إشارة انفجار", group=G_VE)
 veFear = input.bool(true, "سطر نظام الخوف", tooltip="VIX كنسبة مئوية من آخر 500 يوم. مقيس على SPY وQQQ 2020-2026: الخُمس الأعلى من الخوف تبعه خلال 60 يوما عائد أعلى من المعتاد بـ3.8 نقطة (SPY) و5.9 (QQQ)؛ وVIX فوق VIX3M +6.5. سياق بطيء، ليس إشارة دخول", group=G_VE)
 veLadder = input.bool(true, "سلّم الوقف والهدف داخل المروحة", tooltip="من آخر شمعة: وقف 0.75× الحركة المتوقّعة (يُضرب بالضجيج 5% من الصفقات الصحيحة، مقابل 41% لوقف ATR واحد)، هدف 1× (يُصاب قبل الوقف 25%) وهدف 2× (8%). مقيس على 5 دقائق، 24 شمعة", group=G_VE)
 veDay    = input.bool(true, "خطّا مدى اليوم", tooltip="±1σ لليوم كلّه من سعر الافتتاح، من تباين EWMA عند أول شمعة. نفس فكرة الحركة المتوقّعة عند متداولي الخيارات", group=G_VE)
-veStrip  = input.bool(false, "شريط التذبذب أسفل الشموع", tooltip="مربّع لكل شمعة أسفل الشموع: اللون = حرارة التذبذب مقارنة بآخر 500 شمعة (داكن هادئ، أصفر عالٍ)، بنفسجي = انضغاط، ▲▼ = الإغلاق خرج من النطاق الذي رُسم قبل k شمعة", group=G_VE)
+veStrip  = input.bool(false, "شريط التذبذب أسفل الشموع", tooltip="مربّع لكل شمعة أسفل الشموع: اللون = حرارة التذبذب مقارنة بنفس وقت اليوم في آخر 20 جلسة (داكن هادئ، أصفر عالٍ)، بنفسجي = انضغاط، ▲▼ = الإغلاق خرج من النطاق الذي رُسم قبل k شمعة. مقيس: بعد الخروج يتّسع المدى (خاصّة في الحرارة العالية) ولا يميل الاتجاه", group=G_VE)
 veStripN = input.int(120, "طول الشريط (شموع)", minval=30, maxval=300, group=G_VE)
+veSeason = input.bool(true, "موسمية اليوم في المروحة", tooltip="تباين الشمعة يتبع وقتها في اليوم: شمعة الافتتاح 13× المتوسّط، الغداء 0.4×، آخر الجلسة 2×. مقيس 2026-10-24: المروحة بلا موسمية كانت تغطّي 60% عند الافتتاح و34% في آخر 45 دقيقة؛ مع الموسمية 67% في كلّ الأوقات", group=G_VE)
+veRem    = input.bool(true, "المدى المتبقّي حتى الإغلاق", tooltip="خطّان من الشمعة الحالية إلى نهاية الجلسة: ±1σ للحركة المتبقّية حتى الإغلاق من جدول مقيس حسب وقت اليوم (على 5 دقائق فقط). القاعدة الساذجة √(الشموع المتبقّية) كانت تغطّي 85% بدل 68%: الإغلاق أهدأ من الافتتاح", group=G_VE)
+veTrail  = input.bool(true, "وقف متحرّك للاتجاه الحالي", tooltip="أفضل سعر منذ بدء حالة الاتجاه ناقص 0.75× الحركة المتوقّعة عند بدئها. مقيس: يربح +0.03% للصفقة مقارنة بالوقف الثابت (فاصل الثقة لا يشمل الصفر)", group=G_VE)
 cVeFan = input.color(#42a5f5, "لون المروحة", inline="vec", group=G_VE)
 cVeSqz = input.color(#ab47bc, "لون الانضغاط", inline="vec", group=G_VE)
 float veR = rvNewSess or na(c_[1]) ? math.log(c_ / o_) : math.log(c_ / c_[1])
@@ -308,8 +319,53 @@ float veLam = tfMin <= 5 ? 0.99 : timeframe.isdwm ? 0.94 : 0.97
 var float veS2 = na
 veS2 := na(veS2) ? veR * veR : veLam * veS2 + (1 - veLam) * veR * veR
 int veK = tfMin <= 5 ? 24 : tfMin <= 15 ? 8 : tfMin <= 60 ? 2 : 5
+// intraday variance profile by 5-minute slot (pooled over 30 symbols on train; reports/vol_engine_dev H1.3), and the
+// 68.3th percentile of |remaining move to the close| / sigma by 5-minute slot (H3.2)
+var float[] veProf5 = array.from(13.0616, 4.8267, 3.6186, 3.5973, 2.9083, 2.2205, 2.5626, 1.8878, 1.6552, 1.5478, 1.5150, 1.3400, 1.3999, 1.3048, 1.1005, 1.0198, 1.0875, 0.9432, 0.9621, 0.9115, 0.8946, 0.7789, 0.8649, 0.7575, 0.7734, 0.7263, 0.6908, 0.6309, 0.6126, 0.5490, 0.6428, 0.5213, 0.5306, 0.5239, 0.5307, 0.4423, 0.5344, 0.4355, 0.4537, 0.4399, 0.4756, 0.4301, 0.4941, 0.3874, 0.4243, 0.4877, 0.4332, 0.4195, 0.4622, 0.4479, 0.3848, 0.3877, 0.3981, 0.3667, 0.5075, 0.4125, 0.3680, 0.3705, 0.3549, 0.3387, 0.4077, 0.3518, 0.3282, 0.2971, 0.3384, 0.3667, 0.4148, 0.4013, 0.3611, 0.3712, 0.3645, 0.3211, 0.4269, 0.3818, 0.4306, 0.4423, 0.9771, 0.8611)
+var float[] veG5 = array.from(7.830, 7.297, 6.952, 6.700, 6.509, 6.301, 5.940, 5.879, 5.761, 5.646, 5.554, 5.505, 5.380, 5.218, 5.228, 5.100, 5.001, 4.960, 4.825, 4.775, 4.668, 4.679, 4.566, 4.549, 4.489, 4.436, 4.442, 4.389, 4.335, 4.314, 4.275, 4.245, 4.210, 4.128, 4.122, 4.119, 4.023, 3.989, 3.910, 3.874, 3.801, 3.785, 3.708, 3.711, 3.771, 3.747, 3.678, 3.618, 3.554, 3.465, 3.425, 3.409, 3.370, 3.317, 3.252, 3.197, 3.157, 3.115, 3.049, 2.952, 2.930, 2.891, 2.795, 2.728, 2.635, 2.599, 2.439, 2.364, 2.290, 2.197, 2.096, 2.037, 1.909, 1.821, 1.667, 1.462, 0.980, 0.000)
+var float[] veProf = array.new_float()
+if barstate.isfirst and timeframe.isintraday
+    for j = 0 to nSlots - 1
+        int lo5 = math.floor(j * tfMin / 5.0)
+        int hi5 = math.max(lo5, math.floor((j + 1) * tfMin / 5.0) - 1)
+        float sF = 0.0
+        int nF = 0
+        for q = lo5 to hi5
+            if q < 78
+                sF += array.get(veProf5, q)
+                nF += 1
+        array.push(veProf, nF > 0 ? sF / nF : 1.0)
+float veF = veSeason and timeframe.isintraday and slotNow >= 0 and array.size(veProf) > slotNow ? array.get(veProf, slotNow) : 1.0
+var float veS2d = na
+veS2d := na(veS2d) ? veR * veR / veF : veLam * veS2d + (1 - veLam) * veR * veR / veF
+float veNext = veK
+if veSeason and timeframe.isintraday and slotNow >= 0 and array.size(veProf) > 0
+    float sN = 0.0
+    for q = 1 to veK
+        sN += array.get(veProf, (slotNow + q) % array.size(veProf))
+    veNext := sN
+// variance of the next veK bars: deseasonalized EWMA x the next slots' factors (intraday), or k x EWMA
+float veS2k = veSeason and timeframe.isintraday ? veS2d * veNext : veK * veS2
 // one sigma of the next veK bars, in price: intraday from the EWMA variance; daily / weekly from the ATR control
-float veMove = timeframe.isdwm ? math.sqrt(2.701088) * atrV * math.sqrt(veK / 5.0) : math.sqrt(veK * veS2) * c_
+float veMove = timeframe.isdwm ? math.sqrt(2.701088) * atrV * math.sqrt(veK / 5.0) : math.sqrt(veS2k) * c_
+// target odds by trend strength (H4.3): S0 quintile edges from train; only the cells whose interval excluded the pooled rate differ
+int veQ = tvS0 > 0.5879 ? 4 : tvS0 > 0.4241 ? 3 : tvS0 > 0.2934 ? 2 : tvS0 > 0.183 ? 1 : 0
+string veP1 = tvState > 0 and veQ == 4 ? "31%" : tvState != 0 and veQ == 0 ? "21%" : "25%"
+string veP2 = tvState < 0 and veQ == 2 ? "7%" : "8%"
+// trailing stop for the current trend state (H4.5): best price since the state began minus 0.75x the move at its start
+var float veBest = na
+var float veTrailD = na
+if tvState != tvState[1]
+    veBest := tvState > 0 ? h_ : tvState < 0 ? l_ : na
+    veTrailD := tvState != 0 ? 0.75 * veMove : na
+else if tvState > 0
+    veBest := math.max(nz(veBest, h_), h_)
+else if tvState < 0
+    veBest := math.min(nz(veBest, l_), l_)
+float veTrailStop = tvState > 0 ? veBest - veTrailD : tvState < 0 ? veBest + veTrailD : na
+// remaining move to the close (H3.2), 5-minute charts only: the table is in units of the 5-minute bar sigma
+int veSlot5end = timeframe.isintraday and slotNow >= 0 ? math.min(77, math.max(0, math.floor((slotNow + 1) * tfMin / 5.0) - 1)) : -1
+float veRemMove = tfMin == 5 and veSlot5end >= 0 ? array.get(veG5, veSlot5end) * math.sqrt(veS2) * c_ : na
 var line[] veLines = array.new_line()
 var label[] veLadderLbl = array.new_label()
 if veOn and barstate.islast and not na(veMove)
@@ -326,8 +382,13 @@ if veOn and barstate.islast and not na(veMove)
         array.clear(veLadderLbl)
         array.push(veLines, line.new(bar_index, c_ - 0.75 * veMove, bar_index + veK, c_ - 0.75 * veMove, color=cTblDn, width=2))
         array.push(veLadderLbl, label.new(bar_index + veK, c_ - 0.75 * veMove, "وقف 0.75× · يُضرب 5%", style=label.style_label_left, color=color.new(cTblDn, 100), textcolor=cTblDn, size=size.small))
-        array.push(veLadderLbl, label.new(bar_index + veK, c_ + veMove, "هدف 1× · 25%", style=label.style_label_left, color=color.new(cTblUp, 100), textcolor=cTblUp, size=size.small))
-        array.push(veLadderLbl, label.new(bar_index + veK, c_ + 2 * veMove, "هدف 2× · 8%", style=label.style_label_left, color=color.new(cTblUp, 100), textcolor=color.new(cTblUp, 30), size=size.small))
+        array.push(veLadderLbl, label.new(bar_index + veK, c_ + veMove, "هدف 1× · " + veP1 + (veP1 != "25%" ? " (حسب قوة الاتجاه)" : ""), style=label.style_label_left, color=color.new(cTblUp, 100), textcolor=cTblUp, size=size.small))
+        array.push(veLadderLbl, label.new(bar_index + veK, c_ + 2 * veMove, "هدف 2× · " + veP2, style=label.style_label_left, color=color.new(cTblUp, 100), textcolor=color.new(cTblUp, 30), size=size.small))
+    if veRem and not na(veRemMove) and slotNow >= 0
+        int veEndBar = bar_index + (nSlots - 1 - slotNow)
+        array.push(veLines, line.new(bar_index, c_ + veRemMove, veEndBar, c_ + veRemMove, color=color.new(cVeFan, 35), width=1, style=line.style_dotted))
+        array.push(veLines, line.new(bar_index, c_ - veRemMove, veEndBar, c_ - veRemMove, color=color.new(cVeFan, 35), width=1, style=line.style_dotted))
+        array.push(veLadderLbl, label.new(veEndBar, c_ - veRemMove, "حتى الإغلاق ±" + str.tostring(veRemMove, format.mintick), style=label.style_label_up, color=color.new(cVeFan, 100), textcolor=color.new(cVeFan, 20), size=size.tiny))
 float veA100 = ta.rma(trR, 100)
 float veComp = veA100 > 0 ? atrV / veA100 : na
 float veThr = timeframe.isdwm ? 0.8833 : 0.6967
@@ -338,7 +399,8 @@ var float veDayLo = na
 var line veDayL1 = na
 var line veDayL2 = na
 if veDay and timeframe.isintraday and rvNewSess and not na(veS2)
-    veDm = math.sqrt(veBarsDay * veS2) * o_
+    float veGap = na(c_[1]) ? 0.0 : math.log(o_ / c_[1])
+    veDm = math.sqrt(veBarsDay * (veS2 + 0.05 * veGap * veGap)) * o_
     veDayHi := o_ + veDm
     veDayLo := o_ - veDm
     line.delete(veDayL1), line.delete(veDayL2)
@@ -348,8 +410,29 @@ if veDay and timeframe.isintraday and rvNewSess and not na(veS2)
 // move over 500 bars), purple = squeeze; a tiny arrow when the close left the band drawn veK bars ago
 var box[] veBoxes = array.new_box()
 var label[] veArrows = array.new_label()
-float vePct = ta.percentrank(veMove / c_, 500)
+// heat: rank of the expected move (as a share of price) against the same slot of the previous 20 sessions
+var matrix<float> veHBuf = matrix.new<float>(nSlots, 20, na)
+float vePct = na
+if slotNow >= 0 and not na(veMove)
+    int veBelow = 0
+    int veCnt = 0
+    for j = 0 to 19
+        float hx = matrix.get(veHBuf, slotNow, j)
+        if not na(hx)
+            veCnt += 1
+            if hx < veMove / c_
+                veBelow += 1
+    if veCnt >= 10
+        vePct := 100.0 * veBelow / veCnt
+if barstate.isconfirmed and slotNow >= 0 and not na(veMove)
+    for j = 0 to 18
+        matrix.set(veHBuf, slotNow, j, matrix.get(veHBuf, slotNow, j + 1))
+    matrix.set(veHBuf, slotNow, 19, veMove / c_)
+bool veAccel = not na(vePct) and not na(vePct[12]) and vePct - vePct[12] >= 20
 bool veSqzOn = veComp < veThr
+var int veSqzBars = 0
+veSqzBars := veSqzOn ? veSqzBars + 1 : 0
+bool veLunch = minsIn >= 150 and minsIn < 240
 float veY0 = ta.lowest(l_, 100) - 1.2 * atrV
 if veStrip and barstate.isconfirmed and not na(veY0)
     color vc = veSqzOn ? cVeSqz : (nz(vePct, 50) < 50 ? color.from_gradient(nz(vePct, 50), 0, 50, #1a1a2e, #1e88e5) : color.from_gradient(nz(vePct, 50), 50, 100, #1e88e5, #ffd600))
@@ -367,13 +450,18 @@ if veStrip and barstate.isconfirmed and not na(veY0)
 // squeeze: ATR14 / ATR100 below the train 10th percentile (5m 0.697, daily 0.883); first bar of the crossing
 bool veSqzNow = veComp < veThr and not (veComp[1] < veThr)
 if veSqz and veSqzNow and barstate.isconfirmed
-    label.new(bar_index, l_, "انضغاط · الهدوء يستمر غالبا (61%)", style=label.style_label_up, color=color.new(cVeSqz, 100), textcolor=cVeSqz, size=size.tiny)
+    string veSqTxt = "انضغاط · الهدوء يستمر غالبا (62%)" + (veLunch ? " · غداء: أهدأ (66%)" : "") + (not na(rvol) and rvol < 0.8 ? " · فوليوم منخفض: أهدأ (69%)" : "")
+    label.new(bar_index, l_, veSqTxt, style=label.style_label_up, color=color.new(cVeSqz, 100), textcolor=cVeSqz, size=size.tiny)
 // fear regime (daily VIX, percent rank over 500 days)
 float veVix = request.security("CBOE:VIX", "D", close, lookahead=barmerge.lookahead_off)
 float veVixPct = request.security("CBOE:VIX", "D", ta.percentrank(close, 500), lookahead=barmerge.lookahead_off)
 float veV3 = request.security("CBOE:VIX3M", "D", close, lookahead=barmerge.lookahead_off)
 plot(veOn ? veMove : na, "الحركة المتوقّعة (1σ)", color=na, display=display.data_window)
 plot(veOn ? veS2 : na, "تباين EWMA", color=na, display=display.data_window)
+plot(veOn ? veS2k : na, "تباين الشموع القادمة (موسمي)", color=na, display=display.data_window)
+plot(vePct, "حرارة التذبذب (ترتيب وقت اليوم)", color=na, display=display.data_window)
+plot(veRemMove, "المتبقّي حتى الإغلاق (1σ)", color=na, display=display.data_window)
+plot(veTrail ? veTrailStop : na, "وقف متحرّك 0.75×", color=tvState > 0 ? color.new(cTblUp, 20) : color.new(cTblDn, 20), style=plot.style_linebr, linewidth=1)
 plot(veComp, "انضغاط ATR14/ATR100", color=na, display=display.data_window)
 alertcondition(veSqzNow, "انضغاط", "دخل السعر في انضغاط (ATR14/ATR100 تحت عُشره المعتاد)")
 emaF = ta.ema(c_, 20)
@@ -1573,7 +1661,11 @@ if barstate.islast
     float veMv = veMove[1]
     string eTxt = na(veMv) ? "-" : "±" + str.tostring(veMv, format.mintick) + " (" + str.tostring(100 * veMv / c_, "#.0") + "%) خلال " + str.tostring(veK) + " شمعة"
     string eFear = na(veVixPct) ? "" : "   |   VIX " + str.tostring(veVixPct, "#") + "% " + (veVixPct >= 80 ? "خوف عال: ميل 60 يوما SPY +3.8 QQQ +5.9" : veVixPct <= 20 ? "هدوء" : "عادي") + (not na(veV3) and veVix > veV3 ? " · VIX فوق VIX3M" : "")
-    string eSub = (na(veMv) ? "-" : "وقف يصمد للضجيج ≥ " + str.tostring(0.75 * veMv, format.mintick) + " (0.75×) · وقف ATR واحد يُضرب 41%") + (veFear ? eFear : "") + (veComp < veThr ? "   |   انضغاط: الهدوء يستمر غالبا" : "")
+    string eHeat = na(vePct) ? "" : "   |   حرارة " + str.tostring(vePct, "#") + "% حسب وقت اليوم" + (veAccel ? " ↑ تتسارع" : "")
+    string eRem = na(veRemMove) ? "" : "   |   حتى الإغلاق ±" + str.tostring(veRemMove, format.mintick)
+    string eTrail = na(veTrailStop) ? "" : "   |   وقف متحرّك " + str.tostring(veTrailStop, format.mintick)
+    string eSqz = veComp < veThr ? "   |   انضغاط منذ " + str.tostring(veSqzBars) + " شمعة: الهدوء يستمر غالبا" + (veLunch ? " (غداء: أهدأ)" : "") : (veComp[1] < veThr ? "   |   خرج من الانضغاط: ليس بداية حركة" : "")
+    string eSub = (na(veMv) ? "-" : "وقف يصمد للضجيج ≥ " + str.tostring(0.75 * veMv, format.mintick) + " (0.75×)" + eTrail) + eRem + eHeat + (veFear ? eFear : "") + eSqz
     color  eCol = veComp < veThr ? cVeSqz : cTblTxt
     // --- trend model (price only): state, strength quintile, P(alive 12 bars), last break
     int tvQ1 = tvQ[1]
