@@ -1,0 +1,17 @@
+{
+ "qlike_rolling_seasonal_minus_plain": {
+  "mean": -0.2481,
+  "lo": -0.26076,
+  "hi": -0.23523,
+  "n": 369000,
+  "blocks": 4740
+ },
+ "coverage_1sigma": {
+  "mean": 0.73158,
+  "lo": 0.72666,
+  "hi": 0.73715,
+  "n": 369000,
+  "blocks": 4740
+ },
+ "pass": false
+}

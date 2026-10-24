@@ -1,0 +1,1185 @@
+{
+ "trend": {
+  "down": {
+   "T1_fan": {
+    "cov_emp": 0.6649,
+    "cov_gauss": 0.6955,
+    "blocks": 4698,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": -0.0314,
+    "lo": -0.052,
+    "hi": -0.0116,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00108,
+     "lo": 0.00066,
+     "hi": 0.0015,
+     "n": 40874,
+     "blocks": 3305
+    },
+    "direction_lift": {
+     "mean": -0.00055,
+     "lo": -0.0009,
+     "hi": -0.00021,
+     "n": 40874,
+     "blocks": 3305
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00084,
+     "lo": -0.00111,
+     "hi": -0.00057,
+     "n": 7083,
+     "blocks": 4452
+    },
+    "value": "no value"
+   },
+   "T3_fuel": {
+    "reversal_lift": {
+     "mean": -0.0099,
+     "lo": -0.06309,
+     "hi": 0.04314,
+     "n": 298,
+     "blocks": 298
+    },
+    "value": "no value"
+   },
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.10992,
+     "lo": -0.13596,
+     "hi": -0.08099,
+     "n": 1482,
+     "blocks": 1131
+    },
+    "value": "value (calm persists)"
+   }
+  },
+  "none": {
+   "T1_fan": {
+    "cov_emp": 0.6824,
+    "cov_gauss": 0.7114,
+    "blocks": 4740,
+    "value": "value"
+   },
+   "T6_heat": {
+    "ic": -0.049,
+    "lo": -0.0659,
+    "hi": -0.0329,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00101,
+     "lo": 0.00067,
+     "hi": 0.00133,
+     "n": 26028,
+     "blocks": 3874
+    },
+    "direction_lift": {
+     "mean": -6e-05,
+     "lo": -0.00033,
+     "hi": 0.00025,
+     "n": 26028,
+     "blocks": 3874
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": "no entries by construction",
+   "T3_fuel": "not enough data",
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.10693,
+     "lo": -0.13232,
+     "hi": -0.08119,
+     "n": 1544,
+     "blocks": 1292
+    },
+    "value": "value (calm persists)"
+   }
+  },
+  "up": {
+   "T1_fan": {
+    "cov_emp": 0.673,
+    "cov_gauss": 0.7053,
+    "blocks": 4687,
+    "value": "value"
+   },
+   "T6_heat": {
+    "ic": -0.0237,
+    "lo": -0.0428,
+    "hi": -0.0043,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00074,
+     "lo": 0.00036,
+     "hi": 0.00113,
+     "n": 42443,
+     "blocks": 3363
+    },
+    "direction_lift": {
+     "mean": 0.00019,
+     "lo": -0.00017,
+     "hi": 0.00058,
+     "n": 42443,
+     "blocks": 3363
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00091,
+     "lo": -0.00119,
+     "hi": -0.00066,
+     "n": 6998,
+     "blocks": 4455
+    },
+    "value": "no value"
+   },
+   "T3_fuel": {
+    "reversal_lift": {
+     "mean": 0.01551,
+     "lo": -0.03426,
+     "hi": 0.06528,
+     "n": 403,
+     "blocks": 403
+    },
+    "value": "no value"
+   },
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.08372,
+     "lo": -0.11352,
+     "hi": -0.05381,
+     "n": 1416,
+     "blocks": 1095
+    },
+    "value": "value (calm persists)"
+   }
+  }
+ },
+ "heat": {
+  "cold": {
+   "T1_fan": {
+    "cov_emp": 0.5941,
+    "cov_gauss": 0.624,
+    "blocks": 2839,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": -0.1379,
+    "lo": -0.1601,
+    "hi": -0.1154,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": -0.00157,
+     "lo": -0.00205,
+     "hi": -0.00096,
+     "n": 20398,
+     "blocks": 1786
+    },
+    "direction_lift": {
+     "mean": -0.00029,
+     "lo": -0.00082,
+     "hi": 0.00023,
+     "n": 20398,
+     "blocks": 1786
+    },
+    "value": "no value"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00079,
+     "lo": -0.00113,
+     "hi": -0.00045,
+     "n": 4137,
+     "blocks": 2147
+    },
+    "value": "no value"
+   },
+   "T3_fuel": "not enough data",
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.13333,
+     "lo": -0.15707,
+     "hi": -0.11068,
+     "n": 2129,
+     "blocks": 1374
+    },
+    "value": "value (calm persists)"
+   }
+  },
+  "mild": {
+   "T1_fan": {
+    "cov_emp": 0.6779,
+    "cov_gauss": 0.709,
+    "blocks": 3717,
+    "value": "value"
+   },
+   "T6_heat": {
+    "ic": 0.0025,
+    "lo": -0.0158,
+    "hi": 0.0218,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00023,
+     "lo": -0.00012,
+     "hi": 0.00064,
+     "n": 35131,
+     "blocks": 2765
+    },
+    "direction_lift": {
+     "mean": -8e-05,
+     "lo": -0.00043,
+     "hi": 0.00029,
+     "n": 35131,
+     "blocks": 2765
+    },
+    "value": "no value"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00115,
+     "lo": -0.00148,
+     "hi": -0.00086,
+     "n": 4781,
+     "blocks": 3000
+    },
+    "value": "no value"
+   },
+   "T3_fuel": {
+    "reversal_lift": {
+     "mean": -0.03612,
+     "lo": -0.09791,
+     "hi": 0.02282,
+     "n": 263,
+     "blocks": 263
+    },
+    "value": "no value"
+   },
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.11455,
+     "lo": -0.14295,
+     "hi": -0.08579,
+     "n": 1526,
+     "blocks": 1080
+    },
+    "value": "value (calm persists)"
+   }
+  },
+  "warm": {
+   "T1_fan": {
+    "cov_emp": 0.722,
+    "cov_gauss": 0.7523,
+    "blocks": 2645,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": 0.0037,
+    "lo": -0.0186,
+    "hi": 0.025,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00093,
+     "lo": 0.00045,
+     "hi": 0.00141,
+     "n": 19440,
+     "blocks": 1940
+    },
+    "direction_lift": {
+     "mean": -3e-05,
+     "lo": -0.00047,
+     "hi": 0.0004,
+     "n": 19440,
+     "blocks": 1940
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00074,
+     "lo": -0.00122,
+     "hi": -0.00026,
+     "n": 2256,
+     "blocks": 1787
+    },
+    "value": "no value"
+   },
+   "T3_fuel": "not enough data",
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.00957,
+     "lo": -0.05675,
+     "hi": 0.03564,
+     "n": 564,
+     "blocks": 424
+    },
+    "value": "no value"
+   }
+  },
+  "hot": {
+   "T1_fan": {
+    "cov_emp": 0.7188,
+    "cov_gauss": 0.749,
+    "blocks": 1931,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": 0.0818,
+    "lo": 0.0588,
+    "hi": 0.1056,
+    "value": "value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00168,
+     "lo": 0.00108,
+     "hi": 0.00235,
+     "n": 11529,
+     "blocks": 1419
+    },
+    "direction_lift": {
+     "mean": 0.00014,
+     "lo": -0.00049,
+     "hi": 0.00071,
+     "n": 11529,
+     "blocks": 1419
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00105,
+     "lo": -0.00177,
+     "hi": -0.00042,
+     "n": 1290,
+     "blocks": 1150
+    },
+    "value": "no value"
+   },
+   "T3_fuel": "not enough data",
+   "T5_squeeze": "not enough data"
+  },
+  "extreme": {
+   "T1_fan": {
+    "cov_emp": 0.7653,
+    "cov_gauss": 0.7968,
+    "blocks": 1412,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": 0.2266,
+    "lo": 0.2001,
+    "hi": 0.2525,
+    "value": "value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00387,
+     "lo": 0.00329,
+     "hi": 0.00444,
+     "n": 22847,
+     "blocks": 1314
+    },
+    "direction_lift": {
+     "mean": -0.00034,
+     "lo": -0.00081,
+     "hi": 0.00011,
+     "n": 22847,
+     "blocks": 1314
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00034,
+     "lo": -0.00094,
+     "hi": 0.00025,
+     "n": 1617,
+     "blocks": 1062
+    },
+    "value": "no value"
+   },
+   "T3_fuel": {
+    "reversal_lift": {
+     "mean": 0.0146,
+     "lo": -0.04656,
+     "hi": 0.0732,
+     "n": 291,
+     "blocks": 291
+    },
+    "value": "no value"
+   },
+   "T5_squeeze": "not enough data"
+  }
+ },
+ "squeeze": {
+  "none": {
+   "T1_fan": {
+    "cov_emp": 0.7009,
+    "cov_gauss": 0.7317,
+    "blocks": 4740,
+    "value": "value"
+   },
+   "T6_heat": {
+    "ic": 0.034,
+    "lo": 0.0183,
+    "hi": 0.0487,
+    "value": "value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00096,
+     "lo": 0.00068,
+     "hi": 0.00122,
+     "n": 108423,
+     "blocks": 4610
+    },
+    "direction_lift": {
+     "mean": -0.00014,
+     "lo": -0.00037,
+     "hi": 9e-05,
+     "n": 108423,
+     "blocks": 4610
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00087,
+     "lo": -0.00106,
+     "hi": -0.00066,
+     "n": 12456,
+     "blocks": 4737
+    },
+    "value": "no value"
+   },
+   "T3_fuel": {
+    "reversal_lift": {
+     "mean": 0.00659,
+     "lo": -0.02564,
+     "hi": 0.03917,
+     "n": 858,
+     "blocks": 858
+    },
+    "value": "no value"
+   },
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.10053,
+     "lo": -0.11615,
+     "hi": -0.08492,
+     "n": 4442,
+     "blocks": 2826
+    },
+    "value": "value (calm persists)"
+   }
+  },
+  "inside": {
+   "T1_fan": {
+    "cov_emp": 0.4739,
+    "cov_gauss": 0.5029,
+    "blocks": 2638,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": -0.0325,
+    "lo": -0.064,
+    "hi": -0.0007,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": -0.00273,
+     "lo": -0.00473,
+     "hi": -0.0006,
+     "n": 922,
+     "blocks": 283
+    },
+    "direction_lift": {
+     "mean": 5e-05,
+     "lo": -0.00249,
+     "hi": 0.00233,
+     "n": 922,
+     "blocks": 283
+    },
+    "value": "no value"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00095,
+     "lo": -0.00155,
+     "hi": -0.00039,
+     "n": 1625,
+     "blocks": 1510
+    },
+    "value": "no value"
+   },
+   "T3_fuel": "not enough data",
+   "T5_squeeze": "not enough data"
+  }
+ },
+ "vix": {
+  "q0": {
+   "T1_fan": {
+    "cov_emp": 0.6887,
+    "cov_gauss": 0.7188,
+    "blocks": 1020,
+    "value": "value"
+   },
+   "T6_heat": {
+    "ic": -0.0877,
+    "lo": -0.1142,
+    "hi": -0.0601,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": -0.002,
+     "lo": -0.00247,
+     "hi": -0.00151,
+     "n": 23050,
+     "blocks": 981
+    },
+    "direction_lift": {
+     "mean": 0.00046,
+     "lo": 6e-05,
+     "hi": 0.00087,
+     "n": 23050,
+     "blocks": 981
+    },
+    "value": "no value"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00094,
+     "lo": -0.0013,
+     "hi": -0.00058,
+     "n": 3021,
+     "blocks": 1020
+    },
+    "value": "no value"
+   },
+   "T3_fuel": "not enough data",
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.14849,
+     "lo": -0.1811,
+     "hi": -0.11793,
+     "n": 1024,
+     "blocks": 647
+    },
+    "value": "value (calm persists)"
+   }
+  },
+  "q1": {
+   "T1_fan": {
+    "cov_emp": 0.6672,
+    "cov_gauss": 0.6973,
+    "blocks": 1080,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": -0.0714,
+    "lo": -0.0976,
+    "hi": -0.0447,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00208,
+     "lo": 0.00151,
+     "hi": 0.00264,
+     "n": 24669,
+     "blocks": 1056
+    },
+    "direction_lift": {
+     "mean": -0.00022,
+     "lo": -0.00071,
+     "hi": 0.00025,
+     "n": 24669,
+     "blocks": 1056
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00091,
+     "lo": -0.00132,
+     "hi": -0.00049,
+     "n": 3203,
+     "blocks": 1080
+    },
+    "value": "no value"
+   },
+   "T3_fuel": {
+    "reversal_lift": {
+     "mean": -0.01917,
+     "lo": -0.07731,
+     "hi": 0.04396,
+     "n": 240,
+     "blocks": 240
+    },
+    "value": "no value"
+   },
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.08605,
+     "lo": -0.11772,
+     "hi": -0.05513,
+     "n": 1072,
+     "blocks": 682
+    },
+    "value": "value (calm persists)"
+   }
+  },
+  "q2": {
+   "T1_fan": {
+    "cov_emp": 0.6843,
+    "cov_gauss": 0.7135,
+    "blocks": 930,
+    "value": "value"
+   },
+   "T6_heat": {
+    "ic": -0.0644,
+    "lo": -0.0943,
+    "hi": -0.0345,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00054,
+     "lo": -5e-05,
+     "hi": 0.00113,
+     "n": 20459,
+     "blocks": 902
+    },
+    "direction_lift": {
+     "mean": -0.00061,
+     "lo": -0.00108,
+     "hi": -0.00017,
+     "n": 20459,
+     "blocks": 902
+    },
+    "value": "no value"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00081,
+     "lo": -0.00123,
+     "hi": -0.00039,
+     "n": 2794,
+     "blocks": 930
+    },
+    "value": "no value"
+   },
+   "T3_fuel": "not enough data",
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.08486,
+     "lo": -0.1263,
+     "hi": -0.04926,
+     "n": 885,
+     "blocks": 562
+    },
+    "value": "value (calm persists)"
+   }
+  },
+  "q3": {
+   "T1_fan": {
+    "cov_emp": 0.6683,
+    "cov_gauss": 0.6987,
+    "blocks": 990,
+    "value": "value"
+   },
+   "T6_heat": {
+    "ic": -0.041,
+    "lo": -0.0689,
+    "hi": -0.012,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00294,
+     "lo": 0.00229,
+     "hi": 0.00366,
+     "n": 23748,
+     "blocks": 971
+    },
+    "direction_lift": {
+     "mean": 0.00024,
+     "lo": -0.00026,
+     "hi": 0.00075,
+     "n": 23748,
+     "blocks": 971
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00065,
+     "lo": -0.0011,
+     "hi": -0.00021,
+     "n": 2918,
+     "blocks": 990
+    },
+    "value": "no value"
+   },
+   "T3_fuel": "not enough data",
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.09391,
+     "lo": -0.13048,
+     "hi": -0.05774,
+     "n": 927,
+     "blocks": 607
+    },
+    "value": "value (calm persists)"
+   }
+  },
+  "q4": {
+   "T1_fan": {
+    "cov_emp": 0.6566,
+    "cov_gauss": 0.6908,
+    "blocks": 720,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": -0.0491,
+    "lo": -0.0833,
+    "hi": -0.0141,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00089,
+     "lo": 0.00026,
+     "hi": 0.00159,
+     "n": 17419,
+     "blocks": 705
+    },
+    "direction_lift": {
+     "mean": -0.0008,
+     "lo": -0.00139,
+     "hi": -0.0002,
+     "n": 17419,
+     "blocks": 705
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00116,
+     "lo": -0.00168,
+     "hi": -0.00066,
+     "n": 2145,
+     "blocks": 720
+    },
+    "value": "no value"
+   },
+   "T3_fuel": "not enough data",
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.07509,
+     "lo": -0.12247,
+     "hi": -0.02556,
+     "n": 534,
+     "blocks": 328
+    },
+    "value": "value (calm persists)"
+   }
+  }
+ },
+ "tod": {
+  "open": {
+   "T1_fan": {
+    "cov_emp": 0.6037,
+    "cov_gauss": 0.6424,
+    "blocks": 4740,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": 0.1442,
+    "lo": 0.118,
+    "hi": 0.1697,
+    "value": "value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00057,
+     "lo": 0.00015,
+     "hi": 0.001,
+     "n": 15507,
+     "blocks": 3539
+    },
+    "direction_lift": {
+     "mean": -8e-05,
+     "lo": -0.00063,
+     "hi": 0.00046,
+     "n": 15507,
+     "blocks": 3539
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00076,
+     "lo": -0.00137,
+     "hi": -0.00018,
+     "n": 1911,
+     "blocks": 1911
+    },
+    "value": "no value"
+   },
+   "T3_fuel": "not enough data",
+   "T5_squeeze": "not enough data"
+  },
+  "mid": {
+   "T1_fan": {
+    "cov_emp": 0.7921,
+    "cov_gauss": 0.8246,
+    "blocks": 4740,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": 0.2229,
+    "lo": 0.2008,
+    "hi": 0.2439,
+    "value": "value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00053,
+     "lo": 0.00027,
+     "hi": 0.00079,
+     "n": 62286,
+     "blocks": 4367
+    },
+    "direction_lift": {
+     "mean": 0.0001,
+     "lo": -0.00015,
+     "hi": 0.00034,
+     "n": 62286,
+     "blocks": 4367
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00051,
+     "lo": -0.00086,
+     "hi": -0.00015,
+     "n": 3765,
+     "blocks": 3765
+    },
+    "value": "no value"
+   },
+   "T3_fuel": {
+    "reversal_lift": {
+     "mean": -0.03117,
+     "lo": -0.07382,
+     "hi": 0.0169,
+     "n": 462,
+     "blocks": 462
+    },
+    "value": "no value"
+   },
+   "T5_squeeze": "not enough data"
+  },
+  "lunch": {
+   "T1_fan": {
+    "cov_emp": 0.869,
+    "cov_gauss": 0.8953,
+    "blocks": 4740,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": 0.2452,
+    "lo": 0.2207,
+    "hi": 0.2681,
+    "value": "value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00164,
+     "lo": 0.00127,
+     "hi": 0.00201,
+     "n": 16369,
+     "blocks": 2665
+    },
+    "direction_lift": {
+     "mean": -0.00035,
+     "lo": -0.00069,
+     "hi": -3e-05,
+     "n": 16369,
+     "blocks": 2665
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00088,
+     "lo": -0.0012,
+     "hi": -0.00053,
+     "n": 3235,
+     "blocks": 3235
+    },
+    "value": "no value"
+   },
+   "T3_fuel": {
+    "reversal_lift": {
+     "mean": 0.00978,
+     "lo": -0.0574,
+     "hi": 0.07239,
+     "n": 230,
+     "blocks": 230
+    },
+    "value": "no value"
+   },
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.14895,
+     "lo": -0.18533,
+     "hi": -0.1178,
+     "n": 807,
+     "blocks": 723
+    },
+    "value": "value (calm persists)"
+   }
+  },
+  "mid2": {
+   "T1_fan": {
+    "cov_emp": 0.5322,
+    "cov_gauss": 0.5625,
+    "blocks": 4740,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": 0.0212,
+    "lo": 0.0038,
+    "hi": 0.038,
+    "value": "value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.0022,
+     "lo": 0.00125,
+     "hi": 0.00309,
+     "n": 11045,
+     "blocks": 1749
+    },
+    "direction_lift": {
+     "mean": -0.00032,
+     "lo": -0.00082,
+     "hi": 0.00019,
+     "n": 11045,
+     "blocks": 1749
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00104,
+     "lo": -0.00143,
+     "hi": -0.00069,
+     "n": 4174,
+     "blocks": 4174
+    },
+    "value": "no value"
+   },
+   "T3_fuel": "not enough data",
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.09184,
+     "lo": -0.11217,
+     "hi": -0.07311,
+     "n": 2904,
+     "blocks": 2119
+    },
+    "value": "value (calm persists)"
+   }
+  },
+  "close": {
+   "T1_fan": {
+    "cov_emp": 0.3414,
+    "cov_gauss": 0.3706,
+    "blocks": 4710,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": 0.1275,
+    "lo": 0.1007,
+    "hi": 0.1538,
+    "value": "value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00211,
+     "lo": 0.0004,
+     "hi": 0.004,
+     "n": 4138,
+     "blocks": 1112
+    },
+    "direction_lift": {
+     "mean": -0.00268,
+     "lo": -0.00523,
+     "hi": -0.00028,
+     "n": 4138,
+     "blocks": 1112
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00181,
+     "lo": -0.00258,
+     "hi": -0.00103,
+     "n": 996,
+     "blocks": 996
+    },
+    "value": "no value"
+   },
+   "T3_fuel": "not enough data",
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.08126,
+     "lo": -0.12261,
+     "hi": -0.03854,
+     "n": 723,
+     "blocks": 630
+    },
+    "value": "value (calm persists)"
+   }
+  }
+ },
+ "day": {
+  "ordinary": {
+   "T1_fan": {
+    "cov_emp": 0.6789,
+    "cov_gauss": 0.7091,
+    "blocks": 4140,
+    "value": "value"
+   },
+   "T6_heat": {
+    "ic": -0.0372,
+    "lo": -0.0509,
+    "hi": -0.0225,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00087,
+     "lo": 0.00056,
+     "hi": 0.00116,
+     "n": 94242,
+     "blocks": 4028
+    },
+    "direction_lift": {
+     "mean": -0.00015,
+     "lo": -0.00039,
+     "hi": 8e-05,
+     "n": 94242,
+     "blocks": 4028
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00095,
+     "lo": -0.00116,
+     "hi": -0.00076,
+     "n": 12303,
+     "blocks": 4140
+    },
+    "value": "no value"
+   },
+   "T3_fuel": {
+    "reversal_lift": {
+     "mean": 0.00598,
+     "lo": -0.02771,
+     "hi": 0.04303,
+     "n": 753,
+     "blocks": 753
+    },
+    "value": "no value"
+   },
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.10491,
+     "lo": -0.12338,
+     "hi": -0.08823,
+     "n": 3965,
+     "blocks": 2519
+    },
+    "value": "value (calm persists)"
+   }
+  },
+  "event": {
+   "T1_fan": {
+    "cov_emp": 0.6391,
+    "cov_gauss": 0.6722,
+    "blocks": 600,
+    "value": "no value"
+   },
+   "T6_heat": {
+    "ic": -0.0546,
+    "lo": -0.0918,
+    "hi": -0.0167,
+    "value": "no value"
+   },
+   "T2_exits": {
+    "range_lift": {
+     "mean": 0.00129,
+     "lo": 0.00054,
+     "hi": 0.00205,
+     "n": 15103,
+     "blocks": 587
+    },
+    "direction_lift": {
+     "mean": -0.0001,
+     "lo": -0.00077,
+     "hi": 0.00053,
+     "n": 15103,
+     "blocks": 587
+    },
+    "value": "value (range)"
+   },
+   "T4_ladder": {
+    "expectancy": {
+     "mean": -0.00035,
+     "lo": -0.00088,
+     "hi": 0.00015,
+     "n": 1778,
+     "blocks": 600
+    },
+    "value": "no value"
+   },
+   "T3_fuel": "not enough data",
+   "T5_squeeze": {
+    "expansion_lift": {
+     "mean": -0.06415,
+     "lo": -0.11309,
+     "hi": -0.01639,
+     "n": 477,
+     "blocks": 307
+    },
+    "value": "value (calm persists)"
+   }
+  }
+ }
+}
