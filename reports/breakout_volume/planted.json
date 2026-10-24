@@ -1,0 +1,598 @@
+{
+ "W1": {
+  "n_test": 14712,
+  "base": 0.2049,
+  "measures": {
+   "rvol": {
+    "edge": 1.9075,
+    "n": 14157,
+    "base": 0.2053,
+    "lift": 0.979,
+    "lift_lo": 0.91,
+    "lift_hi": 1.048,
+    "control": 1.275,
+    "control_lo": 1.206,
+    "control_hi": 1.345,
+    "diff": -0.297,
+    "diff_lo": -0.394,
+    "diff_hi": -0.2,
+    "ic_B4": -0.0061,
+    "ic_lo": -0.0214,
+    "ic_hi": 0.0111,
+    "by_quintile": [
+     0.215,
+     0.198,
+     0.198,
+     0.215,
+     0.2
+    ]
+   },
+   "B": {
+    "edge": 1.1281,
+    "n": 13604,
+    "base": 0.2071,
+    "lift": 1.067,
+    "lift_lo": 0.999,
+    "lift_hi": 1.137,
+    "control": 1.272,
+    "control_lo": 1.203,
+    "control_hi": 1.341,
+    "diff": -0.205,
+    "diff_lo": -0.301,
+    "diff_hi": -0.113,
+    "ic_B4": -0.0091,
+    "ic_lo": -0.0261,
+    "ic_hi": 0.0082,
+    "by_quintile": [
+     0.204,
+     0.199,
+     0.205,
+     0.207,
+     0.208
+    ]
+   },
+   "range_atr": {
+    "edge": 1.7563,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.289,
+    "lift_lo": 1.222,
+    "lift_hi": 1.358,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": 0.0,
+    "diff_lo": 0.0,
+    "diff_hi": 0.0,
+    "ic_B4": -0.0225,
+    "ic_lo": -0.0387,
+    "ic_hi": -0.0062,
+    "by_quintile": [
+     0.169,
+     0.175,
+     0.201,
+     0.215,
+     0.264
+    ]
+   },
+   "body": {
+    "edge": 0.8108,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.165,
+    "lift_lo": 1.097,
+    "lift_hi": 1.235,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": -0.123,
+    "diff_lo": -0.212,
+    "diff_hi": -0.036,
+    "ic_B4": -0.0104,
+    "ic_lo": -0.0264,
+    "ic_hi": 0.006,
+    "by_quintile": [
+     0.158,
+     0.196,
+     0.207,
+     0.223,
+     0.239
+    ]
+   },
+   "penetration": {
+    "edge": 0.6704,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.583,
+    "lift_lo": 1.514,
+    "lift_hi": 1.655,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": 0.295,
+    "diff_lo": 0.209,
+    "diff_hi": 0.376,
+    "ic_B4": -0.0149,
+    "ic_lo": -0.0303,
+    "ic_hi": 0.0002,
+    "by_quintile": [
+     0.13,
+     0.157,
+     0.181,
+     0.236,
+     0.324
+    ]
+   },
+   "touches": {
+    "edge": 3.0,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.035,
+    "lift_lo": 0.967,
+    "lift_hi": 1.101,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": -0.253,
+    "diff_lo": -0.35,
+    "diff_hi": -0.162,
+    "ic_B4": -0.012,
+    "ic_lo": -0.0281,
+    "ic_hi": 0.004,
+    "by_quintile": [
+     0.203,
+     0.213,
+     0.188,
+     null,
+     0.212
+    ]
+   },
+   "control": {
+    "edge": 1.7563,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.289,
+    "lift_lo": 1.222,
+    "lift_hi": 1.358,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": 0.0,
+    "diff_lo": 0.0,
+    "diff_hi": 0.0,
+    "ic_B4": -0.0225,
+    "ic_lo": -0.0387,
+    "ic_hi": -0.0062,
+    "by_quintile": [
+     0.169,
+     0.175,
+     0.201,
+     0.215,
+     0.264
+    ]
+   }
+  },
+  "grid_range_x_rvol": [
+   [
+    0.179,
+    0.17,
+    0.168
+   ],
+   [
+    0.207,
+    0.178,
+    0.206
+   ],
+   [
+    0.237,
+    0.24,
+    0.255
+   ]
+  ],
+  "top_rvol_above_mean_in_range_terciles": 2,
+  "broken": [],
+  "pass": true
+ },
+ "W2": {
+  "n_test": 14712,
+  "base": 0.2049,
+  "measures": {
+   "rvol": {
+    "edge": 1.8817,
+    "n": 14157,
+    "base": 0.2053,
+    "lift": 1.841,
+    "lift_lo": 1.763,
+    "lift_hi": 1.92,
+    "control": 1.275,
+    "control_lo": 1.206,
+    "control_hi": 1.345,
+    "diff": 0.566,
+    "diff_lo": 0.461,
+    "diff_hi": 0.672,
+    "ic_B4": 0.1375,
+    "ic_lo": 0.1224,
+    "ic_hi": 0.1543,
+    "by_quintile": [
+     0.11,
+     0.12,
+     0.167,
+     0.247,
+     0.348
+    ]
+   },
+   "B": {
+    "edge": 1.1106,
+    "n": 13604,
+    "base": 0.2071,
+    "lift": 1.838,
+    "lift_lo": 1.765,
+    "lift_hi": 1.915,
+    "control": 1.272,
+    "control_lo": 1.203,
+    "control_hi": 1.341,
+    "diff": 0.565,
+    "diff_lo": 0.469,
+    "diff_hi": 0.665,
+    "ic_B4": 0.1263,
+    "ic_lo": 0.1098,
+    "ic_hi": 0.1436,
+    "by_quintile": [
+     0.101,
+     0.125,
+     0.169,
+     0.255,
+     0.323
+    ]
+   },
+   "range_atr": {
+    "edge": 1.7563,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.289,
+    "lift_lo": 1.222,
+    "lift_hi": 1.358,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": 0.0,
+    "diff_lo": 0.0,
+    "diff_hi": 0.0,
+    "ic_B4": -0.0225,
+    "ic_lo": -0.0387,
+    "ic_hi": -0.0062,
+    "by_quintile": [
+     0.169,
+     0.175,
+     0.201,
+     0.215,
+     0.264
+    ]
+   },
+   "body": {
+    "edge": 0.8108,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.165,
+    "lift_lo": 1.097,
+    "lift_hi": 1.235,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": -0.123,
+    "diff_lo": -0.212,
+    "diff_hi": -0.036,
+    "ic_B4": -0.0104,
+    "ic_lo": -0.0264,
+    "ic_hi": 0.006,
+    "by_quintile": [
+     0.158,
+     0.196,
+     0.207,
+     0.223,
+     0.239
+    ]
+   },
+   "penetration": {
+    "edge": 0.6704,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.583,
+    "lift_lo": 1.514,
+    "lift_hi": 1.655,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": 0.295,
+    "diff_lo": 0.209,
+    "diff_hi": 0.376,
+    "ic_B4": -0.0149,
+    "ic_lo": -0.0303,
+    "ic_hi": 0.0002,
+    "by_quintile": [
+     0.13,
+     0.157,
+     0.181,
+     0.236,
+     0.324
+    ]
+   },
+   "touches": {
+    "edge": 3.0,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.035,
+    "lift_lo": 0.967,
+    "lift_hi": 1.101,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": -0.253,
+    "diff_lo": -0.35,
+    "diff_hi": -0.162,
+    "ic_B4": -0.012,
+    "ic_lo": -0.0281,
+    "ic_hi": 0.004,
+    "by_quintile": [
+     0.203,
+     0.213,
+     0.188,
+     null,
+     0.212
+    ]
+   },
+   "control": {
+    "edge": 1.7563,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.289,
+    "lift_lo": 1.222,
+    "lift_hi": 1.358,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": 0.0,
+    "diff_lo": 0.0,
+    "diff_hi": 0.0,
+    "ic_B4": -0.0225,
+    "ic_lo": -0.0387,
+    "ic_hi": -0.0062,
+    "by_quintile": [
+     0.169,
+     0.175,
+     0.201,
+     0.215,
+     0.264
+    ]
+   }
+  },
+  "grid_range_x_rvol": [
+   [
+    0.1,
+    0.137,
+    0.269
+   ],
+   [
+    0.106,
+    0.155,
+    0.316
+   ],
+   [
+    0.133,
+    0.204,
+    0.375
+   ]
+  ],
+  "top_rvol_above_mean_in_range_terciles": 3,
+  "planted_lift": 2.217,
+  "recovered_share_rvol_top_quintile": 0.691,
+  "lift_rvol_gt_1p5": 1.645,
+  "recovered_share_rvol": 0.53,
+  "control_lift_W1_vs_W2": [
+   1.289,
+   1.289
+  ],
+  "pass": false
+ },
+ "W2b": {
+  "n_test": 14712,
+  "base": 0.2049,
+  "measures": {
+   "rvol": {
+    "edge": 2.4592,
+    "n": 14157,
+    "base": 0.2053,
+    "lift": 2.113,
+    "lift_lo": 2.04,
+    "lift_hi": 2.188,
+    "control": 1.275,
+    "control_lo": 1.206,
+    "control_hi": 1.345,
+    "diff": 0.838,
+    "diff_lo": 0.738,
+    "diff_hi": 0.944,
+    "ic_B4": 0.1726,
+    "ic_lo": 0.1577,
+    "ic_hi": 0.1889,
+    "by_quintile": [
+     0.103,
+     0.1,
+     0.119,
+     0.256,
+     0.396
+    ]
+   },
+   "B": {
+    "edge": 1.4394,
+    "n": 13604,
+    "base": 0.2071,
+    "lift": 2.073,
+    "lift_lo": 1.994,
+    "lift_hi": 2.153,
+    "control": 1.272,
+    "control_lo": 1.203,
+    "control_hi": 1.341,
+    "diff": 0.801,
+    "diff_lo": 0.707,
+    "diff_hi": 0.903,
+    "ic_B4": 0.162,
+    "ic_lo": 0.1452,
+    "ic_hi": 0.1793,
+    "by_quintile": [
+     0.097,
+     0.1,
+     0.129,
+     0.27,
+     0.358
+    ]
+   },
+   "range_atr": {
+    "edge": 1.7563,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.289,
+    "lift_lo": 1.222,
+    "lift_hi": 1.358,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": 0.0,
+    "diff_lo": 0.0,
+    "diff_hi": 0.0,
+    "ic_B4": -0.0225,
+    "ic_lo": -0.0387,
+    "ic_hi": -0.0062,
+    "by_quintile": [
+     0.169,
+     0.175,
+     0.201,
+     0.215,
+     0.264
+    ]
+   },
+   "body": {
+    "edge": 0.8108,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.165,
+    "lift_lo": 1.097,
+    "lift_hi": 1.235,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": -0.123,
+    "diff_lo": -0.212,
+    "diff_hi": -0.036,
+    "ic_B4": -0.0104,
+    "ic_lo": -0.0264,
+    "ic_hi": 0.006,
+    "by_quintile": [
+     0.158,
+     0.196,
+     0.207,
+     0.223,
+     0.239
+    ]
+   },
+   "penetration": {
+    "edge": 0.6704,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.583,
+    "lift_lo": 1.514,
+    "lift_hi": 1.655,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": 0.295,
+    "diff_lo": 0.209,
+    "diff_hi": 0.376,
+    "ic_B4": -0.0149,
+    "ic_lo": -0.0303,
+    "ic_hi": 0.0002,
+    "by_quintile": [
+     0.13,
+     0.157,
+     0.181,
+     0.236,
+     0.324
+    ]
+   },
+   "touches": {
+    "edge": 3.0,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.035,
+    "lift_lo": 0.967,
+    "lift_hi": 1.101,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": -0.253,
+    "diff_lo": -0.35,
+    "diff_hi": -0.162,
+    "ic_B4": -0.012,
+    "ic_lo": -0.0281,
+    "ic_hi": 0.004,
+    "by_quintile": [
+     0.203,
+     0.213,
+     0.188,
+     null,
+     0.212
+    ]
+   },
+   "control": {
+    "edge": 1.7563,
+    "n": 14712,
+    "base": 0.2049,
+    "lift": 1.289,
+    "lift_lo": 1.222,
+    "lift_hi": 1.358,
+    "control": 1.289,
+    "control_lo": 1.222,
+    "control_hi": 1.358,
+    "diff": 0.0,
+    "diff_lo": 0.0,
+    "diff_hi": 0.0,
+    "ic_B4": -0.0225,
+    "ic_lo": -0.0387,
+    "ic_hi": -0.0062,
+    "by_quintile": [
+     0.169,
+     0.175,
+     0.201,
+     0.215,
+     0.264
+    ]
+   }
+  },
+  "grid_range_x_rvol": [
+   [
+    0.089,
+    0.106,
+    0.31
+   ],
+   [
+    0.098,
+    0.112,
+    0.358
+   ],
+   [
+    0.117,
+    0.154,
+    0.422
+   ]
+  ],
+  "top_rvol_above_mean_in_range_terciles": 3,
+  "planted_lift": 2.217,
+  "recovered_share_rvol_top_quintile": 0.915,
+  "lift_rvol_gt_1p5": 1.742,
+  "recovered_share_rvol": 0.61,
+  "control_lift_W1_vs_W2": [
+   1.289,
+   1.289
+  ],
+  "pass": true
+ }
+}

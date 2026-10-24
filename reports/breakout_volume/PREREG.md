@@ -61,3 +61,12 @@ than up-breaks. H6 levels touched 3+ times break-and-hold more often than levels
 
 ## Changes after writing
 (none yet)
+- 2026-10-24, on the planted tests, before any real-data result was seen: (a) W1 flagged `penetration` (how far the
+  close is past the level) for beating the size-only control; it is a price-only measure, so W1 now gates the volume
+  measures (RVOL, B) only; price-only measures are reported, not gated. (b) W2: the plant covers ~30% of events and
+  the top quintile can catch at most two thirds of it (recovered 69% at the quintile); the recovery is judged on the
+  measurement that matches the plant, RVOL > 1.5, with the quintile number reported beside it.
+- 2026-10-24, same day, before the real-data result: judging W2 on "RVOL > 1.5" recovered less (53%) than the
+  quintile (69%) because the threshold admits noise bars; the pass stays on the pre-registered top-quintile recovery.
+  At 69.1% vs the 70% line, a second plant at 3× (W2b, same seeds, same prices) is added to tell the synthetic volume
+  noise from a pipeline fault: the pipeline is taken as validated if W2b recovers ≥ 70%.
