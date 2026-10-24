@@ -1,0 +1,244 @@
+{
+ "Z1": {
+  "n": {
+   "trend": 36521,
+   "touches": 32019,
+   "breaks": 19140
+  },
+  "J_vs_J0": {
+   "n": 30690,
+   "base": 0.4385,
+   "lift": 1.108,
+   "lift_lo": 1.081,
+   "lift_hi": 1.135,
+   "control": 1.131,
+   "control_lo": 1.104,
+   "control_hi": 1.157,
+   "diff": -0.024,
+   "diff_lo": -0.049,
+   "diff_hi": 0.003,
+   "by_quintile": [
+    0.435,
+    0.423,
+    0.419,
+    0.432,
+    0.486
+   ],
+   "edge": 4.2073,
+   "twin_edge": 3.3661
+  },
+  "S_vs_S0": {
+   "n": 30690,
+   "base": 0.4385,
+   "lift": 1.059,
+   "lift_lo": 1.031,
+   "lift_hi": 1.085,
+   "control": 1.074,
+   "control_lo": 1.047,
+   "control_hi": 1.1,
+   "diff": -0.015,
+   "diff_lo": -0.029,
+   "diff_hi": -0.001,
+   "by_quintile": [
+    0.449,
+    0.419,
+    0.429,
+    0.431,
+    0.464
+   ],
+   "edge": 0.6912,
+   "twin_edge": 0.6846
+  },
+  "mass_vs_time_respect": {
+   "n": 30079,
+   "base": 0.5241,
+   "lift": 1.004,
+   "lift_lo": 0.987,
+   "lift_hi": 1.019,
+   "control": 1.011,
+   "control_lo": 0.991,
+   "control_hi": 1.03,
+   "diff": -0.008,
+   "diff_lo": -0.024,
+   "diff_hi": 0.009,
+   "by_quintile": [
+    0.511,
+    0.531,
+    0.528,
+    0.524,
+    0.524
+   ],
+   "edge": 2.4669,
+   "twin_edge": 2.0
+  },
+  "E_vs_E0_hold": {
+   "n": 14319,
+   "base": 0.2031,
+   "lift": 1.077,
+   "lift_lo": 1.011,
+   "lift_hi": 1.15,
+   "control": 1.304,
+   "control_lo": 1.237,
+   "control_hi": 1.377,
+   "diff": -0.227,
+   "diff_lo": -0.31,
+   "diff_hi": -0.14,
+   "by_quintile": [
+    0.178,
+    0.197,
+    0.211,
+    0.211,
+    0.217
+   ],
+   "edge": 3.1382,
+   "twin_edge": 1.7547
+  },
+  "retest_quiet_vs_small": {
+   "n": 8220,
+   "base": 0.3569,
+   "lift": 0.951,
+   "lift_lo": 0.894,
+   "lift_hi": 1.009,
+   "control": 0.75,
+   "control_lo": 0.695,
+   "control_hi": 0.805,
+   "diff": 0.201,
+   "diff_lo": 0.12,
+   "diff_hi": 0.282,
+   "by_quintile": [
+    0.36,
+    0.361,
+    0.358,
+    0.367,
+    0.347
+   ],
+   "edge": -0.4355,
+   "twin_edge": -0.441
+  },
+  "broken": [],
+  "pass": true
+ },
+ "Z2": {
+  "n": {
+   "trend": 36521,
+   "touches": 32019,
+   "breaks": 19140
+  },
+  "J_vs_J0": {
+   "n": 30690,
+   "base": 0.4385,
+   "lift": 1.128,
+   "lift_lo": 1.102,
+   "lift_hi": 1.153,
+   "control": 1.131,
+   "control_lo": 1.104,
+   "control_hi": 1.157,
+   "diff": -0.004,
+   "diff_lo": -0.029,
+   "diff_hi": 0.022,
+   "by_quintile": [
+    0.433,
+    0.422,
+    0.413,
+    0.431,
+    0.495
+   ],
+   "edge": 4.2156,
+   "twin_edge": 3.3661
+  },
+  "S_vs_S0": {
+   "n": 30690,
+   "base": 0.4385,
+   "lift": 1.065,
+   "lift_lo": 1.038,
+   "lift_hi": 1.092,
+   "control": 1.074,
+   "control_lo": 1.047,
+   "control_hi": 1.1,
+   "diff": -0.009,
+   "diff_lo": -0.022,
+   "diff_hi": 0.006,
+   "by_quintile": [
+    0.449,
+    0.414,
+    0.428,
+    0.435,
+    0.467
+   ],
+   "edge": 0.6927,
+   "twin_edge": 0.6846
+  },
+  "mass_vs_time_respect": {
+   "n": 30079,
+   "base": 0.5241,
+   "lift": 1.034,
+   "lift_lo": 1.018,
+   "lift_hi": 1.049,
+   "control": 1.011,
+   "control_lo": 0.991,
+   "control_hi": 1.03,
+   "diff": 0.023,
+   "diff_lo": 0.007,
+   "diff_hi": 0.038,
+   "by_quintile": [
+    0.504,
+    0.522,
+    0.515,
+    0.522,
+    0.554
+   ],
+   "edge": 2.4468,
+   "twin_edge": 2.0
+  },
+  "E_vs_E0_hold": {
+   "n": 14319,
+   "base": 0.2031,
+   "lift": 1.938,
+   "lift_lo": 1.863,
+   "lift_hi": 2.019,
+   "control": 1.304,
+   "control_lo": 1.237,
+   "control_hi": 1.377,
+   "diff": 0.634,
+   "diff_lo": 0.544,
+   "diff_hi": 0.717,
+   "by_quintile": [
+    0.09,
+    0.126,
+    0.164,
+    0.236,
+    0.364
+   ],
+   "edge": 3.0687,
+   "twin_edge": 1.7547
+  },
+  "retest_quiet_vs_small": {
+   "n": 8220,
+   "base": 0.3569,
+   "lift": 1.418,
+   "lift_lo": 1.354,
+   "lift_hi": 1.479,
+   "control": 0.75,
+   "control_lo": 0.695,
+   "control_hi": 0.805,
+   "diff": 0.668,
+   "diff_lo": 0.582,
+   "diff_hi": 0.746,
+   "by_quintile": [
+    0.278,
+    0.288,
+    0.318,
+    0.396,
+    0.486
+   ],
+   "edge": -0.434,
+   "twin_edge": -0.441
+  },
+  "planted_hold_lift": 2.217,
+  "recovered_E": 0.771,
+  "planted_respect_lift": 1.037,
+  "recovered_mass": 0.919,
+  "twins_unchanged": true,
+  "pass": true
+ }
+}

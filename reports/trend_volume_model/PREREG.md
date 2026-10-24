@@ -81,3 +81,9 @@ holds from false breaks better than E0 alone. H4 absorption + counter-trend is t
 
 ## Changes after writing
 (none yet)
+- 2026-10-24, found on the planted tests before any real-data run: (a) level ids used Python's id(), which is reused
+  once a broken level is freed, so touches of a later level could be credited to a dead one (the planted respect
+  effect vanished, 1.03); replaced by explicit counters. (b) Z1 "no volume quantity beats its twin" is refined: a
+  quantity counts as broken only when it beats its twin **and** its own lift interval excludes 1; in the synthetic
+  world small retest bars fail more (a price fact), so the quiet-retest ratio "beat" a negative twin with its own
+  lift below 1 (0.93), which is not information. (c) the synthetic generator ignored the session count (test only).
