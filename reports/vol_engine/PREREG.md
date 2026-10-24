@@ -80,3 +80,6 @@ the interval excluding 0.
 
 ## Changes after writing
 (none yet)
+- 2026-10-24, before any run: GEXRadar's stored payloads carry greeks, open interest and volume per strike but no
+  implied volatility (the per-contract blobs in `snap_detail` were not decoded); **VRP is dropped**, the fear regime
+  uses VIX (and the VIX / VIX3M ratio as the term-structure line, both fetched from Yahoo 2010–now).
