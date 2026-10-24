@@ -1,0 +1,2027 @@
+//@version=6
+// Volume Zones
+// Rolling volume profile (POC / VAH / VAL / HVN), ranked top-3 zones, heat-map ribbons and a buy / sell profile,
+// prior-day value area + trend alert, whale levels of every daily sideways range + whale bounce, Arabic status panel,
+// options levels (CW / PW / FLIP / PIN) pasted as one daily block from GEXRadar (vzones/gex_block.py, tools/gex_block.py).
+// Python counterpart for testing: vzones/ranges.py (sideways ranges, whale levels, session profile, trendlines).
+indicator("Volume Zones · مربّع", "VZ مربّع", overlay=true, max_bars_back=5000, max_lines_count=500, max_boxes_count=500, max_labels_count=200)
+
+// ═══════════════ مدخلات المربّع الأزرق (نافذة الأدوات أسفل الشارت) ═══════════════
+G_F = "المربّع الأزرق أسفل الشارت"
+pBoxOn  = input.bool(true, "إظهار المربّع الأزرق", tooltip="مربّع في أسفل نافذة الشارت نفسها، فيه آخر N شمعة مصغّرة مع المروحة الموسمية والسلّم ومدى اليوم والمتبقّي حتى الإغلاق والوقف المتحرّك وأسهم الخروج، وتحتها شريطا الحرارة والانضغاط. يُرسم على مقياس السعر تحت أدنى سعر معروض، ويضاف هامش أسفل الشارت تلقائيًّا", group=G_F)
+pWin    = input.int(50, "عدد الشموع داخل المربّع", minval=20, maxval=200, group=G_F)
+pBoxH   = input.float(10, "ارتفاع المربّع (ATR)", minval=3, maxval=40, step=1, tooltip="بوحدات ATR14 للفريم. أكبر = مربّع أطول. اسحب مقياس السعر إن أردت تكبيره أكثر", group=G_F)
+pBoxGap = input.float(2, "المسافة تحت أدنى سعر (ATR)", minval=0.5, maxval=20, step=0.5, group=G_F)
+pBoxAhead = input.int(30, "مساحة المروحة يمين المربّع (شموع)", minval=24, maxval=120, group=G_F)
+pFan    = input.bool(true, "المروحة الموسمية ±1σ و±2σ", group=G_F)
+pLadder = input.bool(true, "سلّم الوقف والهدف", group=G_F)
+pDay    = input.bool(true, "خطّا مدى اليوم", group=G_F)
+pRem    = input.bool(true, "المتبقّي حتى الإغلاق (5 دقائق)", group=G_F)
+pTrail  = input.bool(true, "وقف متحرّك للاتجاه الحالي", group=G_F)
+pExits  = input.bool(true, "أسهم الخروج من النطاق ▲▼", group=G_F)
+pStrips = input.bool(true, "شريطا الحرارة والانضغاط", group=G_F)
+pBox    = input.bool(true, "مربّع «الحالة الآن»", group=G_F)
+pCompact = input.bool(true, "وضع مضغوط", group=G_F)
+pBoxPos = input.string("أسفل اليمين", "موقع مربّع الحالة", options=["أسفل اليمين", "أسفل اليسار", "وسط اليمين", "أعلى اليمين"], group=G_F)
+G_C = "ألوان المربّع الأزرق"
+cWinB = input.color(#1e88e5, "إطار المربّع", inline="pc0", group=G_C)
+cWinF = input.color(#0d1b2a, "خلفيته", inline="pc0", group=G_C)
+cUp   = input.color(#26a69a, "صعود", inline="pc", group=G_C)
+cNorm = color.new(#5d606b, 0)
+cDn   = input.color(#ef5350, "هبوط", inline="pc", group=G_C)
+cHot  = input.color(#ffd600, "عالٍ جدًا", inline="pc", group=G_C)
+cMove = input.color(#29b6f6, "المروحة", inline="pc2", group=G_C)
+cSqz  = input.color(#ab47bc, "الانضغاط", inline="pc2", group=G_C)
+cDay  = input.color(#b388ff, "مدى اليوم", inline="pc2", group=G_C)
+cTgt  = input.color(#c6ff00, "الأهداف", inline="pc3", group=G_C)
+cTrail = input.color(#ff7043, "الوقف المتحرّك", inline="pc3", group=G_C)
+
+// ═══════════════ Inputs ═══════════════
+vpMode     = input.string("الجلسة الحالية", "البروفايل المتحرك يُحسب على", options=["الجلسة الحالية", "عدد الشموع"], tooltip="الجلسة الحالية: من افتتاح اليوم حتى الشمعة الحالية، ويبدأ من جديد كل يوم. على الفريم اليومي وفوق يُستخدم عدد الشموع تلقائيا", group="البروفايل")
+sessMax    = input.int(300, "الجلسة: أقصى عدد شموع", minval=50, maxval=1000, tooltip="حد أعلى للسرعة. على فريم 1 دقيقة أو عقود 23 ساعة تُستخدم آخر هذه الشموع من الجلسة فقط", group="البروفايل")
+lookback   = input.int(120, "عدد الشموع (إذا اخترت عدد الشموع)", minval=20, maxval=400, group="البروفايل")
+rows       = input.int(40, "عدد صفوف البروفايل", minval=10, maxval=100, group="البروفايل")
+vaPct      = input.float(0.70, "نسبة منطقة القيمة", minval=0.5, maxval=0.95, step=0.05, tooltip="نسبة الفوليوم داخل منطقة القيمة. المعتاد 0.70", group="البروفايل")
+hvnMult    = input.float(1.5, "منطقة فوليوم عالي = أكبر من المتوسط بـ", minval=1.0, maxval=3.0, step=0.1, group="البروفايل")
+
+volMaLen   = input.int(20, "متوسط الفوليوم (عدد الشموع)", group="الفوليوم")
+udLen      = input.int(50, "فوليوم الاتجاه: عدد الشموع", minval=10, maxval=200, tooltip="فوليوم الشموع الصاعدة ÷ فوليوم الشموع الهابطة. أكبر من 1 = الشراء أقوى", group="الفوليوم")
+udBand     = input.float(0.05, "فوليوم الاتجاه: هامش الحياد", minval=0.0, maxval=0.5, step=0.05, tooltip="0.05 = بين 0.95 و 1.05 يعتبر محايد", group="الفوليوم")
+weakRatio  = input.float(0.80, "فوليوم ضعيف إذا أقل من المتوسط بنسبة", minval=0.3, maxval=1.0, step=0.05, tooltip="0.80 = أقل من 80% من المتوسط", group="الفوليوم")
+breakRatio = input.float(1.5, "فوليوم قوي إذا أكبر من المتوسط بنسبة", minval=1.0, maxval=5.0, step=0.1, tooltip="1.5 = مرة ونصف المتوسط", group="الفوليوم")
+G_NOW = "الجدول: الاتجاه والفوليوم اللحظي"
+nowEmaF    = input.int(9, "متوسط سريع", minval=2, maxval=100, inline="ne", group=G_NOW)
+nowEmaS    = input.int(21, "متوسط بطيء", minval=3, maxval=200, inline="ne", group=G_NOW)
+nowAdxLen  = input.int(7, "فترة ADX اللحظي", minval=2, maxval=50, group=G_NOW)
+nowUdLen   = input.int(10, "فوليوم لحظي: عدد الشموع", minval=3, maxval=100, tooltip="الجدول فقط. إشارة الاتجاه على الشارت تبقى على الحساب المختبر (50 شمعة)", group=G_NOW)
+adxStrong  = input.float(25, "ترند قوي إذا ADX أكبر من", minval=10, maxval=50, step=1, group=G_NOW)
+
+showTop    = input.bool(true, "إظهار أقوى 3 مناطق", group="المناطق")
+tblPos     = input.string("أسفل اليمين", "موقع الجدول", options=["أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "أسفل اليسار"], group="المناطق")
+showVA     = input.bool(true, "إظهار POC و VAH و VAL", group="المناطق")
+cLblTxt  = input.color(color.black, "لون نص ملصقات الإشارات (اتجاه، حوت)", group="المناطق")
+
+showHeat   = input.bool(true, "إظهار الخريطة الحرارية", group="الخريطة الحرارية")
+heatMode   = input.string("ثلاثة ألوان", "شكل الخريطة", options=["ثلاثة ألوان", "لونان", "تدرج خمسة ألوان"], group="الخريطة الحرارية")
+heatMid    = input.float(0.60, "بداية التداول المتوسط (0 إلى 1)", minval=0.05, maxval=1.0, step=0.05, tooltip="قيمة بين 0 و 1: نسبة من أعلى مستوى تداول. 0.5 = نصف أعلى مستوى", group="الخريطة الحرارية")
+heatHigh   = input.float(0.80, "بداية التداول العالي (0 إلى 1)", minval=0.05, maxval=1.0, step=0.05, tooltip="قيمة بين 0 و 1: نسبة من أعلى مستوى تداول. 0.5 = نصف أعلى مستوى", group="الخريطة الحرارية")
+heatStep   = input.int(1, "عرض عمود الخريطة (شموع)", minval=1, group="الخريطة الحرارية")
+heatMin    = input.float(0.40, "إخفاء المستويات الأقل من (0 إلى 1)", minval=0.0, maxval=0.95, step=0.05, tooltip="قيمة بين 0 و 1: نسبة من أعلى مستوى تداول. 0.5 = نصف أعلى مستوى", group="الخريطة الحرارية")
+heatAlpha  = input.int(20, "شفافية الخريطة (0 إلى 95)", minval=0, maxval=95, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان ولا تلغيها. 0 = بدون شفافية إضافية", group="الخريطة الحرارية")
+stripGap   = input.float(0.12, "المسافة بين الخطوط (0 إلى 0.45)", minval=0.0, maxval=0.45, step=0.03, tooltip="جزء من ارتفاع الصف يُترك فارغا فوق وتحت كل خط. 0 = خطوط ملتصقة", group="الخريطة الحرارية")
+showDelta  = input.bool(false, "طبقة الشراء والبيع", group="الخريطة الحرارية")
+deltaMin   = input.float(0.55, "طبقة الشراء والبيع: فقط المستويات الأعلى من (0 إلى 1)", minval=0.0, maxval=1.0, step=0.05, tooltip="قيمة بين 0 و 1: نسبة من أعلى مستوى تداول. 0.5 = نصف أعلى مستوى", group="الخريطة الحرارية")
+deltaEdge  = input.float(0.12, "طبقة الشراء والبيع: أقل فرق مطلوب (0 إلى 0.5)", minval=0.0, maxval=0.5, step=0.02, tooltip="0.12 = أحد الطرفين يملك 62% على الأقل", group="الخريطة الحرارية")
+showLegend = input.bool(true, "إظهار مفتاح الألوان", group="الخريطة الحرارية")
+
+// ═══════════════ Colours & styles ═══════════════
+G_LN = "ألوان · الخطوط"
+cPoc     = input.color(#ff4d4d, "خط POC (أعلى تداول)", inline="poc", group=G_LN)
+wPoc     = input.int(1, "السماكة", minval=1, maxval=5, inline="poc", group=G_LN)
+cVah     = input.color(#26c6da, "خط VAH (أعلى منطقة القيمة)", inline="vah", group=G_LN)
+wVah     = input.int(1, "السماكة", minval=1, maxval=5, inline="vah", group=G_LN)
+cVal     = input.color(#26c6da, "خط VAL (أدنى منطقة القيمة)", inline="val", group=G_LN)
+wVal     = input.int(1, "السماكة", minval=1, maxval=5, inline="val", group=G_LN)
+wZoneB   = input.int(1, "سماكة حدود أقوى 3 مناطق", minval=1, maxval=5, group=G_LN)
+wPdVA    = input.int(1, "سماكة خطوط منطقة قيمة الأمس", minval=1, maxval=5, inline="pdw", group=G_LN)
+wPdPoc   = input.int(1, "أعلى تداول أمس", minval=1, maxval=5, inline="pdw", group=G_LN)
+
+G_CD = "ألوان · الشموع"
+colorBars = input.bool(true, "تلوين الشموع حسب الفوليوم", group=G_CD)
+cStrongUp = input.color(#00e676, "فوليوم قوي صعود", inline="sv", group=G_CD)
+cStrongDn = input.color(#ff1744, "هبوط", inline="sv", group=G_CD)
+cWeakBar  = input.color(#4a4e5a, "شمعة فوليوم ضعيف", group=G_CD)
+
+G_ZN = "ألوان · أقوى 3 مناطق"
+cZone1   = input.color(#e8432d, "#1", inline="z", group=G_ZN)
+cZone2   = input.color(#e8a33d, "#2", inline="z", group=G_ZN)
+cZone3   = input.color(#e8d547, "#3", inline="z", group=G_ZN)
+zoneFill = input.int(90, "شفافية تعبئة المنطقة", minval=0, maxval=100, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان", group=G_ZN)
+zoneBord = input.int(20, "شفافية حدود المنطقة", minval=0, maxval=100, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان", group=G_ZN)
+
+G_TB = "ألوان · الجدول"
+cTblBg   = input.color(#1e222d, "الخلفية", inline="tb", group=G_TB)
+cTblBd   = input.color(#2a2e39, "الحدود", inline="tb", group=G_TB)
+cTblLbl  = input.color(color.gray, "العناوين", inline="tt", group=G_TB)
+cTblTxt  = input.color(color.white, "القيم", inline="tt", group=G_TB)
+cTblUp   = input.color(#00e676, "صعود وقوي", inline="tc", group=G_TB)
+cTblDn   = input.color(#ff5252, "هبوط", inline="tc", group=G_TB)
+cTblWeak = input.color(#f0c419, "ضعيف", inline="tc", group=G_TB)
+cVdBgT   = input.int(85, "شفافية خلفية سطر الخلاصة", minval=0, maxval=100, step=5, group=G_TB)
+tblSize  = input.string("عادي", "حجم خط الجدول", options=["صغير جدا", "صغير", "عادي", "كبير"], group=G_TB)
+
+G_HM = "ألوان · الخريطة الحرارية"
+cLow3 = input.color(#1a2a6c, "ثلاثة ألوان: منخفض", inline="k3", group=G_HM)
+cMid3 = input.color(#7b3fbf, "متوسط", inline="k3", group=G_HM)
+cTop3 = input.color(#ff4fa3, "عالي", inline="k3", group=G_HM)
+cMed  = input.color(#4a5568, "لونان: متوسط", inline="k", group=G_HM)
+cHigh = input.color(#ff4d4d, "عالي", inline="k", group=G_HM)
+cH1 = input.color(#440154, "تدرج: الأقل", inline="h", group=G_HM)
+cH2 = input.color(#3b528b, "", inline="h", group=G_HM)
+cH3 = input.color(#21918c, "", inline="h", group=G_HM)
+cH4 = input.color(#5ec962, "", inline="h", group=G_HM)
+cH5 = input.color(#fde725, "الأعلى", inline="h", group=G_HM)
+cBuy  = input.color(#00e676, "المشترون", inline="d", group=G_HM)
+cSell = input.color(#ff1744, "البائعون", inline="d", group=G_HM)
+
+G_VP = "ألوان · فوليوم بروفايل"
+showSplit = input.bool(true, "إظهار الفوليوم بروفايل على اليمين", group=G_VP)
+cVpUp    = input.color(#2f7fd1, "فوليوم الشراء", inline="vp", group=G_VP)
+cVpDn    = input.color(#c9a227, "فوليوم البيع", inline="vp", group=G_VP)
+vpAlpha  = input.int(20, "شفافية البروفايل", minval=0, maxval=95, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان", group=G_VP)
+vpWidth  = input.int(40, "أقصى عرض للبروفايل (شموع)", minval=5, maxval=200, group=G_VP)
+vpOffset = input.int(8, "بُعد البروفايل عن آخر شمعة", minval=0, maxval=100, group=G_VP)
+cVpPoc   = input.color(#ff4d4d, "لون صف POC", inline="vpp", group=G_VP)
+vpHighlightPoc = input.bool(true, "تمييز", inline="vpp", group=G_VP)
+
+// ═══════════════ Colour helper ═══════════════
+// The colour pickers already carry their own transparency. Older code used color.new(c, X), which REPLACES that
+// transparency, so the picker's opacity slider had no effect. fade() multiplies the two opacities instead:
+// picker 50% + setting 20% -> 60% transparent. Either control can fade a colour and neither overrides the other.
+fade(color c, float extraT) => color.new(c, 100 - (100 - color.t(c)) * (100 - math.max(0, math.min(100, extraT))) / 100)
+
+// Keep the heat-map thresholds in order even if the user sets them crossed: hidden < medium <= high.
+heatMidE  = math.max(heatMid, heatMin)
+heatHighE = math.max(heatHigh, heatMidE)
+
+// ═══════════════ Real candles ═══════════════
+// Every measurement uses the real (standard) OHLC, so Heikin Ashi or other chart types only change how the chart
+// looks, not the levels or signals. On a normal candle chart these equal the built-in open / high / low / close.
+// ⚠️ ticker.standard() also DROPS the chart's dividend adjustment. Found 2026-10-23 on UNH 15m in bar replay: the chart
+// (dividend-adjusted) showed the 07-29 14:45 high at 423.95 while every request.security(stdT) value was the unadjusted
+// 426.57, so the trendlines (and every other real-candle reading) sat 2.6$ above the candles on history. The chart's
+// adjustment is part of syminfo.tickerid, so it is put back here; a non-adjusted chart stays non-adjusted.
+stdT0 = ticker.standard(syminfo.tickerid)
+stdT = str.contains(syminfo.tickerid, "dividends") ? ticker.modify(stdT0, syminfo.session, adjustment.dividends) : stdT0
+[o_, h_, l_, c_] = request.security(stdT, timeframe.period, [open, high, low, close], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+trR = na(c_[1]) ? h_ - l_ : math.max(h_ - l_, math.max(math.abs(h_ - c_[1]), math.abs(l_ - c_[1])))
+// new trading day - computed once, globally (Pine v6 short-circuits `and`, so a ta.* call inside a condition
+// would not run on every bar)
+dayChg = ta.change(time("D")) != 0
+
+// DMI / ADX on the real candles (same formula as ta.dmi)
+dmiReal(int len) =>
+    up = h_ - h_[1]
+    dn = l_[1] - l_
+    pDM = na(up) ? 0.0 : up > dn and up > 0 ? up : 0.0
+    mDM = na(dn) ? 0.0 : dn > up and dn > 0 ? dn : 0.0
+    trS = ta.rma(trR, len)
+    pDI = 100 * ta.rma(pDM, len) / trS
+    mDI = 100 * ta.rma(mDM, len) / trS
+    sDI = pDI + mDI
+    adxR = 100 * ta.rma(math.abs(pDI - mDI) / (sDI == 0 ? 1 : sDI), len)
+    [pDI, mDI, adxR]
+
+// Supertrend on the real candles (same formula as ta.supertrend; direction < 0 = up)
+stReal(float factor, int len) =>
+    atrS = ta.rma(trR, len)
+    src = (h_ + l_) / 2
+    float upB = src + factor * atrS
+    float loB = src - factor * atrS
+    float prevLo = nz(loB[1])
+    float prevUp = nz(upB[1])
+    loB := loB > prevLo or c_[1] < prevLo ? loB : prevLo
+    upB := upB < prevUp or c_[1] > prevUp ? upB : prevUp
+    int dir = na
+    float prevSt = na
+    prevSt := nz(prevSt[1])
+    if na(atrS[1])
+        dir := 1
+    else if prevSt == prevUp
+        dir := c_ > upB ? -1 : 1
+    else
+        dir := c_ < loB ? 1 : -1
+    float stv = dir == -1 ? loB : upB
+    prevSt := stv
+    [stv, dir]
+
+// ═══════════════ Volume / trend ═══════════════
+atrV  = ta.rma(trR, 14)
+volMa = ta.sma(volume, volMaLen)
+vr    = volMa > 0 ? volume / volMa : 1.0
+weak  = vr < weakRatio
+strongVol = vr >= breakRatio
+emaF = ta.ema(c_, 20)
+emaS = ta.ema(c_, 50)
+// up / down volume over the last udLen bars (tested: trend alerts with supporting volume did better in both halves)
+upVol = math.sum(c_ > o_ ? volume : 0.0, udLen)
+dnVol = math.sum(c_ < o_ ? volume : 0.0, udLen)
+udR   = dnVol > 0 ? upVol / dnVol : na
+udDir = na(udR) ? 0 : udR > 1 + udBand ? 1 : udR < 1 / (1 + udBand) ? -1 : 0
+// instant readings for the panel (faster than the tested signal settings)
+nowF = ta.ema(c_, nowEmaF)
+nowS = ta.ema(c_, nowEmaS)
+[nDiP, nDiM, nAdx] = dmiReal(nowAdxLen)
+nowDir = nowF > nowS and nDiP > nDiM ? 1 : nowF < nowS and nDiM > nDiP ? -1 : 0
+nUp = math.sum(c_ > o_ ? volume : 0.0, nowUdLen)
+nDn = math.sum(c_ < o_ ? volume : 0.0, nowUdLen)
+nowUd = nDn > 0 ? nUp / nDn : na
+nowUdDir = na(nowUd) ? 0 : nowUd > 1 + udBand ? 1 : nowUd < 1 / (1 + udBand) ? -1 : 0
+
+// ═══════════════ Rolling volume profile (today's session, or bars 1..lookback) ═══════════════
+var float[] rowVol = array.new_float(rows, 0.0)
+var float[] rowBuy = array.new_float(rows, 0.0)
+var float[] hvnLo  = array.new_float()
+var float[] hvnHi  = array.new_float()
+// session mode: bars of today's session up to and including the current bar (developing profile);
+// bars mode: the previous `lookback` bars (past only)
+useSess = vpMode == "الجلسة الحالية" and timeframe.isintraday
+var int sessBar0 = 0
+if dayChg
+    sessBar0 := bar_index
+int profLen = useSess ? math.min(bar_index - sessBar0 + 1, sessMax) : lookback
+int profOff = useSess ? 0 : 1
+sessHi = ta.highest(h_, math.max(1, profLen))
+sessLo = ta.lowest(l_, math.max(1, profLen))
+barsHi = ta.highest(h_, lookback)[1]
+barsLo = ta.lowest(l_, lookback)[1]
+pHi  = useSess ? sessHi : barsHi
+pLo  = useSess ? sessLo : barsLo
+step = (pHi - pLo) / rows
+float poc = na
+float vah = na
+float val = na
+ready = (useSess ? profLen >= 2 : bar_index > lookback) and step > 0
+
+if ready
+    array.fill(rowVol, 0.0)
+    array.fill(rowBuy, 0.0)
+    for i = profOff to profOff + profLen - 1
+        bh = h_[i]
+        bl = l_[i]
+        bv = nz(volume[i])
+        isUp = c_[i] >= o_[i]
+        rng = math.max(bh - bl, syminfo.mintick)
+        r0 = math.max(0, math.min(rows - 1, int((bl - pLo) / step)))
+        r1 = math.max(0, math.min(rows - 1, int((bh - pLo) / step)))
+        for r = r0 to r1
+            rLo = pLo + r * step
+            rHi = rLo + step
+            ov = math.max(0.0, math.min(bh, rHi) - math.max(bl, rLo))
+            add = bh == bl ? bv : bv * ov / rng
+            array.set(rowVol, r, array.get(rowVol, r) + add)
+            if isUp
+                array.set(rowBuy, r, array.get(rowBuy, r) + add)
+    total = array.sum(rowVol)
+    pocI = array.indexof(rowVol, array.max(rowVol))
+    loI = pocI
+    hiI = pocI
+    acc = array.get(rowVol, pocI)
+    while acc < vaPct * total and (loI > 0 or hiI < rows - 1)
+        upV1 = hiI < rows - 1 ? array.get(rowVol, hiI + 1) : -1.0
+        dnV1 = loI > 0 ? array.get(rowVol, loI - 1) : -1.0
+        if upV1 >= dnV1
+            hiI += 1
+            acc += upV1
+        else
+            loI -= 1
+            acc += dnV1
+    poc := pLo + (pocI + 0.5) * step
+    vah := pLo + (hiI + 1) * step
+    val := pLo + loI * step
+    array.clear(hvnLo)
+    array.clear(hvnHi)
+    mean = total / rows
+    inRun = false
+    for r = 0 to rows - 1
+        isH = array.get(rowVol, r) > hvnMult * mean
+        if isH and not inRun
+            array.push(hvnLo, pLo + r * step)
+            array.push(hvnHi, pLo + (r + 1) * step)
+            inRun := true
+        else if isH and inRun
+            array.set(hvnHi, array.size(hvnHi) - 1, pLo + (r + 1) * step)
+        else
+            inRun := false
+
+nZones = array.size(hvnLo)
+
+// ═══════════════ Plots & candles ═══════════════
+plot(showVA ? poc : na, "POC", cPoc, wPoc, plot.style_stepline)
+plot(showVA ? vah : na, "VAH", cVah, wVah, plot.style_stepline)
+plot(showVA ? val : na, "VAL", cVal, wVal, plot.style_stepline)
+var label lbPoc = na
+var label lbVah = na
+var label lbVal = na
+if barstate.islast and showVA and not na(poc)
+    label.delete(lbPoc)
+    label.delete(lbVah)
+    label.delete(lbVal)
+    lbPoc := label.new(bar_index + 2, poc, "POC", style=label.style_label_left, color=color.new(cPoc, 100), textcolor=cPoc, size=size.small)
+    lbVah := label.new(bar_index + 2, vah, "VAH", style=label.style_label_left, color=color.new(cVah, 100), textcolor=cVah, size=size.small)
+    lbVal := label.new(bar_index + 2, val, "VAL", style=label.style_label_left, color=color.new(cVal, 100), textcolor=cVal, size=size.small)
+barcolor(not colorBars ? na : strongVol ? (c_ >= o_ ? cStrongUp : cStrongDn) : weak ? cWeakBar : na, title="شموع حسب الفوليوم")
+// ═══════════════ Top-3 volume zones (ranked, % of zone volume) ═══════════════
+var box[] topBoxes = array.new_box()
+if showTop and barstate.islast and nZones > 0
+    for b in topBoxes
+        box.delete(b)
+    array.clear(topBoxes)
+    zv = array.new_float()
+    for k = 0 to nZones - 1
+        sv = 0.0
+        for r = 0 to rows - 1
+            mid = pLo + (r + 0.5) * step
+            if mid >= array.get(hvnLo, k) and mid <= array.get(hvnHi, k)
+                sv += array.get(rowVol, r)
+        array.push(zv, sv)
+    totZ = array.sum(zv)
+    idx = array.sort_indices(zv, order.descending)
+    cols = array.from(cZone1, cZone2, cZone3)
+    for j = 0 to math.min(3, nZones) - 1
+        k = array.get(idx, j)
+        c = array.get(cols, j)
+        pct = totZ > 0 ? math.round(100 * array.get(zv, k) / totZ) : 0
+        txt = "#" + str.tostring(j + 1) + "  " + str.tostring(pct) + "%  " + str.tostring(array.get(hvnLo, k), format.mintick) + "-" + str.tostring(array.get(hvnHi, k), format.mintick)
+        array.push(topBoxes, box.new(bar_index - profOff - profLen + 1, array.get(hvnHi, k), bar_index + 15, array.get(hvnLo, k), border_color=fade(c, zoneBord), border_width=wZoneB, bgcolor=fade(c, zoneFill), text=txt, text_color=c, text_size=size.small, text_halign=text.align_right, text_valign=text.align_top))
+
+// ═══════════════ Prior-day value area + trend alert ═══════════════
+// Tested on 7 symbols (15m, 1.5 years): two closes outside yesterday's value area with the EMA trend was the only
+// setup that beat ordinary bars in both halves of the data (right direction ~52%, small edge). Context, not an entry.
+showTA   = input.bool(true, "إظهار تنبيه الاتجاه", group="تنبيه الاتجاه")
+taBars   = input.int(2, "عدد الإغلاقات خارج منطقة قيمة الأمس", minval=1, maxval=5, group="تنبيه الاتجاه")
+taRows   = input.int(30, "دقة بروفايل الأمس (عدد الصفوف)", minval=10, maxval=60, group="تنبيه الاتجاه")
+showPdVA = input.bool(true, "إظهار منطقة قيمة الأمس", group="تنبيه الاتجاه")
+cPdVA    = input.color(#5c8dff, "حدود منطقة قيمة الأمس", inline="pd", group="تنبيه الاتجاه")
+cPdPoc   = input.color(#ff4d4d, "أعلى تداول أمس", inline="pd", group="تنبيه الاتجاه")
+cTaUp    = input.color(color.new(#00e676, 92), "خلفية اتجاه صاعد", inline="tb2", group="تنبيه الاتجاه")
+cTaDn    = input.color(color.new(#ff5252, 92), "هابط", inline="tb2", group="تنبيه الاتجاه")
+cTaLbl   = input.color(#00e676, "لون ملصق التنبيه صعود", inline="tl2", group="تنبيه الاتجاه")
+cTaLblDn = input.color(#ff5252, "هبوط", inline="tl2", group="تنبيه الاتجاه")
+
+newSess = timeframe.isintraday and dayChg
+var float[] sH = array.new_float()
+var float[] sL = array.new_float()
+var float[] sV = array.new_float()
+var float pdVAH = na
+var float pdVAL = na
+var float pdPOC = na
+var float sessOpen = na
+var int   upCnt = 0
+var int   dnCnt = 0
+var bool  taFired = false
+var int   taDir = 0
+if newSess
+    nB = array.size(sH)
+    if nB > 0
+        hiS = array.max(sH)
+        loS = array.min(sL)
+        stS = (hiS - loS) / taRows
+        if stS > 0
+            pv = array.new_float(taRows, 0.0)
+            for b = 0 to nB - 1
+                bh = array.get(sH, b)
+                bl = array.get(sL, b)
+                bv = array.get(sV, b)
+                rg = math.max(bh - bl, syminfo.mintick)
+                q0 = math.max(0, math.min(taRows - 1, int((bl - loS) / stS)))
+                q1 = math.max(0, math.min(taRows - 1, int((bh - loS) / stS)))
+                for q = q0 to q1
+                    qLo = loS + q * stS
+                    ov = math.max(0.0, math.min(bh, qLo + stS) - math.max(bl, qLo))
+                    array.set(pv, q, array.get(pv, q) + (bh == bl ? bv : bv * ov / rg))
+            tot = array.sum(pv)
+            pI = array.indexof(pv, array.max(pv))
+            a0 = pI
+            a1 = pI
+            accV = array.get(pv, pI)
+            while accV < vaPct * tot and (a0 > 0 or a1 < taRows - 1)
+                vUp = a1 < taRows - 1 ? array.get(pv, a1 + 1) : -1.0
+                vDn = a0 > 0 ? array.get(pv, a0 - 1) : -1.0
+                if vUp >= vDn
+                    a1 += 1
+                    accV += vUp
+                else
+                    a0 -= 1
+                    accV += vDn
+            pdPOC := loS + (pI + 0.5) * stS
+            pdVAH := loS + (a1 + 1) * stS
+            pdVAL := loS + a0 * stS
+    array.clear(sH)
+    array.clear(sL)
+    array.clear(sV)
+    sessOpen := o_
+    upCnt := 0
+    dnCnt := 0
+    taFired := false
+    taDir := 0
+if timeframe.isintraday
+    array.push(sH, h_)
+    array.push(sL, l_)
+    array.push(sV, nz(volume))
+
+int taFire = 0
+if not na(pdVAH)
+    upCnt := c_ > pdVAH ? upCnt + 1 : 0
+    dnCnt := c_ < pdVAL ? dnCnt + 1 : 0
+    if not taFired and upCnt >= taBars and sessOpen <= pdVAH and emaF > emaS
+        taFire := 1
+    else if not taFired and dnCnt >= taBars and sessOpen >= pdVAL and emaF < emaS
+        taFire := -1
+    if taFire != 0
+        taFired := true
+        taDir := taFire
+    else if taDir == 1 and (c_ < pdVAH or emaF < emaS)
+        taDir := 0
+    else if taDir == -1 and (c_ > pdVAL or emaF > emaS)
+        taDir := 0
+
+plot(showPdVA and timeframe.isintraday ? pdVAH : na, "أعلى منطقة قيمة الأمس", cPdVA, wPdVA, plot.style_stepline)
+plot(showPdVA and timeframe.isintraday ? pdVAL : na, "أدنى منطقة قيمة الأمس", cPdVA, wPdVA, plot.style_stepline)
+plot(showPdVA and timeframe.isintraday ? pdPOC : na, "أعلى تداول أمس", cPdPoc, wPdPoc, plot.style_stepline)
+bgcolor(showTA and taDir == 1 ? cTaUp : showTA and taDir == -1 ? cTaDn : na, title="خلفية تنبيه الاتجاه")
+// faded when the up/down volume points the other way
+plotshape(showTA and taFire == 1, "تنبيه اتجاه صاعد", shape.labelup, location.belowbar, udDir < 0 ? fade(cTaLbl, 65) : cTaLbl, text="اتجاه ↑", textcolor=cLblTxt, size=size.small)
+plotshape(showTA and taFire == -1, "تنبيه اتجاه هابط", shape.labeldown, location.abovebar, udDir > 0 ? fade(cTaLblDn, 65) : cTaLblDn, text="اتجاه ↓", textcolor=cLblTxt, size=size.small)
+alertcondition(taFire != 0, "تنبيه اتجاه", "ثبات السعر خارج منطقة قيمة الأمس مع اتجاه المتوسطات")
+
+// ═══════════════ Whale levels + whale bounce (UNDER TEST) ═══════════════
+// Whale levels = tall columns + POC / VAH / VAL of a hidden 200-row volume profile of every daily sideways range
+// (the first N days set top / bottom unless wider than k x daily ATR; the first daily close outside completes it and
+// starts the next one). Recomputed once per new day from completed days only, so history matches live.
+// Whale bounce = touch of a whale level and close back on the side price came from; target = nearest whale level at
+// least minR x risk away. Backtest on 5 stocks (15m): out-of-sample PF 1.18, ~20% win rate, avg win ~5.5R, but NOT
+// statistically proven (random levels can do as well). Use as an experiment.
+G_WH = "مستويات الحيتان (تحت الاختبار)"
+showWhale = input.bool(true, "إظهار مستويات الحيتان", group=G_WH)
+whLen     = input.int(10, "أقل عدد أيام لتكوين المنطقة العرضية", minval=3, maxval=60, tooltip="أول هذه الأيام تحدد القمة والقاع. بعدها أي إغلاق يومي فوق القمة أو تحت القاع يُنهي المنطقة ويبدأ منطقة جديدة", group=G_WH)
+whMult    = input.float(6.0, "أقصى مدى للمنطقة (ATR يومي)", minval=1.0, maxval=20, step=0.5, group=G_WH)
+whRows    = input.int(200, "عدد صفوف البروفايل (العواميد الأفقية)", minval=20, maxval=500, tooltip="البروفايل لا يُرسم على الشارت. يُستخدم فقط لحساب خطوط الحيتان. صفوف أكثر = خطوط أدق", group=G_WH)
+whMinD    = input.float(0.5, "أقرب خط حوت في الجدول: أقل مسافة (ATR يومي)", minval=0.0, maxval=3.0, step=0.25, tooltip="يتجاهل الخطوط الأقرب من هذه المسافة للسعر. 0.5 = نصف حركة يوم. 0 = أقرب خط حتى لو ملاصق", group=G_WH)
+whInclBrk = input.bool(true, "تضمين يوم الكسر في البروفايل", tooltip="مفعّل = مثل رسم FRVP من بداية المنطقة حتى شمعة الكسر نفسها", group=G_WH)
+whKeep    = input.int(2, "عدد المناطق العرضية المكتملة المعروضة", minval=1, maxval=5, group=G_WH)
+showLive  = input.bool(true, "حساب المنطقة الحالية (قيد التكوين)", group=G_WH)
+whMode    = input.string("تلقائي", "طريقة تحديد المنطقة العرضية", options=["تلقائي", "يدوي"], tooltip="تلقائي: كل منطقة عرضية على الشموع اليومية تنتهي بكسر القمة أو القاع. يدوي: أنت تحدد بداية المنطقة ونهايتها", group=G_WH)
+whStartT  = input.time(timestamp("2026-05-01T00:00:00"), "بداية المنطقة (الوضع اليدوي)", group=G_WH)
+whEndT    = input.time(timestamp("2026-10-01T00:00:00"), "نهاية المنطقة (الوضع اليدوي)", group=G_WH)
+whSrcTF   = input.timeframe("15", "فريم بيانات البروفايل", tooltip="البروفايل يُبنى دائما من هذا الفريم، فتبقى الخطوط ثابتة عند تغيير فريم الشارت. فريم أصغر = خطوط أدق وأقرب لأداة FRVP، لكن تاريخ أقصر", group=G_WH)
+whPeaks   = input.int(8, "أقصى عدد للأعمدة الطويلة", minval=1, maxval=100, group=G_WH)
+showWhVA  = input.bool(true, "إظهار POC و VAH و VAL لكل منطقة عرضية", group=G_WH)
+cWhVA     = input.color(#ffb020, "لون VAH و VAL للمنطقة", inline="wva", group=G_WH)
+wWhVA     = input.int(2, "السماكة", minval=1, maxval=5, inline="wva", group=G_WH)
+wWhPocL   = input.int(3, "سماكة خط POC للمنطقة", minval=1, maxval=5, group=G_WH)
+wWhLv     = input.int(1, "سماكة الأعمدة الطويلة", minval=1, maxval=5, inline="wlw", group=G_WH)
+wWhPk     = input.int(2, "العمود الأعلى", minval=1, maxval=5, inline="wlw", group=G_WH)
+wWhBox    = input.int(1, "سماكة حدود مستطيل المنطقة", minval=1, maxval=5, group=G_WH)
+wWbT      = input.int(2, "سماكة خط هدف الحوت", minval=1, maxval=5, inline="wbw", group=G_WH)
+wWbS      = input.int(1, "خط الوقف", minval=1, maxval=5, inline="wbw", group=G_WH)
+cWhPoc    = input.color(#ff3b3b, "أعلى فوليوم POC", inline="wc", group=G_WH)
+cWhLv     = input.color(#9b5cff, "باقي الأعمدة", inline="wc", group=G_WH)
+showWBox  = input.bool(true, "إظهار مستطيل المنطقة العرضية", group=G_WH)
+cWhBoxB   = input.color(color.new(#ffb020, 30), "حدود المستطيل", inline="wbx", group=G_WH)
+cWhBoxF   = input.color(color.new(#ffb020, 96), "تعبئته", inline="wbx", group=G_WH)
+cWbStopC  = input.color(color.new(color.gray, 20), "لون خط الوقف", group=G_WH)
+showWB    = input.bool(true, "إظهار إشارة ارتداد الحوت (تحت الاختبار)", group=G_WH)
+wbStop    = input.float(1.0, "وقف الخسارة (ATR الفريم)", minval=0.25, maxval=5, step=0.25, group=G_WH)
+wbMinR    = input.float(3.0, "أقل مسافة للهدف (مضاعف المخاطرة)", minval=1.0, maxval=10, step=0.5, group=G_WH)
+cWbUp     = input.color(#00e5ff, "لون الإشارة صعود", inline="wb", group=G_WH)
+cWbDn     = input.color(#ff9100, "هبوط", inline="wb", group=G_WH)
+
+// ---- fixed data source: profile always built from `whSrcTF` bars, ranges always from DAILY bars, so the
+// levels are identical on every chart timeframe. Lines are drawn with xloc.bar_time (time, not bar number).
+chartSec = timeframe.in_seconds()
+srcSec   = timeframe.in_seconds(whSrcTF)
+useLower = chartSec > srcSec                                   // chart (e.g. daily) is above the source TF
+lowerTF  = useLower ? whSrcTF : timeframe.period
+[lH, lL, lV, lT] = request.security_lower_tf(stdT, lowerTF, [high, low, volume, time], ignore_invalid_timeframe=true)
+[uH, uL, uV, uT] = request.security(stdT, whSrcTF, [high[1], low[1], volume[1], time[1]], lookahead=barmerge.lookahead_on)
+[pdHi, pdLo, pdCl, pdT] = request.security(stdT, "D", [high[1], low[1], close[1], time[1]], lookahead=barmerge.lookahead_on)
+
+var float[] wsH = array.new_float()
+var float[] wsL = array.new_float()
+var float[] wsV = array.new_float()
+var int[]   wsT = array.new_int()
+SRC_MAX = 30000          // ~1 year of 15m bars on a 23h CFD, ~4 years on a 6.5h stock session
+// copy the intrabars of this chart bar (no `if` around the loop: a `while` with a counter is the simplest form the compiler accepts)
+// only closed chart bars, and only intrabars newer than the last one stored: keeps the buffer strictly time-sorted
+// (needed by the binary search in drawRange) and never stores a half-built intrabar
+int lastPushT = array.size(wsT) > 0 ? array.get(wsT, array.size(wsT) - 1) : na
+int lN = useLower and barstate.isconfirmed ? math.min(array.size(lT), math.min(array.size(lH), math.min(array.size(lL), array.size(lV)))) : 0
+int jj = 0
+while jj < lN
+    float hj = array.get(lH, jj)
+    float lj = array.get(lL, jj)
+    float vj = nz(array.get(lV, jj))
+    int   tj = array.get(lT, jj)
+    bool okj = not na(hj) and not na(lj) and not na(tj) and (na(lastPushT) or tj > lastPushT)
+    if okj
+        array.push(wsH, hj)
+        array.push(wsL, lj)
+        array.push(wsV, vj)
+        array.push(wsT, tj)
+    jj += 1
+// `or` does not short-circuit in v5: never index an array inside the same condition that tests its size
+int lastSrcT = array.size(wsT) > 0 ? array.get(wsT, array.size(wsT) - 1) : na
+bool addSrc = not useLower and not na(uT) and (na(lastSrcT) or uT != lastSrcT)
+if addSrc
+    array.push(wsH, uH)
+    array.push(wsL, uL)
+    array.push(wsV, nz(uV))
+    array.push(wsT, uT)
+while array.size(wsT) > SRC_MAX
+    array.shift(wsH)
+    array.shift(wsL)
+    array.shift(wsV)
+    array.shift(wsT)
+
+// daily candles (completed days only)
+var float[] wdH = array.new_float()
+var float[] wdL = array.new_float()
+var float[] wdC = array.new_float()
+var int[]   wdT = array.new_int()
+var float dATR = na
+var int   rIdx = na            // first day of the range being formed (index into wd*)
+var float rHi = na
+var float rLo = na
+var int[]   rgT0 = array.new_int()   // completed sideways ranges: start / end time
+var int[]   rgT1 = array.new_int()
+var float[] whLv = array.new_float()
+var line[] whLines = array.new_line()
+var box[] whBoxA = array.new_box()
+var label[] whLbls = array.new_label()
+var float[] curVA = array.new_float(3, na)   // POC, VAH, VAL of the last drawn range (live one if shown)
+var string[] curVAName = array.new_string(1, "")
+
+// profile of [t0, t1) from the source bars (never drawn), tall columns -> lines. Appends to whLv / whLines / whBoxA.
+drawRange(int t0, int t1, int boxEnd, bool live) =>
+    int nUsed = 0
+    float pHiW = na
+    float pLoW = na
+    nSrc = array.size(wsT)
+    // the source times are sorted: jump straight to the range instead of scanning the whole buffer
+    int jS = nSrc > 0 ? math.max(0, array.binary_search_leftmost(wsT, t0)) : 0
+    int j0 = jS
+    while j0 < nSrc
+        tj = array.get(wsT, j0)
+        if tj >= t1
+            break
+        if tj >= t0
+            pHiW := na(pHiW) ? array.get(wsH, j0) : math.max(pHiW, array.get(wsH, j0))
+            pLoW := na(pLoW) ? array.get(wsL, j0) : math.min(pLoW, array.get(wsL, j0))
+            nUsed += 1
+        j0 += 1
+    if nUsed > 10 and pHiW > pLoW
+        stW = (pHiW - pLoW) / whRows
+        pv = array.new_float(whRows, 0.0)
+        for j = jS to j0 - 1
+            tj = array.get(wsT, j)
+            if tj >= t0 and tj < t1
+                bh = array.get(wsH, j)
+                bl = array.get(wsL, j)
+                bv = array.get(wsV, j)
+                rg = math.max(bh - bl, syminfo.mintick)
+                q0 = math.max(0, math.min(whRows - 1, int((bl - pLoW) / stW)))
+                q1 = math.max(0, math.min(whRows - 1, int((bh - pLoW) / stW)))
+                for q = q0 to q1
+                    qLo = pLoW + q * stW
+                    ov = math.max(0.0, math.min(bh, qLo + stW) - math.max(bl, qLo))
+                    array.set(pv, q, array.get(pv, q) + (bh == bl ? bv : bv * ov / rg))
+        sm = array.new_float(whRows, 0.0)
+        for q = 0 to whRows - 1
+            array.set(sm, q, (array.get(pv, math.max(0, q - 1)) + array.get(pv, q) + array.get(pv, math.min(whRows - 1, q + 1))) / 3)
+        mS = array.avg(sm)
+        nb = math.max(2, int(whRows / 40))      // peak neighbourhood scales with the number of rows
+        cand = array.new_float()
+        candV = array.new_float()
+        for q = 0 to whRows - 1
+            isMax = true
+            for z = math.max(0, q - nb) to math.min(whRows - 1, q + nb)
+                if array.get(sm, z) > array.get(sm, q)
+                    isMax := false
+            if isMax and array.get(sm, q) >= 1.3 * mS
+                array.push(cand, pLoW + (q + 0.5) * stW)
+                array.push(candV, array.get(sm, q))
+        pocI = array.indexof(pv, array.max(pv))
+        pocV = pLoW + (pocI + 0.5) * stW
+        // value area of this range: grow from the POC row toward the bigger neighbour until vaPct of the volume
+        totW = array.sum(pv)
+        int a0 = pocI
+        int a1 = pocI
+        float accW = array.get(pv, pocI)
+        while accW < vaPct * totW and (a0 > 0 or a1 < whRows - 1)
+            vU = a1 < whRows - 1 ? array.get(pv, a1 + 1) : -1.0
+            vD = a0 > 0 ? array.get(pv, a0 - 1) : -1.0
+            if vU >= vD
+                a1 += 1
+                accW += vU
+            else
+                a0 -= 1
+                accW += vD
+        vahW = pLoW + (a1 + 1) * stW
+        valW = pLoW + a0 * stW
+        array.set(curVA, 0, pocV)
+        array.set(curVA, 1, vahW)
+        array.set(curVA, 2, valW)
+        array.set(curVAName, 0, live ? "المنطقة الحالية" : "آخر منطقة مكتملة")
+        if showWhVA
+            array.push(whLines, line.new(t0, pocV, boxEnd, pocV, xloc=xloc.bar_time, extend=extend.right, color=cWhPoc, width=wWhPocL))
+            array.push(whLines, line.new(t0, vahW, boxEnd, vahW, xloc=xloc.bar_time, extend=extend.right, color=cWhVA, width=wWhVA))
+            array.push(whLines, line.new(t0, valW, boxEnd, valW, xloc=xloc.bar_time, extend=extend.right, color=cWhVA, width=wWhVA))
+            array.push(whLbls, label.new(t0, pocV, "POC " + str.tostring(pocV, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cWhPoc, 100), textcolor=cWhPoc, size=size.small))
+            array.push(whLbls, label.new(t0, vahW, "VAH " + str.tostring(vahW, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cWhVA, 100), textcolor=cWhVA, size=size.small))
+            array.push(whLbls, label.new(t0, valW, "VAL " + str.tostring(valW, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cWhVA, 100), textcolor=cWhVA, size=size.small))
+        if array.size(cand) > 0
+            ordW = array.sort_indices(candV, order.descending)
+            for j = 0 to math.min(whPeaks, array.size(cand)) - 1
+                L = array.get(cand, array.get(ordW, j))
+                array.push(whLv, L)
+                if showWhale
+                    isPoc = math.abs(L - pocV) <= 3 * stW
+                    array.push(whLines, line.new(t0, L, boxEnd, L, xloc=xloc.bar_time, extend=extend.right, color=isPoc ? cWhPoc : cWhLv, width=isPoc ? wWhPk : wWhLv))
+        if showWBox
+            array.push(whBoxA, box.new(t0, pHiW, boxEnd, pLoW, xloc=xloc.bar_time, border_color=cWhBoxB, border_width=wWhBox, border_style=line.style_dashed, bgcolor=cWhBoxF, text=live ? "منطقة قيد التكوين" : "", text_color=cWhBoxB, text_size=size.small, text_valign=text.align_top, text_halign=text.align_left))
+    nUsed
+
+// delete everything and redraw the completed ranges (+ the live one if liveT0 is not na)
+redrawAll(int liveT0, int liveT1) =>
+    for ln in whLines
+        line.delete(ln)
+    array.clear(whLines)
+    for bx in whBoxA
+        box.delete(bx)
+    array.clear(whBoxA)
+    for lb in whLbls
+        label.delete(lb)
+    array.clear(whLbls)
+    array.clear(whLv)
+    int k = 0
+    while k < array.size(rgT0)
+        drawRange(array.get(rgT0, k), array.get(rgT1, k), array.get(rgT1, k), false)
+        k += 1
+    if not na(liveT0)
+        drawRange(liveT0, liveT1, time, true)
+    k
+
+// Everything below runs once per new trading day, on history and live alike, so the levels a past bar saw are the
+// same levels it would have seen live (the forming range uses completed days only, never today's bars).
+int lastDayT = array.size(wdT) > 0 ? array.get(wdT, array.size(wdT) - 1) : na
+if not na(pdT) and (na(lastDayT) or pdT != lastDayT)
+    array.push(wdH, pdHi)
+    array.push(wdL, pdLo)
+    array.push(wdC, pdCl)
+    array.push(wdT, pdT)
+    n = array.size(wdC) - 1
+    pcD = n > 0 ? array.get(wdC, n - 1) : pdCl
+    trD = math.max(pdHi - pdLo, math.max(math.abs(pdHi - pcD), math.abs(pdLo - pcD)))
+    dATR := na(dATR) ? trD : dATR + (trD - dATR) / 14
+    todayT = time("D")
+    if whMode == "يدوي"
+        // manual: the chosen dates; while the end date is still ahead the profile grows day by day
+        array.clear(rgT0)
+        array.clear(rgT1)
+        if todayT > whStartT
+            array.push(rgT0, whStartT)
+            array.push(rgT1, math.min(whEndT, todayT))
+        redrawAll(na, na)
+    else
+        if na(rIdx)
+            rIdx := n
+            rHi := pdHi
+            rLo := pdLo
+        else if n - rIdx < whLen
+            // forming: the first whLen days set the top and bottom
+            rHi := math.max(rHi, pdHi)
+            rLo := math.min(rLo, pdLo)
+            if rHi - rLo > whMult * dATR
+                // too wide = trending, not sideways: restart from today
+                rIdx := n
+                rHi := pdHi
+                rLo := pdLo
+        else if pdCl > rHi or pdCl < rLo
+            // daily close outside the top / bottom: range complete, new range starts on the breakout day
+            array.push(rgT0, array.get(wdT, rIdx))
+            array.push(rgT1, whInclBrk ? todayT : pdT)
+            while array.size(rgT0) > whKeep
+                array.shift(rgT0)
+                array.shift(rgT1)
+            rIdx := n
+            rHi := pdHi
+            rLo := pdLo
+        else
+            rHi := math.max(rHi, pdHi)
+            rLo := math.min(rLo, pdLo)
+        liveOk = showLive and array.size(wdT) - rIdx >= whLen
+        redrawAll(liveOk ? array.get(wdT, rIdx) : na, todayT)
+
+// whale bounce signal
+int wbSig = 0
+float wbTgt = na
+float wbStp = na
+var int   wbOpen = 0
+var float wbOT = na
+var float wbOS = na
+var int   wbOB = na
+wbFree = wbOpen == 0
+if wbOpen != 0
+    hitT = wbOpen > 0 ? h_ >= wbOT : l_ <= wbOT
+    hitS = wbOpen > 0 ? l_ <= wbOS : h_ >= wbOS
+    if hitT or hitS or bar_index - wbOB >= 130
+        wbOpen := 0
+if wbFree and showWB and array.size(whLv) > 0 and atrV > 0
+    for j = 0 to array.size(whLv) - 1
+        L = array.get(whLv, j)
+        if c_[1] > L and l_ <= L and c_ > L
+            wbSig := 1
+            break
+        if c_[1] < L and h_ >= L and c_ < L
+            wbSig := -1
+            break
+    if wbSig != 0
+        risk = wbStop * atrV
+        float best = na
+        for j = 0 to array.size(whLv) - 1
+            L = array.get(whLv, j)
+            if (L - c_) * wbSig >= wbMinR * risk and (na(best) or math.abs(L - c_) < math.abs(best - c_))
+                best := L
+        if na(best)
+            wbSig := 0
+        else
+            wbTgt := best
+            wbStp := c_ - wbSig * risk
+            wbOpen := wbSig
+            wbOT := wbTgt
+            wbOS := wbStp
+            wbOB := bar_index
+plotshape(wbSig == 1, "ارتداد حوت صعود", shape.labelup, location.belowbar, cWbUp, text="حوت ↑", textcolor=cLblTxt, size=size.small)
+plotshape(wbSig == -1, "ارتداد حوت هبوط", shape.labeldown, location.abovebar, cWbDn, text="حوت ↓", textcolor=cLblTxt, size=size.small)
+if wbSig != 0
+    line.new(bar_index, wbTgt, bar_index + 30, wbTgt, color=wbSig > 0 ? cWbUp : cWbDn, style=line.style_dashed, width=wWbT)
+    line.new(bar_index, wbStp, bar_index + 30, wbStp, color=cWbStopC, style=line.style_dotted, width=wWbS)
+    label.new(bar_index + 30, wbTgt, "هدف الحوت " + str.tostring(wbTgt, format.mintick), style=label.style_none, textcolor=wbSig > 0 ? cWbUp : cWbDn, size=size.small)
+alertcondition(wbSig != 0, "ارتداد حوت", "ارتداد من مستوى حوت باتجاه المستوى التالي (تحت الاختبار)")
+
+// ═══════════════ Whale targets of the day, the level price is heading to, trend hold ═══════════════
+G_TG = "أهداف الحيتان واتجاه السعر"
+showHead = input.bool(true, "تسميك خط الحوت الذي يتجه له السعر", group=G_TG)
+cHead    = input.color(#9b5cff, "لونه", inline="hd", group=G_TG)
+wHead    = input.int(4, "السماكة", minval=1, maxval=10, inline="hd", group=G_TG)
+stLen    = input.int(10, "صمود الترند: فترة Supertrend", minval=2, maxval=100, inline="st", group=G_TG)
+stMult   = input.float(3.0, "المضاعف", minval=0.5, maxval=10, step=0.5, inline="st", group=G_TG)
+showSt   = input.bool(false, "رسم خط كسر الترند على الشارت", group=G_TG)
+cStUp    = input.color(color.new(#00e676, 30), "لونه صاعد", inline="stc", group=G_TG)
+cStDn    = input.color(color.new(#ff5252, 30), "هابط", inline="stc", group=G_TG)
+wSt      = input.int(1, "السماكة", minval=1, maxval=5, inline="stc", group=G_TG)
+
+// all whale levels currently drawn: tall columns + POC / VAH / VAL of the last drawn range
+lvNow = array.copy(whLv)
+for k = 0 to 2
+    if not na(array.get(curVA, k))
+        array.push(lvNow, array.get(curVA, k))
+
+// session open / high / low (a new session = a new trading day)
+newDay = dayChg
+var float dOpen = na
+var float dHigh = na
+var float dLow  = na
+if newDay or na(dOpen)
+    dOpen := o_
+    dHigh := h_
+    dLow  := l_
+else
+    dHigh := math.max(dHigh, h_)
+    dLow  := math.min(dLow, l_)
+
+// the whale level price is heading to: the nearest whale level ahead of price in the instant-trend direction,
+// re-picked every bar (so after a pull-back the closer level becomes the target again). A level the bar touched
+// counts as reached and the next one becomes the target.
+var int    hDir = 0
+var float  hLvl = na
+var string hLast = ""
+float nLvl = na
+if nowDir != 0
+    edge = nowDir > 0 ? h_ : l_
+    for x in lvNow
+        if (x - edge) * nowDir > 0 and (na(nLvl) or math.abs(x - edge) < math.abs(nLvl - edge))
+            nLvl := x
+bool hitHead = hDir != 0 and not na(hLvl) and ((hDir > 0 and h_ >= hLvl) or (hDir < 0 and l_ <= hLvl))
+if hitHead
+    hLast := "وصل " + str.tostring(hLvl, format.mintick) + " ✓"
+else if hDir != 0 and nowDir == -hDir and not na(hLvl)
+    hLast := "انعكس قبل " + str.tostring(hLvl, format.mintick)
+hDir := na(nLvl) ? 0 : nowDir
+hLvl := nLvl
+var line headLine = na
+var label headLbl = na
+if barstate.islast
+    line.delete(headLine)
+    label.delete(headLbl)
+    if showHead and hDir != 0
+        headLine := line.new(bar_index - 1, hLvl, bar_index, hLvl, extend=extend.both, color=cHead, width=wHead)
+        headLbl := label.new(bar_index + 3, hLvl, (hDir > 0 ? "▲ " : "▼ ") + "متجه إلى " + str.tostring(hLvl, format.mintick), style=label.style_label_left, color=color.new(cHead, 100), textcolor=cHead, size=size.small)
+
+// trend hold: Supertrend on the chart timeframe (direction < 0 = up in Pine)
+[stLine, stD] = stReal(stMult, stLen)
+stUp = stD < 0
+stFlipBars = ta.barssince(stD != stD[1])
+plot(showSt ? stLine : na, "خط كسر الترند", stUp ? cStUp : cStDn, wSt, plot.style_linebr)
+
+// ═══════════════ Options levels (GEX) pasted from GEXRadar ═══════════════
+// One daily block for all symbols, e.g. "INTU: CW=360 PW=340 FLIP=355 PIN=350" (DFLIP / MAXOI / CWOI / PWOI optional, "DATE=..." line
+// optional). Only the line of the current ticker is used. Same rules as vzones/gex_block.py (tests/test_gex_block.py).
+// These are levels for TODAY, so they are drawn from today's open only. No tested edge yet: context, not a signal.
+G_GX = "مستويات الخيارات (GEX)"
+showGex = input.bool(true, "إظهار مستويات الخيارات", group=G_GX)
+gexText = input.text_area("", "الصق كتلة اليوم من GEXRadar", tooltip="سطر لكل سهم، مثال:\nDATE=2026-10-22\nINTU: CW=360 PW=340 FLIP=355 PIN=350\nيُقرأ سطر السهم الحالي فقط. DFLIP و MAXOI و CWOI و PWOI اختيارية", group=G_GX)
+gexTol  = input.float(0.25, "تلاقي مع خط حوت إذا المسافة أقل من (ATR يومي)", minval=0.0, maxval=2.0, step=0.05, group=G_GX)
+// one colour per line, so each concept keeps its own (i) explanation
+GX_NOTE = "\nتقدير من GEXRadar (يفترض أن صناع السوق يشترون الكول ويبيعون البوت)، وليس مراكزهم الحقيقية. غير مختبر بعد"
+cGxCW   = input.color(#00c853, "جدار الكول", tooltip="CW في الكتلة. أكبر تجمّع قاما للكول فوق السعر، ويعمل غالبا كمقاومة" + GX_NOTE, group=G_GX)
+cGxPW   = input.color(#ff1744, "جدار البوت", tooltip="PW في الكتلة. أكبر تجمّع قاما للبوت تحت السعر، ويعمل غالبا كدعم" + GX_NOTE, group=G_GX)
+cGxFl   = input.color(#ffd600, "انقلاب القاما", tooltip="FLIP في الكتلة. السعر اللي يتغيّر عنده سلوك صنّاع السوق:\nفوقه: غالبا يبيعون مع الصعود ويشترون مع النزول، فالحركة تهدأ.\nتحته: يبيعون مع النزول ويشترون مع الصعود، فالحركة تتسارع." + GX_NOTE, group=G_GX)
+cGxPin  = input.color(#e0e0e0, "نقطة التثبيت", tooltip="PIN في الكتلة. أكبر تجمّع خيارات (كول وبوت مع بعض) عند سعر واحد. السعر أحيانا ينجذب له، خصوصا قرب انتهاء العقود." + GX_NOTE, group=G_GX)
+cGxDf   = input.color(#80d8ff, "انقلاب الدلتا", tooltip="DFLIP في الكتلة. السعر اللي تتوازن عنده كفّة الكول مع كفّة البوت. فوقه تميل الكفّة للكول، وتحته للبوت." + GX_NOTE, group=G_GX)
+cGxMoi  = input.color(#1de9b6, "أعلى فائدة مفتوحة", tooltip="MAXOI في الكتلة. السترايك اللي عليه أكبر عدد عقود مفتوحة (كول وبوت). يُحسب مرة باليوم من بيانات OCC، فيبقى ثابتا ولا يتبع السعر.\nقياس على 560 يوم: ثابت طول اليوم في 85% من الأيام، بينما نقطة التثبيت تتحرك مع السعر." + GX_NOTE, group=G_GX)
+GX_OIW  = "\nبالفائدة المفتوحة فقط، بدون وزن القاما عند السعر الحالي. قياس 140 يوما: ثابت طول اليوم في نحو 65% من الأيام، مقابل نحو 30% لجدار القاما. أغلب تغيّراته الباقية عند تحديث بيانات العقود. غالبا أبعد عن السعر وعند أرقام مستديرة."
+cGxCWoi = input.color(#69f0ae, "جدار الكول الثابت", tooltip="CWOI في الكتلة. السترايك اللي عليه أكبر عقود كول مفتوحة فوق السعر وقت توليد الكتلة." + GX_OIW + GX_NOTE, group=G_GX)
+cGxPWoi = input.color(#ff8a80, "جدار البوت الثابت", tooltip="PWOI في الكتلة. السترايك اللي عليه أكبر عقود بوت مفتوحة تحت السعر وقت توليد الكتلة." + GX_OIW + GX_NOTE, group=G_GX)
+wGx    = input.int(2, "السماكة", minval=1, maxval=5, group=G_GX)
+gexShape = input.string("شريط", "شكل المستويات", options=["شريط", "صناديق", "خطوط"], tooltip="شريط: جاما كل سترايك كخطوط رفيعة على يمين آخر شمعة (أخضر = الكول أقوى، أحمر = البوت أقوى، الطول = الحجم) مع خط انقلاب القاما فقط، فتبقى الشموع نظيفة. يحتاج سطر السهم الذي يكتبه وكيل GEX؛ إن لم يوجد تُرسم الصناديق. صناديق: منطقة شفافة حول كل مستوى. خطوط: خط لكل مستوى", group=G_GX)
+gxStripOff = input.int(3, "بُعد شريط القاما", minval=0, maxval=300, inline="gxs", tooltip="بعد آخر شمعة. إن تداخل مع البروفايل الأيمن يُنقل بعده", group=G_GX)
+gxStripW   = input.int(40, "عرضه (شموع)", minval=15, maxval=200, inline="gxs", group=G_GX)
+gxStripTop = input.int(5, "عدد السترايكات المبرزة", minval=0, maxval=10, tooltip="كل سترايك يُكتب بجانبه حجمه بالمليون؛ أكبرها يُكتب بخط أوضح", group=G_GX)
+gexBand  = input.float(0.10, "عرض الصندوق (ATR يومي)", minval=0.02, maxval=1.0, step=0.02, tooltip="0.10 = عُشر حركة يوم. إذا لم يتوفر ATR اليومي يُستخدم 0.4% من السعر", group=G_GX)
+gexFill  = input.int(75, "شفافية تعبئة الصندوق", minval=0, maxval=100, step=5, tooltip="تُضاف فوق شفافية منتقي الألوان", group=G_GX)
+gexBord  = input.int(30, "شفافية حدود الصندوق", minval=0, maxval=100, step=5, group=G_GX)
+// watch table: every symbol of the block vs its own walls, from the "#S:" line the GEX agent rewrites every poll
+G_WT = "جدول أسهم الجدران"
+wtShow = input.bool(true, "إظهار جدول أسهم الجدران", tooltip="حالة كل سهم في كتلة GEX مقابل جدرانه: فوق الكول، عند الكول، بين الجدارين، عند البوت، تحت البوت. «عند» = أقل من 0.5% من الجدار.\nالقاما: + = السعر فوق انقلاب القاما (الحركة تهدأ عادة)، − = تحته (الحركة تتسارع).\nالأسعار من GEXRadar يكتبها وكيل GEX كل 5 دقائق؛ الوقت في رأس الجدول. الأسهم المخترقة أولا ثم اللي عند جدار", group=G_WT)
+wtPos  = input.string("أعلى اليمين", "موقعه", options=["أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "أسفل اليسار"], inline="wt", group=G_WT)
+wtLay  = input.string("بالعرض (صفّان)", "الشكل", options=["بالعرض (صفّان)", "بالطول (عمود)", "أعمدة"], inline="wtl", group=G_WT)
+wtCols = input.int(2, "عدد الأعمدة", minval=1, maxval=6, inline="wtl", tooltip="يُستخدم فقط مع الشكل «أعمدة»", group=G_WT)
+wtMax  = input.int(60, "أقصى عدد أسهم", minval=1, maxval=80, inline="wt2", group=G_WT)
+wtOnly = input.bool(true, "المخترقة واللي عند جدار فقط", inline="wt2", group=G_WT)
+wtSize = input.string("عادي", "حجم الخط", options=["صغير جدا", "صغير", "عادي"], inline="wt3", group=G_WT)
+wtGap  = input.int(0, "إزاحة للأسفل %", minval=0, maxval=60, inline="wt3", tooltip="في الموقعين العلويين: مسافة فارغة فوق الجدول بنسبة من ارتفاع الشارت، حتى لا يغطيه سطر أرقام المؤشرات أعلى الشارت. 0 = ملاصق للحافة", group=G_WT)
+
+gxKeys = array.from("CW", "PW", "FLIP", "PIN", "DFLIP", "MAXOI", "CWOI", "PWOI")
+// names drawn on the chart (the keys above stay for reading the block); the user asked for Arabic on these three
+gxShow = array.from("CW", "PW", "انقلاب القاما", "نقطة التثبيت", "انقلاب الدلتا", "MAXOI", "CWOI", "PWOI")
+var float[]  gxV    = array.new_float(8, na)
+var string[] gxInfo = array.new_string(2, "")      // 0 = date of the block, 1 = "1" when the ticker line was found
+var float[]  gpK    = array.new_float()            // gamma strip: strikes and net gamma (millions) from the "SYM#G:" line
+var float[]  gpV    = array.new_float()
+var string[] wtSym  = array.new_string()           // watch table, from the "#S:" line: symbol, wall state 1..5, gamma side
+var int[]    wtSt   = array.new_int()
+var string[] wtG    = array.new_string()
+var string[] wtT    = array.new_string(1, "")
+gxNum(string s) =>
+    m = str.match(s, "[-+]?[0-9]*\\.?[0-9]+")
+    m == "" ? float(na) : str.tonumber(m)
+gxSym(string s) =>
+    parts = str.split(s, ":")
+    string last = ""
+    for p in parts
+        if str.length(p) > 0
+            last := p
+    str.upper(str.replace_all(last, "^", ""))
+
+// the text is an input, so it is parsed once
+if barstate.isfirst and showGex and str.length(gexText) > 0
+    me = gxSym(syminfo.ticker)
+    gxRows = str.split(str.replace_all(gexText, "\t", " "), "\n")
+    for gl in gxRows
+        // the chart's own gamma strip line: "MSFT#G: 505=-1.2 507.5=-3.4 ..."
+        if str.startswith(str.upper(gl), me + "#G:")
+            gpToks = str.split(str.substring(gl, str.length(me) + 3), " ")
+            for gt in gpToks
+                if str.contains(gt, "=")
+                    gkv = str.split(gt, "=")
+                    if array.size(gkv) > 1
+                        gk = str.tonumber(array.get(gkv, 0))
+                        gv = str.tonumber(array.get(gkv, 1))
+                        if not na(gk) and not na(gv)
+                            array.push(gpK, gk)
+                            array.push(gpV, gv)
+            continue
+        // the watch-table line: "#S: T=14:35 NVDA=182.3|1|+ AAPL=..." (states 1..5, gamma + / - / empty)
+        if str.startswith(gl, "#S:")
+            for wt in str.split(str.substring(gl, 3), " ")
+                if str.startswith(wt, "T=")
+                    array.set(wtT, 0, str.substring(wt, 2))
+                else if str.contains(wt, "=") and str.contains(wt, "|")
+                    wkv = str.split(wt, "=")
+                    wpt = str.split(array.get(wkv, 1), "|")
+                    if array.size(wpt) >= 2
+                        wsn = str.tonumber(array.get(wpt, 1))
+                        if not na(wsn)
+                            array.push(wtSym, array.get(wkv, 0))
+                            array.push(wtSt, int(wsn))
+                            array.push(wtG, array.size(wpt) > 2 ? array.get(wpt, 2) : "")
+            continue
+        string sym = ""
+        string dt = ""
+        got = array.new_float(8, na)
+        gxToks = str.split(str.replace_all(gl, ",", " "), " ")
+        for tk in gxToks
+            // separate ifs, not an if / else chain (branches ending differently can fail the type check)
+            bool isKv = str.length(tk) > 0 and str.contains(tk, "=")
+            if str.length(tk) > 0 and not isKv and sym == ""
+                sym := gxSym(tk)
+            if isKv
+                kv = str.split(tk, "=")
+                k = str.upper(array.get(kv, 0))
+                string v = ""
+                if array.size(kv) > 1
+                    v := array.get(kv, 1)
+                if k == "DATE"
+                    dt := v
+                ki = array.indexof(gxKeys, k)
+                if ki >= 0
+                    array.set(got, ki, gxNum(v))
+        if sym == "" and dt != ""
+            array.set(gxInfo, 0, dt)
+        if sym != "" and sym == me
+            for i = 0 to 7
+                array.set(gxV, i, array.get(got, i))
+            array.set(gxInfo, 1, "1")
+            if dt != ""
+                array.set(gxInfo, 0, dt)
+
+gxCW = array.get(gxV, 0)
+gxPW = array.get(gxV, 1)
+gxFl = array.get(gxV, 2)
+gxOn = showGex and array.get(gxInfo, 1) == "1"
+var int gxT0 = na
+if newDay or na(gxT0)
+    gxT0 := time
+
+// a GEX level within gexTol x daily ATR of a whale level = confluence (★)
+gxNear(float x) =>
+    bool hit = false
+    if not na(x) and not na(dATR)
+        for w in lvNow
+            if math.abs(w - x) <= gexTol * dATR
+                hit := true
+    hit
+
+var line[]  gxLines = array.new_line()
+var box[]   gxBoxA  = array.new_box()
+var label[] gxLbls  = array.new_label()
+if barstate.islast
+    for gx in gxLines
+        line.delete(gx)
+    array.clear(gxLines)
+    for gq in gxBoxA
+        box.delete(gq)
+    array.clear(gxBoxA)
+    for gb in gxLbls
+        label.delete(gb)
+    array.clear(gxLbls)
+    bool gxStrip = gxOn and gexShape == "شريط" and array.size(gpK) > 0
+    bool gxBoxes = gexShape == "صناديق" or (gexShape == "شريط" and not gxStrip)
+    if gxStrip
+        // minimal strip right of the last bar: a thin line per strike, length = |net gamma| / largest, green where calls
+        // dominate (net > 0, dealers calm the move), red where puts dominate; a dot at the tip; the biggest strikes labelled
+        // design 4 (approved 2026-10-23): thick lollipops, square-root length (small strikes stay visible), every strike
+        // labelled with its size, the biggest brighter, the flip as a soft band
+        float gpMax = 0.0
+        for v in gpV
+            gpMax := math.max(gpMax, math.abs(v))
+        // right next to the candles; after the volume profile only if the two would overlap
+        bool gxClash = showSplit and vpOffset < gxStripOff + gxStripW + 3
+        int gxL0 = bar_index + (gxClash ? vpOffset + vpWidth : 0) + gxStripOff
+        int gxR = gxL0 + gxStripW
+        gpAbs = array.new_float()
+        for v in gpV
+            array.push(gpAbs, math.abs(v))
+        gpTop = array.sort_indices(gpAbs, order.descending)
+        nTop = math.min(gxStripTop, array.size(gpTop))
+        gpIsTop = array.new_bool(array.size(gpK), false)
+        if nTop > 0
+            for j = 0 to nTop - 1
+                array.set(gpIsTop, array.get(gpTop, j), true)
+        for j = 0 to array.size(gpK) - 1
+            k = array.get(gpK, j)
+            v = array.get(gpV, j)
+            if gpMax > 0 and v != 0
+                gc = v > 0 ? cGxCW : cGxPW
+                int x1 = gxR - math.max(1, int(math.round((gxStripW - 10) * math.sqrt(math.abs(v) / gpMax))))
+                array.push(gxLines, line.new(x1, k, gxR, k, color=gc, width=4, extend=extend.right))   // to the right without end
+                array.push(gxLines, line.new(x1, k, x1 + 1, k, color=gc, width=9))       // the dot at the tip
+                bool big = array.get(gpIsTop, j)
+                array.push(gxLbls, label.new(x1 - 1, k, str.tostring(k) + "  " + (v > 0 ? "+" : "") + str.tostring(v, "#.#") + "M",
+                     style=label.style_label_right, color=color.new(color.black, 100),
+                     textcolor=big ? color.new(color.white, 10) : color.new(color.gray, 20), size=big ? size.small : size.tiny))
+        float fl = array.get(gxV, 2)
+        if not na(fl)
+            // soft band: a third of the strike spacing tall
+            float gpStep = array.size(gpK) > 1 ? math.abs(array.get(gpK, 1) - array.get(gpK, 0)) : c_ * 0.005
+            float hb = 0.15 * gpStep
+            array.push(gxBoxA, box.new(gxT0, fl + hb, time, fl - hb, xloc=xloc.bar_time, extend=extend.right,
+                 border_color=color.new(cGxFl, 100), bgcolor=color.new(cGxFl, 75)))
+            array.push(gxLbls, label.new(gxL0, fl, "انقلاب القاما " + str.tostring(fl, format.mintick), style=label.style_label_left,
+                 color=color.new(color.black, 100), textcolor=cGxFl, size=size.small))
+    if gxOn and not gxStrip
+        gxCols = array.from(cGxCW, cGxPW, cGxFl, cGxPin, cGxDf, cGxMoi, cGxCWoi, cGxPWoi)
+        gxSty  = array.from(line.style_solid, line.style_solid, line.style_dashed, line.style_dotted, line.style_dotted, line.style_dashed, line.style_dashed, line.style_dashed)
+        gxH    = na(dATR) ? c_ * 0.004 : gexBand * dATR
+        for i = 0 to 7
+            x = array.get(gxV, i)
+            if not na(x)
+                gc = array.get(gxCols, i)
+                // walls (CW / PW / CWOI / PWOI) full height, FLIP / PIN / DFLIP / MAXOI half, so overlapping levels stay apart
+                hb = (i < 2 or i > 5 ? 0.5 : 0.25) * gxH
+                if gxBoxes
+                    array.push(gxBoxA, box.new(gxT0, x + hb, time, x - hb, xloc=xloc.bar_time, extend=extend.right, border_color=fade(gc, gexBord), border_width=1, border_style=array.get(gxSty, i), bgcolor=fade(gc, gexFill)))
+                if not gxBoxes
+                    array.push(gxLines, line.new(gxT0, x, time, x, xloc=xloc.bar_time, extend=extend.right, color=gc, style=array.get(gxSty, i), width=wGx))
+                // levels at the same price (e.g. CW = PIN) share one label: "CW · PIN 340"
+                bool gxDup = false
+                string gxNm = array.get(gxShow, i)
+                for j = 0 to 7
+                    y = array.get(gxV, j)
+                    if j != i and not na(y) and math.abs(y - x) <= 0.25 * gxH
+                        if j < i
+                            gxDup := true
+                        if j > i
+                            gxNm := gxNm + " · " + array.get(gxShow, j)
+                if not gxDup
+                    array.push(gxLbls, label.new(bar_index + 3, x, gxNm + " " + str.tostring(x, format.mintick) + (gxNear(x) ? " ★" : ""), style=label.style_label_left, color=color.new(gc, 100), textcolor=gc, size=size.small))
+// ta.cross on every bar (not inside and/or), then combined
+gxXcw = ta.cross(c_, gxCW)
+gxXpw = ta.cross(c_, gxPW)
+gxXfl = ta.cross(c_, gxFl)
+gxCross = gxOn and (gxXcw or gxXpw or gxXfl)
+alertcondition(gxCross, "عبور مستوى خيارات", "السعر عبر جدار الكول أو جدار البوت أو FLIP")
+
+// ═══════════════ Trendlines (reverse-engineered from the user's chart) ═══════════════
+// Pivots on the real highs / lows, tlLen bars each side. Red = latest pair of consecutive pivot highs where the
+// second is lower; green = latest pair of consecutive pivot lows where the second is higher. Drawn from the first
+// pivot and extended right. A broken line stays as drawn until a new pair replaces it.
+// 2026-10-23 VERIFIED against the user's other indicator ("مكنى مؤشر الزخم", closed source): its red line ran through
+// the last two 2-bar pivot highs (UNH 15m: 12:00 426.25 -> 12:45 426.15) and its green through the last two 2-bar pivot
+// lows (previous day 15:45 416.69 -> 14:30 423.43), from the first pivot, extended right - exactly the rule below with
+// tlLen = 2 and tlHold off. So that is the default again ("ممتد"); the other modes stay as options.
+// 2026-10-23 "heavier" lines (the user found them jumping): 5-bar pivots and a line that HOLDS until price closes
+// through it. Measured on 7 symbols, 15m (reports/trendline_stability.py): 3.5 -> 0.49 line changes a day, median
+// life 12 -> 44 bars, lines touched 2+ times before the break 9% -> 12%. 2 bars + hold off = the original behaviour.
+// Line QUALITY (reports/trendline_quality.py, 7 stocks, 5m + 15m, 18 settings, both halves of the dates): the best
+// lines - most often respected (2+ touches before the break) and fewest fakeouts - come from k = 2 WITH hold, #1 on
+// both timeframes and both halves (15m: respected 14% vs 8% without hold, fakeouts 31% vs 28-38%). Default k = 2, hold.
+// Backtest (reports/trendline_backtest.py, 7 stocks, 5m + 15m, 36 settings, held-out last 40%): NO setting's breaks
+// beat random entries out of sample (best p = 0.25, gross edge ~0). The lines are a picture of structure, not a signal.
+G_TL = "خطوط الترند"
+showTL  = input.bool(true, "إظهار خطوط الترند", group=G_TL)
+tlLen   = input.int(2, "طول القمة / القاع (شموع يمين ويسار)", minval=1, maxval=20, tooltip="مقيس على 7 أسهم 5د و15د: 2 مع التثبيت يعطي أكثر خطوط يحترمها السعر وأقل كسر كاذب. أكبر = أهدى لكن أقل احتراما", group=G_TL)
+tlHold  = input.bool(false, "ثبّت الخط حتى يُكسر", tooltip="مفعّل: الخط لا يتبدّل بقمة أو قاع جديد إلا بعد إغلاق السعر خلفه (خطوط أثقل وأطول). معطّل = مثل مؤشر القراءة الفنية: آخر قمتين / قاعين دائما", group=G_TL)
+cTlUp   = input.color(#00e676, "خط القيعان الصاعد", inline="tlc", group=G_TL)
+cTlDn   = input.color(#ff1744, "خط القمم الهابط", inline="tlc", group=G_TL)
+wTl     = input.int(2, "السماكة", minval=1, maxval=5, inline="tlc", group=G_TL)
+// ---- which candles the trendlines read ----
+// Everything else in this indicator reads the REAL candles (ticker.standard), so on a Heikin Ashi chart the lines
+// used to touch pivots the user cannot see. تلقائي: Heikin Ashi candles when the chart is Heikin Ashi (chart.is_heikinashi),
+// real candles otherwise; the other two force one source. Only the trendlines (pivots + breaks) use this.
+tlSrc = input.string("تلقائي", "شموع خطوط الترند", options=["تلقائي", "عادية", "هايكين آشي"], tooltip="تلقائي: إذا الشارت هايكين آشي تُقرأ القمم والقيعان من شموع الهايكين آشي الظاهرة، وإلا من الشموع العادية. يخص خطوط الترند فقط", group=G_TL)
+[haH, haL, haC] = request.security(ticker.heikinashi(stdT), timeframe.period, [high, low, close], gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+bool tlUseHA = tlSrc == "هايكين آشي" or (tlSrc == "تلقائي" and chart.is_heikinashi)
+float tlH = tlUseHA ? haH : h_
+float tlL = tlUseHA ? haL : l_
+float tlC = tlUseHA ? haC : c_
+
+tPh = ta.pivothigh(tlH, tlLen, tlLen)
+tPl = ta.pivotlow(tlL, tlLen, tlLen)
+var float tLastPh = na
+var int   tLastPhB = na
+var float tLastPl = na
+var int   tLastPlB = na
+var float dnA = na
+var int   dnAB = na
+var float dnS = na
+var float upA = na
+var int   upAB = na
+var float upS = na
+var bool  dnBroke = true      // the current red line has been closed through (or there is none)
+var bool  upBroke = true
+if not na(tPh)
+    pb = bar_index - tlLen
+    if not na(tLastPh) and tPh < tLastPh and (not tlHold or dnBroke or na(dnA))
+        dnA := tLastPh
+        dnAB := tLastPhB
+        dnS := (tPh - tLastPh) / (pb - tLastPhB)
+        dnBroke := false
+    tLastPh := tPh
+    tLastPhB := pb
+if not na(tPl)
+    pb = bar_index - tlLen
+    if not na(tLastPl) and tPl > tLastPl and (not tlHold or upBroke or na(upA))
+        upA := tLastPl
+        upAB := tLastPlB
+        upS := (tPl - tLastPl) / (pb - tLastPlB)
+        upBroke := false
+    tLastPl := tPl
+    tLastPlB := pb
+dnNow = na(dnA) ? na : dnA + dnS * (bar_index - dnAB)
+upNow = na(upA) ? na : upA + upS * (bar_index - upAB)
+if not na(dnNow) and tlC > dnNow
+    dnBroke := true
+if not na(upNow) and tlC < upNow
+    upBroke := true
+bool tlBrkUpL = not na(dnNow) and tlC > dnNow and tlC[1] <= dnNow - dnS
+bool tlBrkDnL = not na(upNow) and tlC < upNow and tlC[1] >= upNow - upS
+
+// ---- DAILY trendlines (default on intraday charts; Python twin: vzones/daily_trendlines.py) ----
+// The user wanted lines that follow TODAY's trend, not lines from days ago reaching across the chart. Per side:
+// pivots since max(session start, that side's last break); red = from the highest pivot high to the most recent
+// lower pivot high with no close above the line since; green mirrored. Re-picked at every new pivot, so the line moves
+// with the trend; a close through it ends it. Drawn to the current bar + a short extension, never across the chart.
+// Measured (reports/daily_trendline_compare.py, 7 stocks): 15m distance to price 1.0 ATR vs 6.3 for the held lines,
+// built from today 100% vs 14%, touches per 100 bars 11.4 vs 1.7 (5m: 1.7 ATR, 100%, 5.7).
+tlMode = input.string("ممتد", "نوع خطوط الترند", options=["ممتد", "صغير", "يومي"], tooltip="ممتد (الافتراضي): خط القمم من آخر قمتين (الثانية أدنى) وخط القيعان من آخر قاعين (الثاني أعلى)، يبدأ من القمة الأولى ويمتد لليمين — هو نفس قاعدة خطوط الاتجاه في مؤشر القراءة الفنية (مُتحقق منه نقطة بنقطة على UNH). صغير: نافذة آخر شموع قليلة. يومي: من قمم وقيعان اليوم", group=G_TL)
+tsLen  = input.int(1, "الترند الصغير: طول القمة / القاع", minval=1, maxval=5, tooltip="مقيس على 7 أسهم 5د و15د: 1 مع نافذة 15 شمعة هو الأفضل", group=G_TL)
+tsWin  = input.int(15, "الترند الصغير: عدد الشموع الأخيرة", minval=6, maxval=60, tooltip="أقل = ترندات أصغر وأقرب للسعر. أكثر = خطوط تظهر وقتا أطول", group=G_TL)
+tsWiden = input.int(3, "الترند الصغير: توسيع تلقائي (مرات)", minval=1, maxval=4, tooltip="إذا ما فيه خط في آخر N شمعة يجرّب 2N ثم 4N. مقيس على 5د و15د وساعة: الخط يظهر نحو 90% من الوقت بدل 58%. 1 = بدون توسيع", group=G_TL)
+tlExt  = input.int(5, "امتداد الخط يمين (شموع) للصغير واليومي", minval=0, maxval=50, group=G_TL)
+dailyTL = tlMode == "يومي" and timeframe.isintraday
+var int[]   dHb = array.new_int()
+var float[] dHv = array.new_float()
+var int[]   dLb = array.new_int()
+var float[] dLv = array.new_float()
+var float[] dLn = array.new_float(6, na)     // red: anchor bar, anchor price, slope | green: the same
+var int dSess = 0
+// closes kept in an array so the line functions read no series history: TradingView's compiler warned that a
+// function with c_[...] called inside an if can be inconsistent. TL_KEEP bars cover a 23-hour 1-minute session.
+TL_KEEP = 3000
+var float[] tlCl = array.new_float()
+array.push(tlCl, tlC)
+if array.size(tlCl) > TL_KEEP
+    array.shift(tlCl)
+var int dHStart = 0
+var int dLStart = 0
+if newDay
+    dSess := bar_index
+    dHStart := bar_index
+    dLStart := bar_index
+    array.clear(dHb)
+    array.clear(dHv)
+    array.clear(dLb)
+    array.clear(dLv)
+    array.fill(dLn, na)
+
+// highest (hi) / lowest pivot -> most recent later pivot on the trend side with no close through the line since
+pickTL(int[] bs, float[] vs, bool hi) =>
+    float rb = na
+    float rv = na
+    float rs = na
+    int n = array.size(bs)
+    if n >= 2
+        int ai = 0
+        for q = 1 to n - 1
+            bool better = hi ? array.get(vs, q) > array.get(vs, ai) : array.get(vs, q) < array.get(vs, ai)
+            if better
+                ai := q
+        int aB = array.get(bs, ai)
+        float aV = array.get(vs, ai)
+        bool found = false
+        int q2 = n - 1
+        while q2 > ai and not found
+            int bB = array.get(bs, q2)
+            float bV = array.get(vs, q2)
+            bool okB = hi ? bV < aV : bV > aV
+            if okB
+                float s = (bV - aV) / (bB - aB)
+                bool valid = true
+                int j = aB + 1
+                int nCl = array.size(tlCl)
+                if bar_index - aB >= nCl
+                    valid := false        // anchor older than the kept closes: no line
+                while j <= bar_index and valid
+                    float cj = array.get(tlCl, nCl - 1 - (bar_index - j))
+                    float yj = aV + s * (j - aB)
+                    bool through = hi ? cj > yj : cj < yj
+                    if through
+                        valid := false
+                    j += 1
+                if valid
+                    rb := aB
+                    rv := aV
+                    rs := s
+                    found := true
+            q2 -= 1
+    [rb, rv, rs]
+
+// 1) a close through the line drawn so far ends it and restarts that side's window
+float dRed = na(array.get(dLn, 0)) ? na : array.get(dLn, 1) + array.get(dLn, 2) * (bar_index - array.get(dLn, 0))
+float dGrn = na(array.get(dLn, 3)) ? na : array.get(dLn, 4) + array.get(dLn, 5) * (bar_index - array.get(dLn, 3))
+bool dBrkUp = dailyTL and not na(dRed) and tlC > dRed
+bool dBrkDn = dailyTL and not na(dGrn) and tlC < dGrn
+if dBrkUp
+    dHStart := bar_index
+    array.clear(dHb)
+    array.clear(dHv)
+    array.set(dLn, 0, na)
+if dBrkDn
+    dLStart := bar_index
+    array.clear(dLb)
+    array.clear(dLv)
+    array.set(dLn, 3, na)
+// 2) a newly confirmed pivot inside the window re-picks the line
+if dailyTL and not dBrkUp and not na(tPh) and bar_index - tlLen >= math.max(dSess, dHStart)
+    array.push(dHb, bar_index - tlLen)
+    array.push(dHv, tPh)
+    [rb, rv, rs] = pickTL(dHb, dHv, true)
+    array.set(dLn, 0, rb)
+    array.set(dLn, 1, rv)
+    array.set(dLn, 2, rs)
+if dailyTL and not dBrkDn and not na(tPl) and bar_index - tlLen >= math.max(dSess, dLStart)
+    array.push(dLb, bar_index - tlLen)
+    array.push(dLv, tPl)
+    [gb, gv, gs] = pickTL(dLb, dLv, false)
+    array.set(dLn, 3, gb)
+    array.set(dLn, 4, gv)
+    array.set(dLn, 5, gs)
+
+// ---- SMALL trendlines (default; Python twin: vzones/daily_trendlines.small_lines) ----
+// Same line rule as the daily lines, over a ROLLING window of the last tsWin bars with tsLen-bar pivots, re-picked
+// every bar: a line for every small swing. reports/small_trend_grid.py (7 stocks, 5m + 15m, 15 settings): pivot 1 +
+// window 15 ranked #1 on both timeframes and both halves of the dates; 15m: on screen 58% of bars (daily 22%),
+// 1.0 ATR from price, 12.5 touches per 100 bars.
+smallTL = tlMode == "صغير"
+// adaptive window: the last tsWin bars; when no line fits, 2x, then 4x ... (tsWiden tries).
+// reports/small_trend_adaptive.py: on screen 89-91% of bars on 5m / 15m / 1h (fixed 15: 58-62%), 1.3-1.4 ATR from price.
+pickWin(int[] bs, float[] vs, bool hi) =>
+    float rb = na
+    float rv = na
+    float rs = na
+    int w = tsWin
+    int tries = 0
+    while tries < tsWiden and na(rb)
+        int lo = bar_index - w + 1
+        int n = array.size(bs)
+        int st = n
+        if n > 0
+            for q = 0 to n - 1
+                if array.get(bs, q) >= lo
+                    st := q
+                    break
+        if n - st >= 2
+            [a1, a2, a3] = pickTL(array.slice(bs, st, n), array.slice(vs, st, n), hi)
+            rb := a1
+            rv := a2
+            rs := a3
+        w := w * 2
+        tries += 1
+    [rb, rv, rs]
+tsPh = ta.pivothigh(tlH, tsLen, tsLen)
+tsPl = ta.pivotlow(tlL, tsLen, tsLen)
+var int[]   sHb = array.new_int()
+var float[] sHv = array.new_float()
+var int[]   sLb = array.new_int()
+var float[] sLv = array.new_float()
+var float[] sLn = array.new_float(6, na)
+float sRed = na(array.get(sLn, 0)) ? na : array.get(sLn, 1) + array.get(sLn, 2) * (bar_index - array.get(sLn, 0))
+float sGrn = na(array.get(sLn, 3)) ? na : array.get(sLn, 4) + array.get(sLn, 5) * (bar_index - array.get(sLn, 3))
+bool sBrkUp = smallTL and not na(sRed) and tlC > sRed
+bool sBrkDn = smallTL and not na(sGrn) and tlC < sGrn
+if smallTL
+    if not na(tsPh)
+        array.push(sHb, bar_index - tsLen)
+        array.push(sHv, tsPh)
+    if not na(tsPl)
+        array.push(sLb, bar_index - tsLen)
+        array.push(sLv, tsPl)
+    // drop pivots that left the window (size test and array.get kept in separate ifs - Pine pitfall)
+    int oldest = bar_index - tsWin * int(math.pow(2, tsWiden - 1)) + 1
+    bool more = true
+    while more
+        more := false
+        if array.size(sHb) > 0
+            if array.get(sHb, 0) < oldest
+                array.shift(sHb)
+                array.shift(sHv)
+                more := true
+    more := true
+    while more
+        more := false
+        if array.size(sLb) > 0
+            if array.get(sLb, 0) < oldest
+                array.shift(sLb)
+                array.shift(sLv)
+                more := true
+    [srb, srv, srs] = pickWin(sHb, sHv, true)
+    array.set(sLn, 0, srb)
+    array.set(sLn, 1, srv)
+    array.set(sLn, 2, srs)
+    [sgb, sgv, sgs] = pickWin(sLb, sLv, false)
+    array.set(sLn, 3, sgb)
+    array.set(sLn, 4, sgv)
+    array.set(sLn, 5, sgs)
+
+bool tlBrkUp = smallTL ? sBrkUp : dailyTL ? dBrkUp : tlBrkUpL
+bool tlBrkDn = smallTL ? sBrkDn : dailyTL ? dBrkDn : tlBrkDnL
+var line tlDnLine = na
+var line tlUpLine = na
+if barstate.islast
+    line.delete(tlDnLine)
+    line.delete(tlUpLine)
+    if showTL and smallTL
+        if not na(array.get(sLn, 0))
+            sr0 = int(array.get(sLn, 0))
+            tlDnLine := line.new(sr0, array.get(sLn, 1), bar_index + tlExt, array.get(sLn, 1) + array.get(sLn, 2) * (bar_index + tlExt - sr0), width=wTl, color=cTlDn)
+        if not na(array.get(sLn, 3))
+            sg0 = int(array.get(sLn, 3))
+            tlUpLine := line.new(sg0, array.get(sLn, 4), bar_index + tlExt, array.get(sLn, 4) + array.get(sLn, 5) * (bar_index + tlExt - sg0), width=wTl, color=cTlUp)
+    if showTL and dailyTL
+        if not na(array.get(dLn, 0))
+            rb0 = int(array.get(dLn, 0))
+            tlDnLine := line.new(rb0, array.get(dLn, 1), bar_index + tlExt, array.get(dLn, 1) + array.get(dLn, 2) * (bar_index + tlExt - rb0), width=wTl, color=cTlDn)
+        if not na(array.get(dLn, 3))
+            gb0 = int(array.get(dLn, 3))
+            tlUpLine := line.new(gb0, array.get(dLn, 4), bar_index + tlExt, array.get(dLn, 4) + array.get(dLn, 5) * (bar_index + tlExt - gb0), width=wTl, color=cTlUp)
+    if showTL and not dailyTL and not smallTL and not na(dnA)
+        tlDnLine := line.new(dnAB, dnA, dnAB + 1, dnA + dnS, extend=extend.right, width=wTl, color=cTlDn)
+    if showTL and not dailyTL and not smallTL and not na(upA)
+        tlUpLine := line.new(upAB, upA, upAB + 1, upA + upS, extend=extend.right, width=wTl, color=cTlUp)
+
+// ═══════════════ Status panel (Arabic) ═══════════════
+// Only the readings that survived testing: trend, volume, the sideways range and its whale levels, and the two
+// signals kept on the chart (whale bounce, trend alert).
+tPos = tblPos == "أعلى اليمين" ? position.top_right : tblPos == "أعلى اليسار" ? position.top_left : tblPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
+var table tbl = table.new(tPos, 3, 13, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
+if barstate.isfirst
+    table.merge_cells(tbl, 0, 0, 1, 0)
+    table.merge_cells(tbl, 0, 12, 2, 12)
+tSz = tblSize == "صغير جدا" ? size.tiny : tblSize == "صغير" ? size.small : tblSize == "كبير" ? size.large : size.normal
+
+// last kept signal: 1 whale bounce, 2 trend alert; status 0 active, 1 target reached, -1 stopped / ended
+var int   lastDir  = 0
+var int   lastType = 0
+var float lastTgt  = na
+var float lastStop = na
+var int   lastTime = na
+var int   lastStat = 0
+if wbSig != 0
+    lastDir  := wbSig
+    lastType := 1
+    lastTgt  := wbTgt
+    lastStop := wbStp
+    lastTime := time
+    lastStat := 0
+else if showTA and taFire != 0
+    lastDir  := taFire
+    lastType := 2
+    lastTgt  := na
+    lastStop := taFire > 0 ? pdVAH : pdVAL
+    lastTime := time
+    lastStat := 0
+else if lastDir != 0 and lastStat == 0
+    if lastType == 1
+        if (lastDir > 0 and h_ >= lastTgt) or (lastDir < 0 and l_ <= lastTgt)
+            lastStat := 1
+        else if (lastDir > 0 and l_ <= lastStop) or (lastDir < 0 and h_ >= lastStop)
+            lastStat := -1
+    else if taDir == 0
+        lastStat := -1
+
+fmt(float x) => str.tostring(x, format.mintick)
+dist(float x) => (x >= c_ ? "+" : "-") + fmt(math.abs(x - c_)) + "   |   " + (x >= c_ ? "+" : "-") + str.tostring(100 * math.abs(x - c_) / c_, "#.00") + "%"
+meter(int k, int n) =>
+    string m = ""
+    for i = 1 to n
+        m := m + (i <= k ? "■" : "□")
+    m
+
+if barstate.islast
+    // --- trend
+    strongT = nAdx >= adxStrong
+    tTxt = nowDir > 0 ? (strongT ? "صاعد قوي" : "صاعد") : nowDir < 0 ? (strongT ? "هابط قوي" : "هابط") : "عرضي"
+    tCol = nowDir > 0 ? cTblUp : nowDir < 0 ? cTblDn : cTblLbl
+    tSub = (nAdx < 20 ? "قوة ضعيفة" : nAdx < adxStrong ? "قوة متوسطة" : "قوة عالية") + "\nADX " + str.tostring(nAdx, "#") + "   |   متوسط " + str.tostring(nowEmaF) + " و " + str.tostring(nowEmaS)
+    tMet = int(math.min(5, math.max(1, math.ceil(nAdx / 10))))
+    // --- volume
+    // completed bars only, so the half-built current candle does not distort it
+    udP = nowUd[1]
+    udD = nowUdDir[1]
+    vTxt = udD > 0 ? "داعم للصعود" : udD < 0 ? "داعم للهبوط" : "محايد"
+    vCol = udD > 0 ? cTblUp : udD < 0 ? cTblDn : cTblLbl
+    vMet = na(udP) ? 1 : int(math.min(5, math.max(1, math.round(math.abs(math.log(udP)) * 10) + 1)))
+    vSub = "شراء ÷ بيع " + (na(udP) ? "-" : str.tostring(udP, "#.00")) + "   |   آخر " + str.tostring(nowUdLen) + " شمعة" + (nowDir != 0 and udD == -nowDir ? "\nعكس الترند" : "")
+    // --- sideways range (daily)
+    string rTxt = "لا توجد منطقة"
+    string rSub = "-"
+    color  rCol = cTblLbl
+    if whMode == "يدوي"
+        rTxt := "منطقة يدوية"
+        rSub := str.format_time(whStartT, "yyyy-MM-dd", syminfo.timezone) + " → " + str.format_time(whEndT, "yyyy-MM-dd", syminfo.timezone)
+        rCol := cTblTxt
+    else if not na(rIdx)
+        nDays = array.size(wdT) - rIdx
+        forming = nDays < whLen
+        where = c_ > rHi ? "السعر فوق القمة" : c_ < rLo ? "السعر تحت القاع" : "السعر داخل المنطقة"
+        rTxt := forming ? "قيد التكوين · " + where : where
+        rCol := c_ > rHi ? cTblUp : c_ < rLo ? cTblDn : forming ? cTblLbl : cTblWeak
+        rSub := fmt(rLo) + " - " + fmt(rHi) + "   |   " + str.tostring(nDays) + " يوم"
+    // --- nearest whale levels (tall columns + POC / VAH / VAL of the drawn ranges)
+    float wUp = na
+    float wDn = na
+    lvAll = array.copy(whLv)
+    for k = 0 to 2
+        array.push(lvAll, array.get(curVA, k))
+    minD = na(dATR) ? 0.0 : whMinD * dATR
+    for x in lvAll
+        if not na(x) and math.abs(x - c_) >= minD
+            if x > c_ and (na(wUp) or x < wUp)
+                wUp := x
+            if x < c_ and (na(wDn) or x > wDn)
+                wDn := x
+    // --- position vs the current range's value area
+    cPocW = array.get(curVA, 0)
+    cVahW = array.get(curVA, 1)
+    cValW = array.get(curVA, 2)
+    string pTxt = "-"
+    color  pCol = cTblLbl
+    if not na(cPocW)
+        pTxt := c_ > cVahW ? "فوق VAH" : c_ < cValW ? "تحت VAL" : c_ >= cPocW ? "بين POC و VAH" : "بين VAL و POC"
+        pCol := c_ > cVahW ? cTblUp : c_ < cValW ? cTblDn : cTblTxt
+    pSub = na(cPocW) ? "-" : array.get(curVAName, 0) + ":  POC " + fmt(cPocW) + "\nVAH " + fmt(cVahW) + "   |   VAL " + fmt(cValW)
+    // --- last signal
+    sName = lastType == 1 ? "حوت" : "اتجاه"
+    sTxt = lastDir == 0 ? "لا توجد" : sName + " " + (lastDir > 0 ? "صعود" : "هبوط") + "، " + (lastStat == 1 ? "تحقق الهدف ✓" : lastStat == -1 ? (lastType == 1 ? "ضرب الوقف ✗" : "انتهى") : "نشطة")
+    sCol = lastDir > 0 ? cTblUp : lastDir < 0 ? cTblDn : cTblLbl
+    sSub = lastDir == 0 ? "-" : (lastType == 1 ? "الهدف " + fmt(lastTgt) + "   |   " : "") + str.format_time(lastTime, "MM-dd HH:mm", syminfo.timezone)
+    // --- verdict
+    string vd = ""
+    color  vdc = cTblTxt
+    if wbSig != 0
+        vd := "ارتداد حوت " + (wbSig > 0 ? "صعود" : "هبوط") + " (تحت الاختبار). الهدف ثم الوقف:\n" + fmt(wbTgt) + "   |   " + fmt(wbStp)
+        vdc := wbSig > 0 ? cWbUp : cWbDn
+    else if showTA and taDir != 0
+        vd := "اتجاه " + (taDir > 0 ? "صاعد" : "هابط") + ": ثبات " + (taDir > 0 ? "فوق" : "تحت") + " منطقة قيمة الأمس مع الترند. ينتهي بالعودة داخلها:\n" + fmt(taDir > 0 ? pdVAH : pdVAL)
+        vdc := taDir > 0 ? cTaLbl : cTaLblDn
+        if udDir == -taDir
+            vd := vd + "\nتنبيه: الفوليوم لا يدعمها"
+    else
+        vd := "لا توجد إشارة. أقرب خط حوت فوق وتحت السعر:\n▲ " + (na(wUp) ? "-" : fmt(wUp)) + "   |   ▼ " + (na(wDn) ? "-" : fmt(wDn))
+
+    // --- whale targets reached today (call = levels above the open, put = below)
+    int cTot = 0
+    int cHit = 0
+    int pTot = 0
+    int pHit = 0
+    for x in lvNow
+        if x > dOpen
+            cTot += 1
+            cHit += dHigh >= x ? 1 : 0
+        else if x < dOpen
+            pTot += 1
+            pHit += dLow <= x ? 1 : 0
+    gTxt = "كول " + str.tostring(cHit) + " من " + str.tostring(cTot) + "   |   بوت " + str.tostring(pHit) + " من " + str.tostring(pTot)
+    gSub = "من الافتتاح " + fmt(dOpen) + "   |   أعلى " + fmt(dHigh) + "   أدنى " + fmt(dLow)
+    gCol = cHit > pHit ? cTblUp : pHit > cHit ? cTblDn : cTblTxt
+    // --- level price is heading to
+    hTxt = hDir == 0 ? "لا يوجد" : (hDir > 0 ? "▲ صاعد إلى " : "▼ هابط إلى ") + fmt(hLvl)
+    hSub = (hDir == 0 ? "" : dist(hLvl)) + (hLast == "" ? "" : (hDir == 0 ? "" : "\n") + "السابق: " + hLast)
+    hCol = hDir > 0 ? cTblUp : hDir < 0 ? cTblDn : cTblLbl
+    // --- trend hold
+    kTxt = stUp ? "الترند الصاعد صامد" : "الترند الهابط صامد"
+    kTxt := stFlipBars <= 2 ? (stUp ? "انكسر الهابط، بدأ صعود" : "انكسر الصاعد، بدأ هبوط") : kTxt
+    kSub = "ينكسر إذا أغلق " + (stUp ? "تحت " : "فوق ") + fmt(stLine) + "   |   منذ " + str.tostring(stFlipBars) + " شمعة"
+    kCol = stUp ? cTblUp : cTblDn
+    // --- options levels (GEX block)
+    string xTxt = "-"
+    string xSub = "الصق كتلة GEXRadar في الإعدادات"
+    color  xCol = cTblLbl
+    if not showGex
+        xSub := "مخفية من الإعدادات"
+    else if gxOn
+        gxPin = array.get(gxV, 3)
+        wTxt = na(gxCW) or na(gxPW) ? "" : c_ > gxCW ? "فوق جدار الكول" : c_ < gxPW ? "تحت جدار البوت" : "بين الجدارين"
+        fTxt = na(gxFl) ? "" : c_ >= gxFl ? "فوق FLIP" : "تحت FLIP"
+        xTxt := fTxt + (fTxt != "" and wTxt != "" ? " · " : "") + wTxt
+        xTxt := xTxt == "" ? "مستويات ناقصة" : xTxt
+        xCol := na(gxFl) ? cTblTxt : c_ >= gxFl ? cTblUp : cTblDn
+        string conf = ""
+        for i = 0 to 7
+            if gxNear(array.get(gxV, i))
+                conf := conf + (conf == "" ? "" : "، ") + array.get(gxKeys, i)
+        dtB = array.get(gxInfo, 0)
+        dtNow = str.format_time(time, "yyyy-MM-dd", syminfo.timezone)
+        // warn only when the block is OLDER than the chart's last bar (a newer block = pre-market or weekend: fine)
+        dtOld = str.tonumber(str.replace_all(dtB, "-", "")) < str.tonumber(str.replace_all(dtNow, "-", ""))
+        xSub := "CW " + (na(gxCW) ? "-" : fmt(gxCW)) + "   |   PW " + (na(gxPW) ? "-" : fmt(gxPW)) + "\nFLIP " + (na(gxFl) ? "-" : fmt(gxFl)) + "   |   PIN " + (na(gxPin) ? "-" : fmt(gxPin)) + (na(array.get(gxV, 5)) ? "" : "\nأعلى فائدة مفتوحة " + fmt(array.get(gxV, 5))) + (na(array.get(gxV, 6)) and na(array.get(gxV, 7)) ? "" : "\nالجداران الثابتان: كول " + (na(array.get(gxV, 6)) ? "-" : fmt(array.get(gxV, 6))) + "   |   بوت " + (na(array.get(gxV, 7)) ? "-" : fmt(array.get(gxV, 7)))) + (conf == "" ? "" : "\nتلاقي مع خط حوت ★ " + conf) + (dtB == "" ? "" : dtOld ? "\nتنبيه: الكتلة قديمة " + dtB : "\nالكتلة " + dtB)
+    else if str.length(gexText) > 0
+        xTxt := "لا يوجد سطر لـ " + gxSym(syminfo.ticker)
+        xCol := cTblWeak
+        xSub := "أضف سطرا مثل:\n" + gxSym(syminfo.ticker) + ": CW=... PW=... FLIP=... PIN=..."
+
+    // --- draw (column 2 = label on the right, column 1 = value, column 0 = meter)
+    table.cell(tbl, 2, 0, "مناطق الفوليوم", text_color=cTblTxt, text_size=tSz, text_halign=text.align_right)
+    table.cell(tbl, 0, 0, syminfo.ticker + " · " + timeframe.period + " · " + fmt(c_), text_color=cTblLbl, text_size=tSz, text_halign=text.align_left)
+    rowsL = array.from("الاتجاه", "فوليوم الاتجاه", "المنطقة العرضية", "أقرب خط حوت فوق", "أقرب خط حوت تحت", "موقع السعر من القيمة", "آخر إشارة", "أهداف الحيتان اليوم", "متجه إلى", "صمود الترند", "مستويات الخيارات")
+    vals  = array.from(tTxt + "\n" + tSub, vTxt + "\n" + vSub, rTxt + "\n" + rSub, na(wUp) ? "-" : fmt(wUp) + "\n" + dist(wUp), na(wDn) ? "-" : fmt(wDn) + "\n" + dist(wDn), pTxt + "\n" + pSub, sTxt + "\n" + sSub, gTxt + "\n" + gSub, hTxt + "\n" + hSub, kTxt + "\n" + kSub, xTxt + "\n" + xSub)
+    cols  = array.from(tCol, vCol, rCol, cWhLv, cWhLv, pCol, sCol, gCol, hCol, kCol, xCol)
+    for i = 0 to 10
+        table.cell(tbl, 2, i + 1, array.get(rowsL, i), text_color=cTblLbl, text_size=tSz, text_halign=text.align_right)
+        table.cell(tbl, 1, i + 1, array.get(vals, i), text_color=array.get(cols, i), text_size=tSz, text_halign=text.align_right)
+        table.cell(tbl, 0, i + 1, "", text_size=tSz)
+    table.cell(tbl, 0, 1, meter(tMet, 5), text_color=tCol, text_size=tSz)
+    table.cell(tbl, 0, 2, meter(vMet, 5), text_color=vCol, text_size=tSz)
+    table.cell(tbl, 0, 12, "الخلاصة: " + vd, text_color=vdc, text_size=tSz, text_halign=text.align_right, bgcolor=fade(vdc, cVdBgT))
+
+// ═══════════════ Heatmap: two-colour or five-colour ribbons, no smoothing ═══════════════
+// colour = volume at that price in the rolling profile (today's session or the last `lookback` bars), relative to the busiest row (0..1)
+viridis(float x) =>
+    t = (x - heatMin) / math.max(1.0 - heatMin, 0.000001)
+    t < 0.25 ? color.from_gradient(t, 0.00, 0.25, cH1, cH2) : t < 0.50 ? color.from_gradient(t, 0.25, 0.50, cH2, cH3) : t < 0.75 ? color.from_gradient(t, 0.50, 0.75, cH3, cH4) : color.from_gradient(t, 0.75, 1.00, cH4, cH5)
+
+// Ribbons: a row that keeps the same colour level on consecutive bars is drawn as ONE
+// continuous box (extended to the right) instead of many small boxes.
+twoCol   = heatMode == "لونان"
+threeCol = heatMode == "ثلاثة ألوان"
+var box[]   heatBoxes = array.new_box()
+var box[]   rowBox    = array.new_box(100, na)     // current ribbon per row
+var int[]   rowKey    = array.new_int(100, 0)      // colour key of that ribbon
+var float[] rowMid    = array.new_float(100, na)   // its mid price
+if showHeat and ready and bar_index % heatStep == 0
+    mx = array.max(rowVol)
+    gap = step * stripGap
+    if mx > 0
+        for r = 0 to rows - 1
+            v = array.get(rowVol, r)
+            x = v / mx
+            int key = 0
+            color c = na
+            if x >= heatMin
+                if threeCol
+                    key := x >= heatHighE ? 7 : x >= heatMidE ? 6 : 5
+                    c := fade(x >= heatHighE ? cTop3 : x >= heatMidE ? cMid3 : cLow3, heatAlpha)
+                else if twoCol
+                    key := x >= heatHighE ? 2 : 1
+                    c := fade(x >= heatHighE ? cHigh : cMed, heatAlpha)
+                else
+                    key := 10 + int(math.min(4, (x - heatMin) / math.max(1.0 - heatMin, 0.000001) * 5))
+                    c := fade(viridis(x), heatAlpha)
+                if showDelta and x >= deltaMin and v > 0
+                    share = array.get(rowBuy, r) / v - 0.5
+                    if math.abs(share) >= deltaEdge
+                        key := share > 0 ? 3 : 4
+                        c := fade(share > 0 ? cBuy : cSell, math.max(heatAlpha, 100 - math.min(75, math.abs(share) * 200)))
+            mid = pLo + (r + 0.5) * step
+            bx = array.get(rowBox, r)
+            sameRun = key != 0 and not na(bx) and array.get(rowKey, r) == key and math.abs(mid - array.get(rowMid, r)) <= step * (useSess ? 1.0 : 0.6)
+            if sameRun
+                box.set_right(bx, bar_index + heatStep - 1)
+            else if key != 0
+                nb = box.new(bar_index, mid + step / 2 - gap, bar_index + heatStep - 1, mid - step / 2 + gap, border_color=color.new(color.black, 100), bgcolor=c)
+                array.push(heatBoxes, nb)
+                array.set(rowBox, r, nb)
+                array.set(rowKey, r, key)
+                array.set(rowMid, r, mid)
+            else
+                array.set(rowBox, r, na)
+                array.set(rowKey, r, 0)
+    // keep room in the 500-box budget for the right-edge profile (2 boxes per row) and the zone / range boxes
+    while array.size(heatBoxes) > math.max(50, 470 - 2 * rows - 3 * pWin - 10)
+        box.delete(array.shift(heatBoxes))
+
+// colour legend
+var table legend = table.new(position.bottom_center, 7, 2, bgcolor=cTblBg, border_color=cTblBd, border_width=1)
+if showLegend and showHeat and barstate.islast
+    if threeCol
+        table.cell(legend, 0, 0, "   ", bgcolor=cLow3, text_size=size.tiny)
+        table.cell(legend, 1, 0, "منخفض", text_color=cTblLbl, text_size=size.tiny)
+        table.cell(legend, 2, 0, "   ", bgcolor=cMid3, text_size=size.tiny)
+        table.cell(legend, 3, 0, "متوسط", text_color=cTblLbl, text_size=size.tiny)
+        table.cell(legend, 4, 0, "   ", bgcolor=cTop3, text_size=size.tiny)
+        table.cell(legend, 5, 0, "عالي", text_color=cTblLbl, text_size=size.tiny)
+    else if twoCol
+        table.cell(legend, 0, 0, "   ", bgcolor=cMed, text_size=size.tiny)
+        table.cell(legend, 1, 0, "تداول متوسط", text_color=cTblLbl, text_size=size.tiny)
+        table.cell(legend, 2, 0, "   ", bgcolor=cHigh, text_size=size.tiny)
+        table.cell(legend, 3, 0, "تداول عالي", text_color=cTblLbl, text_size=size.tiny)
+    else
+        table.cell(legend, 0, 0, "أقل", text_color=cTblLbl, text_size=size.tiny)
+        stops = array.from(cH1, cH2, cH3, cH4, cH5)
+        for k = 0 to 4
+            table.cell(legend, k + 1, 0, "   ", bgcolor=array.get(stops, k), text_size=size.tiny)
+        table.cell(legend, 6, 0, "فوليوم أعلى", text_color=cTblLbl, text_size=size.tiny)
+    if showDelta
+        table.cell(legend, 0, 1, "   ", bgcolor=cBuy, text_size=size.tiny)
+        table.cell(legend, 1, 1, "مشترون", text_color=cTblLbl, text_size=size.tiny)
+        table.cell(legend, 2, 1, "   ", bgcolor=cSell, text_size=size.tiny)
+        table.cell(legend, 3, 1, "بائعون", text_color=cTblLbl, text_size=size.tiny)
+
+// ═══════════════ Up/Down split profile at the right edge ═══════════════
+var box[] splitBoxes = array.new_box()
+if showSplit and barstate.islast and ready
+    for b in splitBoxes
+        box.delete(b)
+    array.clear(splitBoxes)
+    mxS = array.max(rowVol)
+    pocRow = array.indexof(rowVol, mxS)
+    x0 = bar_index + vpOffset
+    if mxS > 0
+        for r = 0 to rows - 1
+            buyV = array.get(rowBuy, r)
+            sellV = array.get(rowVol, r) - buyV
+            u = int(vpWidth * buyV / mxS)
+            d = int(vpWidth * sellV / mxS)
+            isPoc = vpHighlightPoc and r == pocRow
+            cu = isPoc ? cVpPoc : cVpUp
+            cdn = isPoc ? cVpPoc : cVpDn
+            if u > 0
+                array.push(splitBoxes, box.new(x0, pLo + (r + 1) * step, x0 + u, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=fade(cu, vpAlpha)))
+            if d > 0
+                array.push(splitBoxes, box.new(x0 + u, pLo + (r + 1) * step, x0 + u + d, pLo + r * step, border_color=color.new(color.black, 100), bgcolor=fade(cdn, vpAlpha)))
+
+// ═══════════════ جدول أسهم الجدران ═══════════════
+// Badges: one cell per symbol, its colour is its state (green = call wall, red = put wall; solid + arrow = broke
+// through, dark = at the wall, grey = between). Hover a cell for the state in words and the gamma side.
+wtP = wtPos == "أعلى اليمين" ? position.top_right : wtPos == "أعلى اليسار" ? position.top_left : wtPos == "أسفل اليسار" ? position.bottom_left : position.bottom_right
+// sized for the widest case of the chosen shape; each bar fills only what it needs. No table background: the
+// optional top gap row stays transparent; every cell paints its own.
+wtGMax = wtLay == "بالعرض (صفّان)" ? int(math.ceil(wtMax / 2)) : wtLay == "بالطول (عمود)" ? 1 : wtCols
+var table wtTbl = table.new(wtP, wtGMax, 3 + int(math.ceil(wtMax / wtGMax)), border_color=cTblBd, border_width=1)
+if barstate.islast and wtShow and showGex and array.size(wtSym) > 0
+    table.clear(wtTbl, 0, 0, wtGMax - 1, 2 + int(math.ceil(wtMax / wtGMax)))
+    wSz = wtSize == "عادي" ? size.normal : wtSize == "صغير" ? size.small : size.tiny
+    meW = gxSym(syminfo.ticker)
+    // which symbols: in the agent's order (broke out, at a wall, between), optionally the first two kinds only
+    wIdx = array.new_int()
+    for i = 0 to array.size(wtSym) - 1
+        if array.size(wIdx) < wtMax and (not wtOnly or array.get(wtSt, i) != 3)
+            array.push(wIdx, i)
+    nW = array.size(wIdx)
+    nG = wtLay == "بالعرض (صفّان)" ? math.max(1, int(math.ceil(nW / 2))) : wtLay == "بالطول (عمود)" ? 1 : wtCols
+    // top positions: a transparent spacer row first, so the indicators' values line at the top of the chart does not cover it
+    int r0 = (wtP == position.top_right or wtP == position.top_left) and wtGap > 0 ? 1 : 0
+    if r0 == 1
+        table.cell(wtTbl, 0, 0, "", height=wtGap, bgcolor=color.new(color.black, 100))
+        table.merge_cells(wtTbl, 0, 0, nG - 1, 0)
+    string wtTitle = "أسهم الجدران  " + array.get(wtT, 0) + "  (" + str.tostring(nW) + ")"
+    table.cell(wtTbl, 0, r0, nG >= 4 ? wtTitle + "   أخضر=كول  أحمر=بوت  غامق=عنده  ▲▼=اخترق" : wtTitle, text_color=cTblLbl, text_size=wSz, bgcolor=cTblBg,
+               tooltip="أخضر = جدار الكول، أحمر = جدار البوت.\nفاقع مع ▲ أو ▼ = السعر اخترق الجدار. غامق = قريب منه (أقل من 0.5%). رمادي = بين الجدارين.\nمرّر الماوس على أي سهم للتفاصيل")
+    if nG > 1
+        table.merge_cells(wtTbl, 0, r0, nG - 1, r0)
+    if nW > 0
+        nRows = int(math.ceil(nW / nG))
+        for k = 0 to nW - 1
+            i = array.get(wIdx, k)
+            st_ = array.get(wtSt, i)
+            g_ = array.get(wtG, i)
+            sym_ = array.get(wtSym, i)
+            bool brk = st_ == 1 or st_ == 5
+            bgc = st_ == 1 ? cGxCW : st_ == 2 ? color.new(cGxCW, 60) : st_ == 4 ? color.new(cGxPW, 60) : st_ == 5 ? cGxPW : cTblBg
+            txt = (sym_ == meW ? "● " : "") + sym_ + (st_ == 1 ? " ▲" : st_ == 5 ? " ▼" : "")
+            tip = (st_ == 1 ? "فوق جدار الكول (اخترقه)" : st_ == 2 ? "عند جدار الكول" : st_ == 3 ? "بين الجدارين" : st_ == 4 ? "عند جدار البوت" : "تحت جدار البوت (اخترقه)") +
+                  (g_ == "+" ? "\nالقاما +: فوق الانقلاب، الحركة تهدأ عادة" : g_ == "-" ? "\nالقاما −: تحت الانقلاب، الحركة تتسارع عادة" : "")
+            table.cell(wtTbl, int(math.floor(k / nRows)), r0 + 1 + k % nRows, txt, text_color=st_ == 3 ? cTblLbl : color.white, text_size=wSz,
+                       bgcolor=bgc, tooltip=tip, text_formatting=brk or sym_ == meW ? text.format_bold : text.format_none)
+
+// ═══════════════ المتوسطات المتحركة ═══════════════
+// Same as TradingView's built-in "MA ribbon" plus Hull (HMA): four averages, each with on/off, type, source, length and color, on the
+// chart's own candles (Heikin Ashi on a Heikin Ashi chart, like the built-in). Optional higher timeframe; "wait for
+// the timeframe close" shows the last CLOSED higher-timeframe value (no repaint), otherwise the live one.
+G_MA = "المتوسطات المتحركة"
+ma1On = input.bool(false, "متوسط 1", inline="ma1", group=G_MA)
+ma1T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA", "HMA مخمّد"], inline="ma1", group=G_MA)
+ma1S  = input.source(close, "", inline="ma1", group=G_MA)
+ma1L  = input.int(20, "", minval=1, maxval=4999, inline="ma1", group=G_MA)
+ma1C  = input.color(#f6c309, "", inline="ma1", group=G_MA)
+ma2On = input.bool(true, "متوسط 2", inline="ma2", group=G_MA)
+ma2T  = input.string("HMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA", "HMA مخمّد"], inline="ma2", group=G_MA)
+ma2S  = input.source(close, "", inline="ma2", group=G_MA)
+ma2L  = input.int(68, "", minval=1, maxval=4999, tooltip="HMA 68: الأهدأ في قياس 30 سهما على 5 دقائق بنفس التأخر (reports/conviction_ma)، لكنه يتأخر عند انعكاس السعر", inline="ma2", group=G_MA)
+ma2C  = input.color(#fb9800, "", inline="ma2", group=G_MA)
+ma3On = input.bool(true, "متوسط 3", inline="ma3", group=G_MA)
+ma3T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA", "HMA مخمّد"], inline="ma3", group=G_MA)
+ma3S  = input.source(close, "", inline="ma3", group=G_MA)
+ma3L  = input.int(100, "", minval=1, maxval=4999, inline="ma3", group=G_MA)
+ma3C  = input.color(#fb6500, "", inline="ma3", group=G_MA)
+ma4On = input.bool(false, "متوسط 4", inline="ma4", group=G_MA)
+ma4T  = input.string("SMA", "", options=["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA", "HMA", "HMA مخمّد"], inline="ma4", group=G_MA)
+ma4S  = input.source(close, "", inline="ma4", group=G_MA)
+ma4L  = input.int(200, "", minval=1, maxval=4999, inline="ma4", group=G_MA)
+ma4C  = input.color(#f60c0c, "", inline="ma4", group=G_MA)
+maTF   = input.timeframe("", "الإطار الزمني للمتوسطات", tooltip="فارغ = نفس فريم الشارت. إطار أكبر من الشارت فقط؛ الأصغر يُتجاهل", group=G_MA)
+maWait = input.bool(true, "انتظر إغلاق شمعة الإطار", tooltip="مفعّل: قيمة آخر شمعة مغلقة على الإطار الأكبر (لا تتغير بعد ظهورها). معطّل: القيمة الحية وتتحرك حتى تُغلق الشمعة", group=G_MA)
+maWid  = input.int(1, "سماكة الخطوط", minval=1, maxval=5, group=G_MA)
+maG    = input.float(0.85, "تخميد HMA المخمّد (g)", minval=0.5, maxval=1.0, step=0.05, tooltip="HMA يمدّ الاتجاه الأخير قدّامه، فيتجاوز نقطة الانعكاس ويرجع متأخرا. g يخفف هذا المدّ: 1.0 = HMA العادي، 0.85 = تجاوز أقل بنحو الثلثين مقابل قلبات أكثر بنحو 8% في النطاق، 0.6 = شبه بلا تجاوز مقابل قلبات أكثر 20%.\nغير مثبت: قياس استكشافي على 30 سهما 5 دقائق بعد الحكم، وليس اختبارا مسجلا مسبقا (reports/hma_successor)", group=G_MA)
+
+// all seven types computed every bar (Pine wants ta.* calls unconditional), then picked
+maOf(string t, float s, simple int n) =>
+    float vS = ta.sma(s, n)
+    float vE = ta.ema(s, n)
+    float vR = ta.rma(s, n)
+    float vW = ta.wma(s, n)
+    float vV = ta.vwma(s, n)
+    float vH = ta.hma(s, n)
+    // damped Hull: WMA((2 WMA(n/2) - g WMA(n)) / (2 - g), sqrt n); g = 1 is the plain HMA (vzones/hma_successor.py)
+    float vD = ta.wma((2 * ta.wma(s, math.max(1, int(n / 2))) - maG * ta.wma(s, n)) / (2 - maG), math.max(1, int(math.round(math.sqrt(n)))))
+    t == "EMA" ? vE : t == "SMMA (RMA)" ? vR : t == "WMA" ? vW : t == "VWMA" ? vV : t == "HMA" ? vH : t == "HMA مخمّد" ? vD : vS
+
+m1 = maOf(ma1T, ma1S, ma1L)
+m2 = maOf(ma2T, ma2S, ma2L)
+m3 = maOf(ma3T, ma3S, ma3L)
+m4 = maOf(ma4T, ma4S, ma4L)
+bool maHTF = maTF != "" and timeframe.in_seconds(maTF) > timeframe.in_seconds(timeframe.period)
+string maTFe = maHTF ? maTF : timeframe.period
+[w1, w2, w3, w4] = request.security(syminfo.tickerid, maTFe, [m1[1], m2[1], m3[1], m4[1]], lookahead=barmerge.lookahead_on)
+[v1, v2, v3, v4] = request.security(syminfo.tickerid, maTFe, [m1, m2, m3, m4], lookahead=barmerge.lookahead_off)
+float o1 = maHTF ? (maWait ? w1 : v1) : m1
+float o2 = maHTF ? (maWait ? w2 : v2) : m2
+float o3 = maHTF ? (maWait ? w3 : v3) : m3
+float o4 = maHTF ? (maWait ? w4 : v4) : m4
+plot(ma1On ? o1 : na, "متوسط 1", ma1C, maWid)
+plot(ma2On ? o2 : na, "متوسط 2", ma2C, maWid)
+plot(ma3On ? o3 : na, "متوسط 3", ma3C, maWid)
+plot(ma4On ? o4 : na, "متوسط 4", ma4C, maWid)
+
+// ═══════════════ Alerts ═══════════════
+alertcondition(weak and not weak[1], "فوليوم ضعيف", "الفوليوم أصبح ضعيفا")
+alertcondition(hitHead, "وصل خط حوت", "السعر وصل خط الحوت الذي كان متجها إليه")
+alertcondition(stD != stD[1] and not na(stD[1]), "انكسار الترند (Supertrend)", "انقلب صمود الترند: الترند السابق انكسر")
+alertcondition(tlBrkUp, "كسر خط الترند الهابط", "إغلاق فوق خط القمم الهابط")
+alertcondition(tlBrkDn, "كسر خط الترند الصاعد", "إغلاق تحت خط القيعان الصاعد")
+
+// ═══════════════ حسابات النافذة (نموذج الاتجاه، محرّك التذبذب v2، الحرارة، الخروج، الوقف المتحرّك، مدى اليوم) ═══════════════
+// ═══════════════ RVOL حسب وقت اليوم ═══════════════
+int tfMin   = timeframe.isintraday ? (timeframe.isseconds ? 1 : timeframe.multiplier) : 390
+int nSlots  = timeframe.isintraday ? math.max(1, math.ceil(390.0 / tfMin)) : 1
+int minsIn  = hour(time, syminfo.timezone) * 60 + minute(time, syminfo.timezone) - 570
+int slotNow = timeframe.isintraday ? (minsIn < 0 or minsIn >= 390 ? -1 : math.min(nSlots - 1, math.floor(minsIn / tfMin))) : 0
+var matrix<float> rvBuf = matrix.new<float>(nSlots, 20, na)
+float rvBase = na
+if slotNow >= 0
+    rvVals = array.new_float()
+    for j = 0 to 19
+        rvx = matrix.get(rvBuf, slotNow, j)
+        if not na(rvx)
+            array.push(rvVals, rvx)
+    if array.size(rvVals) >= 10
+        rvBase := array.median(rvVals)
+float rvol = na(rvBase) or rvBase <= 0 ? na : volume / rvBase
+if barstate.isconfirmed and slotNow >= 0
+    for j = 0 to 18
+        matrix.set(rvBuf, slotNow, j, matrix.get(rvBuf, slotNow, j + 1))
+    matrix.set(rvBuf, slotNow, 19, volume)
+
+
+// ═══════════════ نموذج الاتجاه (الحالة وقوّتها فقط؛ نفس معادلات المؤشّر الرئيسي) ═══════════════
+int tvmLen = tfMin <= 5 ? 67 : tfMin <= 15 ? 66 : 56
+tvM  = ta.hma(c_, tvmLen)
+tvSl = tvM - tvM[1]
+int tvState = c_ > tvM and tvSl > 0 and tvSl[1] > 0 and tvSl[2] > 0 ? 1 : c_ < tvM and tvSl < 0 and tvSl[1] < 0 and tvSl[2] < 0 ? -1 : 0
+tvPath = math.sum(math.abs(ta.change(c_)), 20)
+float tvI = tvPath > 0 ? math.abs(c_ - c_[20]) / tvPath : 0.0
+float tvJ0 = math.sum((c_ - o_) / atrV, 10)
+float tvS0 = 0.5 * tvI + 0.5 * math.min(1.0, math.abs(tvJ0) / 3.0)
+
+// ═══════════════ محرّك التذبذب v2 (نفس معادلات المؤشّر الرئيسي الإصدار 50) ═══════════════
+float veR = newSess or na(c_[1]) ? math.log(c_ / o_) : math.log(c_ / c_[1])
+float veLam = tfMin <= 5 ? 0.99 : timeframe.isdwm ? 0.94 : 0.97
+var float veS2 = na
+veS2 := na(veS2) ? veR * veR : veLam * veS2 + (1 - veLam) * veR * veR
+int veK = tfMin <= 5 ? 24 : tfMin <= 15 ? 8 : tfMin <= 60 ? 2 : 5
+var float[] veProf5 = array.from(13.0616, 4.8267, 3.6186, 3.5973, 2.9083, 2.2205, 2.5626, 1.8878, 1.6552, 1.5478, 1.5150, 1.3400, 1.3999, 1.3048, 1.1005, 1.0198, 1.0875, 0.9432, 0.9621, 0.9115, 0.8946, 0.7789, 0.8649, 0.7575, 0.7734, 0.7263, 0.6908, 0.6309, 0.6126, 0.5490, 0.6428, 0.5213, 0.5306, 0.5239, 0.5307, 0.4423, 0.5344, 0.4355, 0.4537, 0.4399, 0.4756, 0.4301, 0.4941, 0.3874, 0.4243, 0.4877, 0.4332, 0.4195, 0.4622, 0.4479, 0.3848, 0.3877, 0.3981, 0.3667, 0.5075, 0.4125, 0.3680, 0.3705, 0.3549, 0.3387, 0.4077, 0.3518, 0.3282, 0.2971, 0.3384, 0.3667, 0.4148, 0.4013, 0.3611, 0.3712, 0.3645, 0.3211, 0.4269, 0.3818, 0.4306, 0.4423, 0.9771, 0.8611)
+var float[] veG5 = array.from(7.830, 7.297, 6.952, 6.700, 6.509, 6.301, 5.940, 5.879, 5.761, 5.646, 5.554, 5.505, 5.380, 5.218, 5.228, 5.100, 5.001, 4.960, 4.825, 4.775, 4.668, 4.679, 4.566, 4.549, 4.489, 4.436, 4.442, 4.389, 4.335, 4.314, 4.275, 4.245, 4.210, 4.128, 4.122, 4.119, 4.023, 3.989, 3.910, 3.874, 3.801, 3.785, 3.708, 3.711, 3.771, 3.747, 3.678, 3.618, 3.554, 3.465, 3.425, 3.409, 3.370, 3.317, 3.252, 3.197, 3.157, 3.115, 3.049, 2.952, 2.930, 2.891, 2.795, 2.728, 2.635, 2.599, 2.439, 2.364, 2.290, 2.197, 2.096, 2.037, 1.909, 1.821, 1.667, 1.462, 0.980, 0.000)
+var float[] veProf = array.new_float()
+if barstate.isfirst and timeframe.isintraday
+    for j = 0 to nSlots - 1
+        int lo5 = math.floor(j * tfMin / 5.0)
+        int hi5 = math.max(lo5, math.floor((j + 1) * tfMin / 5.0) - 1)
+        float sF = 0.0
+        int nF = 0
+        for q = lo5 to hi5
+            if q < 78
+                sF += array.get(veProf5, q)
+                nF += 1
+        array.push(veProf, nF > 0 ? sF / nF : 1.0)
+float veF = timeframe.isintraday and slotNow >= 0 and array.size(veProf) > slotNow ? array.get(veProf, slotNow) : 1.0
+var float veS2d = na
+veS2d := na(veS2d) ? veR * veR / veF : veLam * veS2d + (1 - veLam) * veR * veR / veF
+float veNext = veK
+if timeframe.isintraday and slotNow >= 0 and array.size(veProf) > 0
+    float sN = 0.0
+    for q = 1 to veK
+        sN += array.get(veProf, (slotNow + q) % array.size(veProf))
+    veNext := sN
+float veS2k = timeframe.isintraday ? veS2d * veNext : veK * veS2
+float veMove = timeframe.isdwm ? math.sqrt(2.701088) * atrV * math.sqrt(veK / 5.0) : math.sqrt(veS2k) * c_
+float veMovePct = 100 * veMove / c_
+float veA100 = ta.rma(trR, 100)
+float veComp = veA100 > 0 ? atrV / veA100 : na
+float veThr = timeframe.isdwm ? 0.8833 : 0.6967
+bool veSqzOn = veComp < veThr
+var int veSqzBars = 0
+veSqzBars := veSqzOn ? veSqzBars + 1 : 0
+bool veLunch = minsIn >= 150 and minsIn < 240
+// heat: rank against the same slot of the previous 20 sessions (same-slot rank, reports/vol_engine_dev H6.1)
+var matrix<float> veHBuf = matrix.new<float>(nSlots, 20, na)
+float vePct = na
+if slotNow >= 0 and not na(veMove)
+    int veBelow = 0
+    int veCnt = 0
+    for j = 0 to 19
+        float hx = matrix.get(veHBuf, slotNow, j)
+        if not na(hx)
+            veCnt += 1
+            if hx < veMove / c_
+                veBelow += 1
+    if veCnt >= 10
+        vePct := 100.0 * veBelow / veCnt
+if barstate.isconfirmed and slotNow >= 0 and not na(veMove)
+    for j = 0 to 18
+        matrix.set(veHBuf, slotNow, j, matrix.get(veHBuf, slotNow, j + 1))
+    matrix.set(veHBuf, slotNow, 19, veMove / c_)
+bool veAccel = not na(vePct) and not na(vePct[12]) and vePct - vePct[12] >= 20
+bool exitUp = not na(veMove[veK]) and c_ > c_[veK] + veMove[veK]
+bool exitDn = not na(veMove[veK]) and c_ < c_[veK] - veMove[veK]
+// target odds by trend strength (H4.3)
+int veQ = tvS0 > 0.5879 ? 4 : tvS0 > 0.4241 ? 3 : tvS0 > 0.2934 ? 2 : tvS0 > 0.183 ? 1 : 0
+string veP1 = tvState > 0 and veQ == 4 ? "31%" : tvState != 0 and veQ == 0 ? "21%" : "25%"
+string veP2 = tvState < 0 and veQ == 2 ? "7%" : "8%"
+// trailing stop for the current trend state (H4.5), with its hit state
+var float veBest = na
+var float veTrailD = na
+var bool veHit = false
+if tvState != tvState[1]
+    veBest := tvState > 0 ? h_ : tvState < 0 ? l_ : na
+    veTrailD := tvState != 0 ? 0.75 * veMove : na
+    veHit := false
+else if tvState > 0
+    veBest := math.max(nz(veBest, h_), h_)
+else if tvState < 0
+    veBest := math.min(nz(veBest, l_), l_)
+float veTrailStop = tvState > 0 ? veBest - veTrailD : tvState < 0 ? veBest + veTrailD : na
+if not na(veTrailStop) and ((tvState > 0 and c_ < veTrailStop) or (tvState < 0 and c_ > veTrailStop))
+    veHit := true
+// day range and the remaining move to the close (H3.2; 5-minute charts only)
+int veBarsDay = timeframe.isintraday ? math.max(1, math.ceil(390.0 / tfMin)) : 1
+var float veDayHi = na
+var float veDayLo = na
+var float veDayOpen = na
+var int veDayBar = na
+if newSess and not na(veS2)
+    float veDm = math.sqrt(veBarsDay * veS2) * o_
+    veDayHi := o_ + veDm
+    veDayLo := o_ - veDm
+    veDayOpen := o_
+    veDayBar := bar_index
+var float veRunHi = na
+var float veRunLo = na
+veRunHi := newSess ? h_ : math.max(nz(veRunHi, h_), h_)
+veRunLo := newSess ? l_ : math.min(nz(veRunLo, l_), l_)
+float veFuel = na(veDayHi) ? na : (veRunHi - veRunLo) / (veDayHi - veDayLo)
+int veSlot5end = timeframe.isintraday and slotNow >= 0 ? math.min(77, math.max(0, math.floor((slotNow + 1) * tfMin / 5.0) - 1)) : -1
+float veRemMove = tfMin == 5 and veSlot5end >= 0 ? array.get(veG5, veSlot5end) * math.sqrt(veS2) * c_ : na
+float veVix = request.security("CBOE:VIX", "D", close, lookahead=barmerge.lookahead_off)
+float veVixPct = request.security("CBOE:VIX", "D", ta.percentrank(close, 500), lookahead=barmerge.lookahead_off)
+float veV3 = request.security("CBOE:VIX3M", "D", close, lookahead=barmerge.lookahead_off)
+
+// ═══════════════ المربّع الأزرق: النافذة مرسومة داخل نافذة الشارت نفسها ═══════════════
+// price-space picture-in-picture: the last pWin candles and the tools are rescaled into a box that sits pBoxGap ATR
+// under the lowest low of the window and is pBoxH ATR tall. A faint plot at the box floor makes the chart's auto-scale
+// include it (boxes alone do not stretch the scale).
+float wLo = ta.lowest(l_, pWin)
+float wHi = ta.highest(h_, pWin)
+float boxBot = wLo - (pBoxGap + pBoxH) * atrV
+float boxTop = wLo - pBoxGap * atrV
+plot(pBoxOn ? boxBot - 0.3 * atrV : na, "قاع المربّع الأزرق", color=color.new(cWinB, 85), linewidth=1)
+var box winBox = na
+var line[] wLines = array.new_line()
+var box[] wBoxes = array.new_box()
+var label[] wLabels = array.new_label()
+var float[] wTrail = array.new_float()   // trailing stop of the last pWin bars (na when none)
+var bool[] wHit = array.new_bool()
+var float[] wHeat = array.new_float()
+var bool[] wSqz = array.new_bool()
+var bool[] wExU = array.new_bool()
+var bool[] wExD = array.new_bool()
+if barstate.isconfirmed
+    array.push(wTrail, veTrailStop), array.push(wHit, veHit), array.push(wHeat, vePct), array.push(wSqz, veSqzOn), array.push(wExU, exitUp), array.push(wExD, exitDn)
+    if array.size(wTrail) > pWin
+        array.shift(wTrail), array.shift(wHit), array.shift(wHeat), array.shift(wSqz), array.shift(wExU), array.shift(wExD)
+int exDnN = math.round(math.sum(exitDn ? 1.0 : 0.0, 12))
+int exUpN = math.round(math.sum(exitUp ? 1.0 : 0.0, 12))
+if pBoxOn and barstate.islast and not na(veMove) and not na(atrV) and atrV > 0
+    for ln in wLines
+        line.delete(ln)
+    for bx in wBoxes
+        box.delete(bx)
+    for lb in wLabels
+        label.delete(lb)
+    array.clear(wLines), array.clear(wBoxes), array.clear(wLabels)
+    box.delete(winBox)
+    // the price range mapped into the box: the window's candles, the fan, the day lines, the trailing stop
+    float pMin = math.min(wLo, c_ - 2 * veMove)
+    float pMax = math.max(wHi, c_ + 2 * veMove)
+    if pDay and not na(veDayHi)
+        pMin := math.min(pMin, veDayLo), pMax := math.max(pMax, veDayHi)
+    float span = math.max(pMax - pMin, syminfo.mintick)
+    // leave room under the candles for the two strips (18% of the box) and a little air on top
+    float yb = boxBot + 0.20 * pBoxH * atrV
+    float yt = boxTop - 0.03 * pBoxH * atrV
+    float kk = (yt - yb) / span
+    int x0 = bar_index - pWin + 1
+    int x1 = bar_index + pBoxAhead
+    winBox := box.new(x0 - 2, boxTop, x1 + 2, boxBot, border_color=cWinB, border_width=2, bgcolor=color.new(cWinF, 20), text="النافذة: آخر " + str.tostring(pWin) + " شمعة", text_color=color.new(cWinB, 30), text_size=size.tiny, text_halign=text.align_left, text_valign=text.align_top)
+    // mini candles
+    for j = pWin - 1 to 0
+        float yo = yb + (o_[j] - pMin) * kk
+        float yc = yb + (c_[j] - pMin) * kk
+        float yh = yb + (h_[j] - pMin) * kk
+        float yl = yb + (l_[j] - pMin) * kk
+        color cc = c_[j] >= o_[j] ? cUp : cDn
+        array.push(wLines, line.new(bar_index - j, yl, bar_index - j, yh, color=cc, width=1))
+        array.push(wBoxes, box.new(bar_index - j, math.max(yo, yc), bar_index - j, math.min(yo, yc), border_color=cc, bgcolor=cc, border_width=2))
+    // exits
+    if pExits
+        int nE = array.size(wExU)
+        for j = 0 to nE - 1
+            int xb = bar_index - (nE - 1 - j)
+            if array.get(wExD, j)
+                array.push(wLabels, label.new(xb, yb + (l_[nE - 1 - j] - pMin) * kk, "▼", style=label.style_label_up, color=color.new(cDn, 100), textcolor=cDn, size=size.tiny))
+            if array.get(wExU, j)
+                array.push(wLabels, label.new(xb, yb + (h_[nE - 1 - j] - pMin) * kk, "▲", style=label.style_label_down, color=color.new(cUp, 100), textcolor=cUp, size=size.tiny))
+    // trailing stop as segments between consecutive bars
+    if pTrail
+        int nT = array.size(wTrail)
+        for j = 1 to nT - 1
+            float a = array.get(wTrail, j - 1)
+            float b = array.get(wTrail, j)
+            if not na(a) and not na(b)
+                color tc = array.get(wHit, j) ? color.new(#78909c, 20) : cTrail
+                array.push(wLines, line.new(bar_index - (nT - j), yb + (a - pMin) * kk, bar_index - (nT - 1 - j), yb + (b - pMin) * kk, color=tc, width=2, style=array.get(wHit, j) ? line.style_dotted : line.style_solid))
+        if not na(veTrailStop)
+            array.push(wLabels, label.new(bar_index + 1, yb + (veTrailStop - pMin) * kk, "وقف متحرّك" + (veHit ? " · ضُرب" : ""), style=label.style_label_left, color=color.new(cTrail, 100), textcolor=veHit ? #78909c : cTrail, size=size.tiny))
+    // day lines
+    if pDay and not na(veDayHi)
+        float yDH = yb + (veDayHi - pMin) * kk
+        float yDL = yb + (veDayLo - pMin) * kk
+        array.push(wLines, line.new(x0, yDH, x1, yDH, color=color.new(cDay, 20), style=line.style_dashed, width=1))
+        array.push(wLines, line.new(x0, yDL, x1, yDL, color=color.new(cDay, 20), style=line.style_dashed, width=1))
+        array.push(wLabels, label.new(x0, yDH, "أعلى اليوم المتوقّع", style=label.style_label_lower_right, color=color.new(cDay, 100), textcolor=cDay, size=size.tiny))
+        array.push(wLabels, label.new(x0, yDL, "أدنى اليوم المتوقّع", style=label.style_label_upper_right, color=color.new(cDay, 100), textcolor=cDay, size=size.tiny))
+    // fan + ladder + remaining
+    float yC = yb + (c_ - pMin) * kk
+    int xe = bar_index + veK
+    if pFan
+        array.push(wBoxes, box.new(bar_index, yb + (c_ + 2 * veMove - pMin) * kk, xe, yb + (c_ - 2 * veMove - pMin) * kk, border_color=color.new(cMove, 80), bgcolor=color.new(cMove, 88)))
+        array.push(wBoxes, box.new(bar_index, yb + (c_ + veMove - pMin) * kk, xe, yb + (c_ - veMove - pMin) * kk, border_color=color.new(cMove, 70), bgcolor=color.new(cMove, 78)))
+        for m = 1 to 2
+            array.push(wLines, line.new(bar_index, yC, xe, yb + (c_ + m * veMove - pMin) * kk, color=color.new(cMove, m == 1 ? 10 : 50), width=m == 1 ? 2 : 1, style=line.style_dashed))
+            array.push(wLines, line.new(bar_index, yC, xe, yb + (c_ - m * veMove - pMin) * kk, color=color.new(cMove, m == 1 ? 10 : 50), width=m == 1 ? 2 : 1, style=line.style_dashed))
+            array.push(wLabels, label.new(xe, yb + (c_ + m * veMove - pMin) * kk, "+" + str.tostring(m) + "σ", style=label.style_label_left, color=color.new(cMove, 100), textcolor=cMove, size=size.tiny))
+            array.push(wLabels, label.new(xe, yb + (c_ - m * veMove - pMin) * kk, "−" + str.tostring(m) + "σ", style=label.style_label_left, color=color.new(cMove, 100), textcolor=cMove, size=size.tiny))
+        array.push(wLines, line.new(bar_index, yC, xe + 3, yC, color=color.new(cDn, 30), width=1, style=line.style_dotted))
+        array.push(wLabels, label.new(xe + 3, yC, str.tostring(c_, format.mintick), style=label.style_label_left, color=cDn, textcolor=color.white, size=size.tiny))
+    if pLadder
+        float y1 = yb + (c_ + veMove - pMin) * kk
+        float y2 = yb + (c_ + 2 * veMove - pMin) * kk
+        float ys = yb + (c_ - 0.75 * veMove - pMin) * kk
+        array.push(wLines, line.new(bar_index, y1, xe, y1, color=cTgt, width=2, style=line.style_dashed))
+        array.push(wLines, line.new(bar_index, y2, xe, y2, color=cTgt, width=2, style=line.style_dashed))
+        array.push(wLines, line.new(bar_index, ys, xe, ys, color=cDn, width=2))
+        array.push(wLabels, label.new(xe + 4, y1, "هدف 1× · " + veP1 + (veP1 != "25%" ? " (قوة الاتجاه)" : ""), style=label.style_label_left, color=color.new(cTgt, 100), textcolor=cTgt, size=size.tiny))
+        array.push(wLabels, label.new(xe + 4, y2, "هدف 2× · " + veP2, style=label.style_label_left, color=color.new(cTgt, 100), textcolor=cTgt, size=size.tiny))
+        array.push(wLabels, label.new(xe + 4, ys, "وقف 0.75× · يُضرب 5%", style=label.style_label_left, color=color.new(cDn, 100), textcolor=cDn, size=size.tiny))
+    if pRem and not na(veRemMove) and slotNow >= 0
+        int xend = math.min(x1, bar_index + (nSlots - 1 - slotNow))
+        float yr1 = yb + (c_ + veRemMove - pMin) * kk
+        float yr2 = yb + (c_ - veRemMove - pMin) * kk
+        array.push(wLines, line.new(bar_index, yr1, xend, yr1, color=color.new(cMove, 30), width=1, style=line.style_dotted))
+        array.push(wLines, line.new(bar_index, yr2, xend, yr2, color=color.new(cMove, 30), width=1, style=line.style_dotted))
+        array.push(wLabels, label.new(xend, yr2, "حتى الإغلاق ±" + str.tostring(veRemMove, format.mintick), style=label.style_label_up, color=color.new(cMove, 100), textcolor=color.new(cMove, 10), size=size.tiny))
+    // strips under the candles, inside the box
+    if pStrips
+        float sTop = boxBot + 0.17 * pBoxH * atrV
+        float sMid = boxBot + 0.10 * pBoxH * atrV
+        float sBot = boxBot + 0.02 * pBoxH * atrV
+        int nH = array.size(wHeat)
+        for j = 0 to nH - 1
+            int xb = bar_index - (nH - 1 - j)
+            float hp = array.get(wHeat, j)
+            bool sq = array.get(wSqz, j)
+            color hc = sq ? cSqz : na(hp) ? cNorm : hp < 50 ? color.from_gradient(hp, 0, 50, #1a1a2e, #1e88e5) : color.from_gradient(hp, 50, 100, #1e88e5, #ffd600)
+            array.push(wBoxes, box.new(xb, sTop, xb + 1, sMid + 0.01 * pBoxH * atrV, border_color=color.new(hc, 100), bgcolor=hc))
+            array.push(wBoxes, box.new(xb, sMid - 0.01 * pBoxH * atrV, xb + 1, sBot, border_color=color.new(cSqz, 100), bgcolor=sq ? cSqz : color.new(#2a2e39, 0)))
+        array.push(wLabels, label.new(bar_index + 1, (sTop + sMid) / 2, "حرارة التذبذب حسب وقت اليوم" + (na(vePct) ? "" : ": الآن " + str.tostring(vePct, "#") + "%") + (veAccel ? " ↑ تتسارع" : ""), style=label.style_label_left, color=color.new(cHot, 100), textcolor=cHot, size=size.tiny))
+        array.push(wLabels, label.new(bar_index + 1, (sMid + sBot) / 2, "الانضغاط" + (veSqzOn ? ": نعم منذ " + str.tostring(veSqzBars) + " شمعة · اصبر" : " (بنفسجي عند حدوثه)"), style=label.style_label_left, color=color.new(cSqz, 100), textcolor=cSqz, size=size.tiny))
+// the state box (compact, 6 rows)
+bPos = pBoxPos == "أسفل اليمين" ? position.bottom_right : pBoxPos == "أسفل اليسار" ? position.bottom_left : pBoxPos == "وسط اليمين" ? position.middle_right : position.top_right
+var table sb = table.new(bPos, 2, 6, bgcolor=color.new(#1e222d, 8), border_color=color.new(#3a3f4b, 0), border_width=1, frame_color=color.new(#1e88e5, 0), frame_width=1)
+if pBoxOn and pBox and barstate.islast
+    string dirW = tvState > 0 ? "صاعد" : tvState < 0 ? "هابط" : "لا اتجاه"
+    color dirC = tvState > 0 ? cUp : tvState < 0 ? cDn : #9598a1
+    bool hot = not na(vePct) and vePct >= 80
+    string verdict = tvState != 0 and veHit ? "الاتجاه " + dirW + " لكنّ وقفه المتحرّك ضُرب: لا صفقة جديدة حتى حالة جديدة" + (hot ? "؛ اليوم ساخن فصغّر الحجم" : "") : tvState != 0 ? "الاتجاه " + dirW + ": الصفقات معه فقط، الوقف المتحرّك " + str.tostring(veTrailStop, format.mintick) + "، هدف 1× " + veP1 + (hot ? "؛ اليوم ساخن فصغّر الحجم" : "") : "لا اتجاه: استعمل الوقف والهدف فقط" + (hot ? "؛ اليوم ساخن" : "")
+    if veSqzOn
+        verdict += "؛ انضغاط: اصبر"
+    string sTrail = na(veTrailStop) ? "-" : str.tostring(veTrailStop, format.mintick) + (veHit ? " ضُرب" : "")
+    tsz = pCompact ? size.tiny : size.small
+    table.cell(sb, 1, 0, "الآن " + str.format_time(time, "HH:mm", syminfo.timezone) + " · " + dirW, text_color=dirC, text_size=pCompact ? size.small : size.normal, text_halign=text.align_right)
+    table.cell(sb, 0, 0, "", text_size=tsz)
+    table.merge_cells(sb, 0, 0, 1, 0)
+    table.cell(sb, 1, 1, "الحركة", text_color=#9598a1, text_size=tsz, text_halign=text.align_right)
+    table.cell(sb, 0, 1, "±" + str.tostring(veMove, format.mintick) + " (" + str.tostring(veMovePct, "#.00") + "%)" + (na(veRemMove) ? "" : " · حتى الإغلاق ±" + str.tostring(veRemMove, format.mintick)), text_color=cMove, text_size=tsz, text_halign=text.align_left)
+    table.cell(sb, 1, 2, "هدف / وقف", text_color=#9598a1, text_size=tsz, text_halign=text.align_right)
+    table.cell(sb, 0, 2, veP1 + " / " + veP2 + " · وقف " + str.tostring(tvState < 0 ? c_ + 0.75 * veMove : c_ - 0.75 * veMove, format.mintick), text_color=cTgt, text_size=tsz, text_halign=text.align_left)
+    table.cell(sb, 1, 3, "متحرّك", text_color=#9598a1, text_size=tsz, text_halign=text.align_right)
+    table.cell(sb, 0, 3, sTrail + (na(veFuel) ? "" : " · مدى اليوم " + str.tostring(100 * veFuel, "#") + "%"), text_color=veHit ? #78909c : cTrail, text_size=tsz, text_halign=text.align_left)
+    table.cell(sb, 1, 4, "حرارة / انضغاط", text_color=#9598a1, text_size=tsz, text_halign=text.align_right)
+    table.cell(sb, 0, 4, (na(vePct) ? "-" : str.tostring(vePct, "#") + "%" + (vePct >= 80 ? " ساخن" : "") + (veAccel ? " ↑" : "")) + " · " + (veSqzOn ? "انضغاط منذ " + str.tostring(veSqzBars) : "لا انضغاط") + " · خروج " + str.tostring(exDnN) + "▼ " + str.tostring(exUpN) + "▲", text_color=cHot, text_size=tsz, text_halign=text.align_left)
+    table.cell(sb, 0, 5, verdict, text_color=cHot, text_size=tsz, text_halign=text.align_right)
+    table.merge_cells(sb, 0, 5, 1, 5)
+alertcondition(veSqzOn and not veSqzOn[1], "انضغاط", "دخل السعر في انضغاط (ATR14/ATR100 تحت عُشره المعتاد)")
+alertcondition(not na(rvol) and rvol >= 2, "فوليوم عالٍ جدًا", "RVOL ≥ 2× لنفس الدقيقة")
+alertcondition(veHit and not veHit[1], "ضُرب الوقف المتحرّك", "الإغلاق عبر الوقف المتحرّك للاتجاه الحالي")
