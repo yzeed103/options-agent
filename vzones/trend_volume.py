@@ -14,6 +14,7 @@ BEYOND = 0.3                             # ATR beyond M that ends the trend
 MAX_PULL = 12
 MIN_LEG = 5
 HORIZON = 24
+HORIZON_TF = {5: 24, 15: 8, 60: 3}         # the same two hours in bars (a 15m session has 26 bars, a 1h session 7)
 
 
 def trend_state(c: np.ndarray, M: np.ndarray) -> np.ndarray:
@@ -148,14 +149,14 @@ def first_passage(h, l, c, A, sess, t: int, dr: int, horizon: int = HORIZON):
     return 0.0, horizon + 1
 
 
-def targets(frames: dict, ev: pd.DataFrame) -> pd.DataFrame:
+def targets(frames: dict, ev: pd.DataFrame, horizon: int = HORIZON) -> pd.DataFrame:
     """R1 first passage in the trend direction, its continuous form, R2 next leg >= previous leg, R3 alive after 24 bars."""
     h, l, c, A, M, sess = (frames[k] for k in ("h", "l", "c", "A", "M", "sess"))
     r1, cont, r2, r3 = [], [], [], []
     for t, dr, pl in zip(ev["t"], ev["dir"], ev["prev_leg_len"]):
-        fp, k = first_passage(h, l, c, A, sess, int(t), int(dr))
+        fp, k = first_passage(h, l, c, A, sess, int(t), int(dr), horizon)
         r1.append(fp)
-        cont.append(np.nan if not np.isfinite(fp) else (HORIZON + 1 - k) * fp if fp != 0 else 0.0)
+        cont.append(np.nan if not np.isfinite(fp) else (horizon + 1 - k) * fp if fp != 0 else 0.0)
         # next leg length: bars from t until the close is beyond M against the trend by BEYOND ATR (same session, cap 100)
         j, L = int(t), 0
         while j + 1 < len(c) and sess[j + 1] == sess[j] and L < 100:
@@ -164,17 +165,17 @@ def targets(frames: dict, ev: pd.DataFrame) -> pd.DataFrame:
                 break
             L += 1
         r2.append(float(L >= pl) if np.isfinite(pl) else np.nan)
-        r3.append(np.nan if not np.isfinite(fp) else float(dr * (c[int(t) + HORIZON] - M[int(t) + HORIZON]) > 0))
+        r3.append(np.nan if not np.isfinite(fp) else float(dr * (c[int(t) + horizon] - M[int(t) + horizon]) > 0))
     out = ev.copy()
     out["R1"], out["R1_cont"], out["R2"], out["R3"] = r1, cont, r2, r3
     return out
 
 
-def climax_targets(frames: dict, clx: pd.DataFrame) -> pd.DataFrame:
+def climax_targets(frames: dict, clx: pd.DataFrame, horizon: int = HORIZON) -> pd.DataFrame:
     h, l, c, A, sess = (frames[k] for k in ("h", "l", "c", "A", "sess"))
     rev = []
     for t, dr in zip(clx["t"], clx["dir"]):
-        fp, _ = first_passage(h, l, c, A, sess, int(t), int(dr))
+        fp, _ = first_passage(h, l, c, A, sess, int(t), int(dr), horizon)
         rev.append(np.nan if not np.isfinite(fp) else float(fp < 0))      # reversal = the stop side came first
     out = clx.copy(); out["reversal"] = rev
     return out

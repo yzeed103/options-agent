@@ -80,3 +80,9 @@ price-only climax bars. H6 the first 30 minutes do not show what the rest of the
   the pattern score recovers ≥ 70% of the planted lift and the control's lift is unchanged between Q1 and Q2 (same
   prices, same events, within 0.01). (c) After a resumption the new leg must again reach 5 bars before a pullback can
   start (the first version allowed 1-bar legs).
+- 2026-10-24, found on the first real-data run, after the 5m numbers were seen (5m unchanged by these): (d) the
+  24-bar first-passage horizon does not fit a 15m session (26 bars) or a 1h session (7 bars); the horizon is now the
+  same two hours in bars (5m 24, 15m 8, 1h 3). (e) On 1h there are **no events at all**: a 5-bar leg, a 2-bar
+  pullback and a resumption do not fit in a 7-bar session with events confined to one session; the 1h clause of the
+  verdict rule is void, the verdict rests on 5m and 15m. (f) H6 (first 30 minutes) is moot: the earliest possible
+  event is 35 minutes into the session.

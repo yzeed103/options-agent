@@ -77,7 +77,7 @@ def collect(items, tf, sym_of, train_mask_of=None):
         F, ev, clx = TV.detect(d, tf)
         if len(ev) == 0:
             continue
-        Y = TV.targets(F, ev)
+        Y = TV.targets(F, ev, TV.HORIZON_TF.get(tf, TV.HORIZON))
         Y["sym"] = sym_of(name); Y["date"] = [str(F["sess"][t]) for t in Y["t"]]
         Y["block"] = Y["sym"] + "|" + Y["date"]
         Y["slot"] = [int((d.index[t].hour * 60 + d.index[t].minute - 570) // tf) for t in Y["t"]]
@@ -151,8 +151,17 @@ def run_verdict():
     days = sorted(set().union(*[set(F[s][390].index.date) for s in syms]))
     cut = days[int(0.6 * len(days))]
     res = {"split": {"train_end_before": str(cut), "days": len(days)}, "tf": {}}
+    prev = os.path.join(OUT, "verdict.json")
+    if os.path.exists(prev):                                   # resume: timeframes already done are kept
+        res["tf"] = {int(k): v for k, v in json.load(open(prev)).get("tf", {}).items()}
     for tf in (5, 15, 60):
+        if tf in res["tf"]:
+            continue
         EV = collect([(s, F[s][tf]) for s in syms], tf, lambda nm: nm, lambda sess: sess < cut)
+        if len(EV) == 0:                                      # 1h: a session has 7 bars, a leg + pullback + resumption needs more
+            res["tf"][tf] = {"n_events_train": 0, "n_events_test": 0, "note": "no events: a session has too few bars for a 5-bar leg, a 2-bar pullback and a resumption"}
+            json.dump(res, open(os.path.join(OUT, "verdict.json"), "w"), indent=1)
+            continue
         tr = EV["train"].to_numpy(bool); te = ~tr
         out = {"n_events_train": int(tr.sum()), "n_events_test": int(te.sum())}
         for tgt in ("R1", "R2", "R3"):
@@ -167,7 +176,7 @@ def run_verdict():
         for s in syms:
             Fr, ev, clx = TV.detect(F[s][tf], tf)
             if len(clx):
-                C = TV.climax_targets(Fr, clx); C["sym"] = s; C["train"] = [Fr["sess"][t] < cut for t in C["t"]]; C["block"] = s + "|" + pd.Series([str(Fr["sess"][t]) for t in C["t"]])
+                C = TV.climax_targets(Fr, clx, TV.HORIZON_TF.get(tf, TV.HORIZON)); C["sym"] = s; C["train"] = [Fr["sess"][t] < cut for t in C["t"]]; C["block"] = s + "|" + pd.Series([str(Fr["sess"][t]) for t in C["t"]])
                 rows.append(C)
         CL = pd.concat(rows, ignore_index=True)
         ct = CL[~CL["train"].to_numpy(bool) & np.isfinite(CL["reversal"])]
@@ -192,13 +201,13 @@ def run_verdict():
                     lg.append((name, SV.trend_lag_real(lambda *a, M=M: M, o, h, l, c, m)))
             out["hull_vwma_vs_hull"] = {nm: dict(flips=round(float(np.mean([x for n_, x in fl if n_ == nm])), 3), noise=round(float(np.mean([x for n_, x in nz if n_ == nm])), 4), lag=round(float(np.mean([x for n_, x in lg if n_ == nm])), 2)) for nm in ("HMA", "HullVWMA")}
         res["tf"][tf] = out
-        print(tf, "events", out["n_events_test"], "R1 base", out["R1"]["base"], "P", out["R1"]["measures"]["P"], "control", out["R1"]["measures"]["control"]["lift"], f"{time.time() - t0:.0f}s", flush=True)
+        print(tf, "events", out["n_events_test"], "R1 base", out["R1"]["base"], "P", out["R1"]["measures"]["P"], "control", out["R1"]["measures"]["control"].get("lift"), f"{time.time() - t0:.0f}s", flush=True)
         json.dump(res, open(os.path.join(OUT, "verdict.json"), "w"), indent=1)
     # verdict by the rule
     def beats(tf):
         p = res["tf"][tf]["R1"]["measures"]["P"]; return p.get("diff_lo", -1) > 0 and p.get("lift_lo", 0) > 1
     g_ok = sum(1 for g, v in res["tf"][5]["groups"].items() if v["measures"]["P"].get("diff_lo", -1) > 0)
-    rev1h = res["tf"][60]["R1"]["measures"]["P"].get("diff", 0) < 0
+    rev1h = res["tf"][60].get("R1", {}).get("measures", {}).get("P", {}).get("diff", 0) < 0
     n_tf = sum(1 for tf in (5, 15) if beats(tf))
     label = "works" if n_tf == 2 and g_ok >= 2 and not rev1h else "weak" if n_tf >= 1 or any(res["tf"][tf]["R1"]["measures"]["P"].get("diff", 0) > 0 and res["tf"][tf]["R1"]["measures"]["P"].get("lift_lo", 0) > 1 for tf in (5, 15)) else "no"
     res["verdict"] = dict(label=label, timeframes_beating_control=n_tf, groups_beating_control=g_ok, reversed_on_1h=bool(rev1h))
