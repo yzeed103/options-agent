@@ -1,0 +1,135 @@
+{
+ "V1": {
+  "fits": {
+   "lam": 0.99,
+   "garch": [
+    0.15460145539131687,
+    0.0029624558372069185,
+    0.84246913734722
+   ],
+   "har": [
+    6.245982371891886,
+    0.008136692573496501,
+    0.03560384257550471,
+    -0.2893503216322092
+   ],
+   "std_note": "fits on standardized returns; applied per symbol after rescaling"
+  },
+  "qlike": {
+   "EWMA": -6.15463,
+   "GARCH": -6.42051,
+   "HAR": -6.42043
+  },
+  "garch_minus_ewma": {
+   "mean": -0.26588,
+   "lo": -0.74638,
+   "hi": -0.01089,
+   "n": 20
+  },
+  "har_minus_ewma": {
+   "mean": -0.2658,
+   "lo": -0.74581,
+   "hi": -0.01087,
+   "n": 20
+  },
+  "coverage_z1": 0.6785,
+  "coverage_z2": 0.9527,
+  "squeeze": {
+   "n": 3917,
+   "expansion_real": 0.4789,
+   "expansion_random": 0.5007,
+   "lift": {
+    "mean": -0.02176,
+    "lo": -0.05159,
+    "hi": 0.00727,
+    "n": 3917
+   },
+   "direction_up": 0.5024,
+   "by_window": {
+    "24": {
+     "n": 3910,
+     "real": 0.4668,
+     "random": 0.5026,
+     "diff": -0.0358
+    },
+    "48": {
+     "n": 3903,
+     "real": 0.4791,
+     "random": 0.5035,
+     "diff": -0.0244
+    }
+   }
+  },
+  "garch_alpha": 0.003,
+  "pass": true
+ },
+ "V2": {
+  "fits": {
+   "lam": 0.9,
+   "garch": [
+    0.0004409639986162833,
+    0.1922728526898003,
+    0.8069194201628791
+   ],
+   "har": [
+    1.6885362832507793,
+    0.7444694289472502,
+    3.43059668922752,
+    0.13724331849526092
+   ],
+   "std_note": "fits on standardized returns; applied per symbol after rescaling"
+  },
+  "qlike": {
+   "EWMA": -6.03524,
+   "GARCH": -6.18458,
+   "HAR": -4.621
+  },
+  "garch_minus_ewma": {
+   "mean": -0.14934,
+   "lo": -0.19714,
+   "hi": -0.07637,
+   "n": 20
+  },
+  "har_minus_ewma": {
+   "mean": 1.41424,
+   "lo": 1.09904,
+   "hi": 1.76782,
+   "n": 20
+  },
+  "coverage_z1": 0.6973,
+  "coverage_z2": 0.9298,
+  "squeeze": {
+   "n": 1713,
+   "expansion_real": 0.4635,
+   "expansion_random": 0.504,
+   "lift": {
+    "mean": -0.04046,
+    "lo": -0.08347,
+    "hi": 0.002,
+    "n": 1713
+   },
+   "direction_up": 0.4997,
+   "by_window": {
+    "24": {
+     "n": 1711,
+     "real": 0.5015,
+     "random": 0.5038,
+     "diff": -0.0023
+    },
+    "48": {
+     "n": 1707,
+     "real": 0.546,
+     "random": 0.5009,
+     "diff": 0.0451
+    }
+   },
+   "planted_events_48": {
+    "n": 443,
+    "real": 0.6772,
+    "random": 0.5028
+   }
+  },
+  "garch_r2_vs_true": 0.908,
+  "pass": true
+ }
+}

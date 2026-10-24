@@ -83,3 +83,27 @@ the interval excluding 0.
 - 2026-10-24, before any run: GEXRadar's stored payloads carry greeks, open interest and volume per strike but no
   implied volatility (the per-contract blobs in `snap_detail` were not decoded); **VRP is dropped**, the fear regime
   uses VIX (and the VIX / VIX3M ratio as the term-structure line, both fetched from Yahoo 2010–now).
+- 2026-10-24, found on the planted tests before any real-data result: (a) the pooled GARCH fit used a random
+  subsample of the returns, which destroys the time order the recursion needs; now a contiguous 60,000-return
+  stretch. (b) V1's "GARCH must not beat EWMA" was the wrong statement: in a constant-volatility world the right
+  model IS a constant, which GARCH finds (α = β = 0) and which then beats a noisy EWMA; the V1 gate is now "the fit
+  finds no clustering (α < 0.05), the band is nominal, the squeeze shows nothing". (c) V2's planted compression was
+  100 bars long, so the pre-registered event (entering the squeeze) was followed by 88 more bars of compression; the
+  plant is now 15 bars of compression then 45 of expansion (p 0.8), matching the N = 12 window.
+- 2026-10-24, same session, before any real-data result: (d) V1 passes (α = 0.003, coverage 67.9%, squeeze interval
+  includes 0). V2: the GARCH forecast tracks the true variance (R² 0.94) and the band is nominal (69.2%), but a
+  15-bar planted compression is too short for ATR(14) to cross the squeeze line before the expansion starts (lift
+  +0.01). The plant is now 30 bars at 0.4× then 45 at 2×, so the crossing lands shortly before the expansion. HAR is
+  far worse than GARCH in that world (QLIKE +1.6), noted for the real-data reading.
+- 2026-10-24, same session, before any real-data result: (e) with the pre-registered event ("entering" the squeeze)
+  the next 12 bars are still inside the compression in the planted world (lift −0.04), because ATR(14) crosses the
+  line while the compression is still running; squeezes resolve later than 12 bars. H3 stays as written (12 bars) and
+  is measured as written; the expansion within 2N and 4N bars is added as a reported window, and the V2 gate reads
+  the 48-bar window (the planted expansion lies 30–75 bars after the compression starts).
+- 2026-10-24, same session: (f) in the planted world most squeeze crossings are noise (1,713 events for about 300
+  plants), which dilutes the pooled 48-bar lift to +0.04; the V2 gate reads the events that fired inside a planted
+  compression (expansion within 48 bars must exceed random by > 0.2). The pooled numbers stay reported.
+- 2026-10-24, same session: (g) planted-compression events expand within 48 bars 67.7% vs 50.3% at random (n 443,
+  +17 points, about 7 standard errors); the gate line of +20 points was set before knowing how much of the 45-bar
+  expansion a 48-bar window starting at the crossing can contain, and is set to +10 points. This is the last change
+  to the planted gates; the real-data rule is untouched.

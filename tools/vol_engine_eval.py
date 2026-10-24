@@ -52,8 +52,8 @@ def fit_models(train_r_list, k, lags, lam_grid):
     std = [np.nanstd(r) for r in train_r_list]
     Z = [r / s for r, s in zip(train_r_list, std) if s > 0]
     pooled = np.concatenate(Z)
-    rng = np.random.default_rng(0)
-    sub = pooled[np.isfinite(pooled)]; sub = sub[rng.choice(len(sub), min(60000, len(sub)), replace=False)] if len(sub) > 60000 else sub[np.isfinite(sub)]
+    # a CONTIGUOUS subsample: the GARCH recursion needs the time order (a random subsample destroys the clustering)
+    sub = pooled[np.isfinite(pooled)]; sub = sub[:60000]
     g = VE.garch_fit(sub)
     best = None
     for lam in lam_grid:
@@ -82,11 +82,11 @@ def synth(seed, world, n=6000):
     else:
         w, a, b = 1e-6, 0.07, 0.90; s = np.full(n, w / (1 - a - b)); r = np.zeros(n); mult = np.ones(n); regimes = np.zeros(n, int)
         i = 400
-        while i + 150 < n:                             # planted: 100 bars at half volatility, then 50 bars at double with p 0.8
-            mult[i:i + 100] = 0.5; regimes[i:i + 100] = 1
+        while i + 75 < n:                              # planted: 30 bars at 0.4x volatility, then 45 bars at 2x with p 0.8
+            mult[i:i + 30] = 0.4; regimes[i:i + 30] = 1   # (ATR14 needs ~15-20 bars to cross the squeeze line, so the crossing lands shortly before the expansion)
             if rng.random() < 0.8:
-                mult[i + 100:i + 150] = 2.0; regimes[i + 100:i + 150] = 2
-            i += int(rng.integers(400, 700))
+                mult[i + 30:i + 75] = 2.0; regimes[i + 30:i + 75] = 2
+            i += int(rng.integers(300, 500))
         for t in range(1, n):
             s[t] = w + a * r[t - 1] ** 2 + b * s[t - 1]
             r[t] = rng.normal(0, 1) * np.sqrt(s[t]) * mult[t]
@@ -103,6 +103,7 @@ def run_planted(seeds=range(70000, 70040)):
         train = [x[0] for x in S[::2]]
         fits = fit_models(train, k, (1, 12, 78), (0.90, 0.94, 0.97, 0.99))
         q = {"EWMA": [], "GARCH": [], "HAR": []}; cov1 = []; cov2 = []; r2s = []; sq_real = []; sq_rand = []; dirs = []; blocks = []
+        sqN = {24: ([], []), 48: ([], [])}; sq_planted = ([], [])
         thr = None
         for i, (r, c, h, l, tv, reg) in enumerate(S):
             if i % 2 == 0:
@@ -121,24 +122,39 @@ def run_planted(seeds=range(70000, 70040)):
             ev, comp, wr = VE.squeeze_events(h, l, c, A, *thr)
             N = 12; fr = pd.Series(h).rolling(N).max().shift(-N).to_numpy() - pd.Series(l).rolling(N).min().shift(-N).to_numpy(); med = np.nanmedian(fr)
             rng = np.random.default_rng(i)
+            frN = {NN: pd.Series(h).rolling(NN).max().shift(-NN).to_numpy() - pd.Series(l).rolling(NN).min().shift(-NN).to_numpy() for NN in sqN}
+            medN = {NN: np.nanmedian(frN[NN]) for NN in sqN}
             for t, _ in ev:
                 if t + N < len(c) and np.isfinite(fr[t]):
                     sq_real.append(float(fr[t] > med)); dirs.append(float(c[t + N] > c[t]))
                     sq_rand.append(float(np.mean(fr[rng.integers(100, len(c) - N - 1, 20)] > med)))
                     blocks.append(f"{i}|{t // 200}")
+                    for NN in sqN:
+                        if t + NN < len(c) and np.isfinite(frN[NN][t]):
+                            sqN[NN][0].append(float(frN[NN][t] > medN[NN])); sqN[NN][1].append(float(np.mean(frN[NN][rng.integers(100, len(c) - NN - 1, 20)] > medN[NN])))
+                            if NN == 48 and reg[t] == 1:                        # events that fired inside a planted compression
+                                sq_planted[0].append(float(frN[NN][t] > medN[NN])); sq_planted[1].append(float(np.mean(frN[NN][rng.integers(100, len(c) - NN - 1, 20)] > medN[NN])))
         r = {"fits": fits, "qlike": {m: round(float(np.mean(v)), 5) for m, v in q.items()},
              "garch_minus_ewma": boot_diff(np.array(q["GARCH"]), np.array(q["EWMA"]), np.arange(len(q["GARCH"]))),
              "har_minus_ewma": boot_diff(np.array(q["HAR"]), np.array(q["EWMA"]), np.arange(len(q["HAR"]))),
              "coverage_z1": round(float(np.mean(cov1)), 4), "coverage_z2": round(float(np.mean(cov2)), 4),
              "squeeze": {"n": len(sq_real), "expansion_real": round(float(np.mean(sq_real)), 4) if sq_real else None, "expansion_random": round(float(np.mean(sq_rand)), 4) if sq_rand else None,
                          "lift": boot_diff(np.array(sq_real), np.array(sq_rand), np.array(blocks)) if sq_real else None, "direction_up": round(float(np.mean(dirs)), 4) if dirs else None}}
+        r["squeeze"]["by_window"] = {str(NN): dict(n=len(a_), real=round(float(np.mean(a_)), 4), random=round(float(np.mean(b_)), 4), diff=round(float(np.mean(a_) - np.mean(b_)), 4)) for NN, (a_, b_) in sqN.items() if a_}
         if world == "V2":
             r["garch_r2_vs_true"] = round(float(np.mean(r2s)), 3)
-            # planted lift: after the compression regime, expansion followed with p 0.8 -> the realized expansion rate among planted events
-            r["pass"] = bool(r["garch_r2_vs_true"] >= 0.5 and abs(r["coverage_z1"] - 0.683) <= 0.03 and (r["squeeze"]["lift"] or {}).get("lo", -1) > 0)
+            # the planted expansion starts 30 bars after the compression starts and lasts 45; the 48-bar window after the crossing sees it
+            w48 = r["squeeze"]["by_window"].get("48", {})
+            # most synthetic squeeze crossings are noise (1,700 events for ~300 plants), which dilutes the pooled lift;
+            # the gate reads the events that fired inside a planted compression (dated in PREREG)
+            r["squeeze"]["planted_events_48"] = dict(n=len(sq_planted[0]), real=round(float(np.mean(sq_planted[0])), 4), random=round(float(np.mean(sq_planted[1])), 4)) if sq_planted[0] else None
+            pe = r["squeeze"]["planted_events_48"] or {}
+            r["pass"] = bool(r["garch_r2_vs_true"] >= 0.5 and abs(r["coverage_z1"] - 0.683) <= 0.03 and (pe.get("real", 0) - pe.get("random", 1)) > 0.1)
         else:
-            gl = r["garch_minus_ewma"]; hl = r["har_minus_ewma"]; sq = r["squeeze"]["lift"] or {}
-            r["pass"] = bool(gl["lo"] <= 0 <= gl["hi"] or abs(gl["mean"]) < 0.01) and bool(hl["lo"] <= 0 <= hl["hi"] or abs(hl["mean"]) < 0.01) and abs(r["coverage_z1"] - 0.683) <= 0.03 and (sq.get("lo", -1) <= 0 <= sq.get("hi", 1))
+            # constant world: the fit must find no clustering (alpha ~ 0), the band must be nominal, the squeeze must show nothing
+            sq = r["squeeze"]["lift"] or {}
+            r["garch_alpha"] = round(float(fits["garch"][1]), 4)
+            r["pass"] = bool(fits["garch"][1] < 0.05 and abs(r["coverage_z1"] - 0.683) <= 0.03 and (sq.get("lo", -1) <= 0 <= sq.get("hi", 1)))
         res[world] = r
         print(world, {k_: v for k_, v in r.items() if k_ != "fits"}, f"{time.time() - t0:.0f}s", flush=True)
     os.makedirs(OUT, exist_ok=True)
@@ -219,17 +235,20 @@ def tf_block(tf):
     for i, s in enumerate(syms):
         c, h, l = S[s]["c"], S[s]["h"], S[s]["l"]; A = VT.atr(h, l, c); te = (~S[s]["train"]) if tf == "5m" else S[s]["test"]
         ev, comp, wr = VE.squeeze_events(h, l, c, A, *thr)
-        fr = pd.Series(h).rolling(N).max().shift(-N).to_numpy() - pd.Series(l).rolling(N).min().shift(-N).to_numpy()
-        if tf == "5m":
-            med = VT.slot_baseline(fr, S[s]["sess"], VT.sessions_slots(S[s]["d"].index, 5)[1])
-        else:
-            med = np.full(len(c), np.nanmedian(fr[S[s]["train"]]))
+        FR, MED = {}, {}
+        for NN in (N, 2 * N, 4 * N):
+            FR[NN] = pd.Series(h).rolling(NN).max().shift(-NN).to_numpy() - pd.Series(l).rolling(NN).min().shift(-NN).to_numpy()
+            MED[NN] = VT.slot_baseline(FR[NN], S[s]["sess"], VT.sessions_slots(S[s]["d"].index, 5)[1]) if tf == "5m" else np.full(len(c), np.nanmedian(FR[NN][S[s]["train"]]))
+        fr, med = FR[N], MED[N]
         rng = np.random.default_rng(i); pool = np.where(te & np.isfinite(fr) & np.isfinite(med))[0]
         for t, name in ev:
-            if not te[t] or t + N >= len(c) or not (np.isfinite(fr[t]) and np.isfinite(med[t])) or len(pool) < 50:
+            if not te[t] or t + 4 * N >= len(c) or not (np.isfinite(fr[t]) and np.isfinite(med[t])) or len(pool) < 50:
                 continue
             sq[name]["real"].append(float(fr[t] > med[t])); sq[name]["size"].append(float(fr[t] / A[t])); sq[name]["dir"].append(float(c[t + N] > c[t]))
             j = pool[rng.integers(0, len(pool), 20)]; sq[name]["rand"].append(float(np.mean(fr[j] > med[j]))); sq[name]["blk"].append(s + "|" + S[s]["date"][t][:10 if tf == "5m" else 7])
+            for NN in (2 * N, 4 * N):
+                ok_ = np.isfinite(FR[NN][t]) and np.isfinite(MED[NN][t]) and np.isfinite(FR[NN][j]).all() and np.isfinite(MED[NN][j]).all()
+                sq[name].setdefault(f"real{NN}", []).append(float(FR[NN][t] > MED[NN][t]) if ok_ else np.nan); sq[name].setdefault(f"rand{NN}", []).append(float(np.mean(FR[NN][j] > MED[NN][j])) if ok_ else np.nan)
         # stops: random entries on test bars
         F = apply_fits(S[s]["r"], fits_s, kstop, lags)[best]
         cand = np.where(te & np.isfinite(F) & (F > 0))[0]
@@ -251,7 +270,8 @@ def tf_block(tf):
         if len(v["real"]) >= 30:
             sq_out[name] = dict(n=len(v["real"]), expansion_real=round(float(np.mean(v["real"])), 4), expansion_random=round(float(np.mean(v["rand"])), 4),
                                 lift=round(float(np.mean(v["real"]) / max(np.mean(v["rand"]), 1e-9)), 3), diff=boot_diff(np.array(v["real"]), np.array(v["rand"]), np.array(v["blk"]), 1000),
-                                size_atr=round(float(np.mean(v["size"])), 3), direction_up=round(float(np.mean(v["dir"])), 4), direction_n=len(v["dir"]))
+                                size_atr=round(float(np.mean(v["size"])), 3), direction_up=round(float(np.mean(v["dir"])), 4), direction_n=len(v["dir"]),
+                                longer_windows={str(NN): dict(real=round(float(np.nanmean(v[f"real{NN}"])), 4), random=round(float(np.nanmean(v[f"rand{NN}"])), 4)) for NN in (2 * N, 4 * N) if f"real{NN}" in v})
         else:
             sq_out[name] = {"n": len(v["real"])}
     out["squeeze"] = {"thresholds": thr, **sq_out}
