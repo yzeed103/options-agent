@@ -1,6 +1,6 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 // © options-agent — Volume Zones · لوحة: نافذة مرافقة تحت الشموع (reports/vol_engine, reports/vol_engine_dev, 2026-10-25).
-// v31: every element has its own settings group. v27: the 40-item review. The seasonal profile is aligned to the New York clock, the session comes from the symbol's
+// v32: short fan length / crossing the close, up to 5000 bars, box in three sizes. v31: every element has its own settings group. v27: the 40-item review. The seasonal profile is aligned to the New York clock, the session comes from the symbol's
 // regular session (length from its daily close), the fan is a time-based curve, exits are measured against that fan,
 // the old modes are gone.
 //@version=6
@@ -8,13 +8,15 @@
 // live fan 2 boxes + ~8 lines + ~8 labels + 4 polylines; ghosts 2 boxes + 3 lines + 1 label each (20 = 40 / 60 / 20);
 // day ranges 2 lines per session (20 = 40) + 2 labels. Total ≈ 444 boxes, 110 lines, 32 labels, 4 polylines; a guard
 // stops drawing ghosts when the box count would pass 480.
-indicator("Volume Zones · لوحة", "VZ لوحة", overlay=false, format=format.price, precision=2, max_boxes_count=500, max_lines_count=500, max_labels_count=500, max_polylines_count=20)
+indicator("Volume Zones · لوحة", "VZ لوحة", overlay=false, format=format.price, precision=2, max_boxes_count=500, max_lines_count=500, max_labels_count=500, max_polylines_count=20, max_bars_back=5000)
 
 // ═══════════════ المدخلات: كلّ عنصر في مجموعته (إظهار، لون، سماكة، نمط، حجم نصّ) ═══════════════
 G_A = "1 · الأساس"
 pFanMode = input.string("الجلسة كاملة", "أفق المروحة", options=["الجلسة كاملة", "أفق قصير يتجدّد"], tooltip="الجلسة كاملة: المروحة والأهداف ونطاق اليوم تبدأ من افتتاح الجلسة العادية وتنتهي بإغلاقها، ولا تتحرّك، وتتجدّد مع اليوم الجديد. المروحة منحنى يكبر مع الوقت حسب نمط التذبذب خلال اليوم. أفق قصير: مروحة بأفق حسب الفريم تتجدّد كلّما بقي أمام السعر أقلّ من N شمعة", group=G_A)
-pWin    = input.int(0, "عدد الشموع المعروضة (0 = تلقائي)", minval=0, maxval=400, tooltip="تلقائي: جلسة ونصف (بين 60 و400 شمعة). المروحة تمتدّ أمام السعر حتى الإغلاق، فاضبط «الهامش الأيمن» في إعدادات الشارت بما يكفي", group=G_A)
+pWin    = input.int(0, "عدد الشموع المعروضة (0 = تلقائي)", minval=0, maxval=5000, tooltip="تلقائي: جلسة ونصف. أيّ رقم حتى 5000 شمعة (الحدّ الأعلى في TradingView لهذا النوع من المؤشّرات). فوق 200 شمعة يُرسم الشريطان بصندوق لكلّ عدّة شموع حتى يبقيا ضمن حدود الرسم", group=G_A)
 pScale  = input.string("الشموع و±1σ", "مقياس اللوحة يشمل", options=["الشموع فقط", "الشموع و±1σ", "الشموع و±2σ"], tooltip="ما يدخل في المقياس التلقائي للّوحة. ±2σ لليوم كاملًا يضغط الشموع", group=G_A)
+pShortH = input.int(0, "الأفق القصير: طول المروحة بالشموع (0 = حسب الفريم)", minval=0, maxval=500, tooltip="0 = حسب الفريم: 5د 24 شمعة، 15د 12، 30د 8، ساعة 6. أيّ رقم آخر يُستعمل كما هو", group=G_A)
+pShortCap = input.bool(false, "الأفق القصير: يتوقّف عند إغلاق الجلسة", tooltip="معطّل (الافتراضي): المروحة تكمل طولها وتعبر الإغلاق إلى الجلسة التالية، فلا تقصر قرب نهاية اليوم. مفعّل: تُقصّ عند الإغلاق", group=G_A)
 pLead   = input.int(5, "الأفق القصير: شموع أمام السعر على الأقلّ", minval=3, maxval=20, tooltip="للأفق القصير فقط: عندما يبقى أمام السعر هذا العدد من الشموع حتى نهاية أفق المروحة تُفتح مرساة جديدة", group=G_A)
 pSessMin = input.int(0, "طول الجلسة بالدقائق (0 = تلقائي)", minval=0, maxval=1440, tooltip="تلقائي: من الجلسة العادية للرمز نفسه، وطولها من وقت إغلاق اليوم (أنصاف أيّام العطل محسوبة)", group=G_A)
 
@@ -145,7 +147,7 @@ szSqzK  = input.string("عادي", "الحجم", options=["صغير جدًا", "
 G_SB = "17 · مربّع «الحالة الآن»"
 pBox    = input.bool(true, "إظهار المربّع", inline="sb", group=G_SB)
 pBoxPos = input.string("وسط اليمين", "", options=["وسط اليمين", "أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "وسط اليسار", "أسفل اليسار"], inline="sb", group=G_SB)
-pTblSz  = input.string("صغير", "حجم النصّ", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="sb2", group=G_SB)
+pTblSz  = input.string("وسط", "حجم المربّع", options=["صغير", "وسط", "كبير"], inline="sb2", group=G_SB)
 pCompact = input.bool(false, "مختصر (6 أسطر)", inline="sb2", group=G_SB)
 pTblAuto = input.bool(true, "ألوان المربّع تلقائية حسب الثيم", tooltip="مفعّل: الخلفية والإطار والنصوص تتبع ثيم الشارت الفاتح أو الداكن. معطّل: الألوان أدناه", group=G_SB)
 cTblBgIn = input.color(#1e222d, "الخلفية", inline="sb3", group=G_SB)
@@ -173,8 +175,8 @@ rVerd = input.bool(true, "الخلاصة", inline="r5", group=G_SR)
 szOf(string k) => k == "صغير جدًا" ? size.tiny : k == "صغير" ? size.small : k == "كبير" ? size.large : size.normal
 szUp(string k) => k == "صغير جدًا" ? size.small : k == "صغير" ? size.normal : size.large
 stOf(string k) => k == "متّصل" ? line.style_solid : k == "منقّط" ? line.style_dotted : line.style_dashed
-tsz = szOf(pTblSz)
-tszH = szUp(pTblSz)
+tsz  = pTblSz == "صغير" ? size.small : pTblSz == "كبير" ? size.large : size.normal
+tszH = pTblSz == "صغير" ? size.normal : pTblSz == "كبير" ? size.huge : size.large
 szOpen = szOf(szOpenK)
 szT1 = szOf(szT1K)
 szT2 = szOf(szT2K)
@@ -414,18 +416,25 @@ float veDayLo = na(dOpen) ? na : dOpen - dMove
 bool sessMode = pFanMode == "الجلسة كاملة" and seasonal
 int veHbase = timeframe.isdwm ? 5 : tfMin <= 5 ? 24 : tfMin <= 15 ? 12 : tfMin <= 30 ? 8 : tfMin <= 60 ? 6 : 4
 int barsLeft = na(sessEndMs) ? 9999 : math.max(0, math.floor((sessEndMs - time) / float(tfMs)) - 1)
-int veH = seasonal and slotNow >= 0 ? math.max(3, math.min(veHbase, barsLeft)) : veHbase
+int veHset = pShortH > 0 ? pShortH : veHbase
+int veH = pShortCap and seasonal and slotNow >= 0 ? math.max(3, math.min(veHset, barsLeft)) : veHset
 float veNextH = veH
 if seasonal and slotNow >= 0
     float sNH = 0.0
     for q = 1 to veH
         sNH += pf((slotNow + q) % nSlots)
     veNextH := sNH
+// a time past the session's close continues at the next session's open (next weekday), so a fan that crosses the
+// close is drawn over the next morning's bars, not over the night
+nextOpenMs(int t0) => t0 + 86400000 * (dayofweek(t0, syminfo.timezone) == dayofweek.friday ? 3 : 1)
+fwdT(int t, int sStart, int sEnd) => na(sEnd) or na(sStart) or t <= sEnd ? t : nextOpenMs(sStart) + (t - sEnd)
 float veMoveHNow = timeframe.isdwm ? math.sqrt(2.701088) * atrV * math.sqrt(veH / 5.0) : seasonal ? math.sqrt(veS2d * veNextH) * c_ : math.sqrt(veH * veS2) * c_
 var int   aBar = na
 var int   aFrom = na
 var int   aT0 = na
 var int   aT1 = na
+var int   aSS = na
+var int   aSE = na
 var float aC = na
 var float aMove = na
 var float aTot = na
@@ -494,6 +503,8 @@ if openAnchor
         aMove := dMove
         aT0 := sessStartMs
         aT1 := sessEndMs
+        aSS := sessStartMs
+        aSE := sessEndMs
         aFrom := bar_index
         aState := 0
         aSlot := 0
@@ -506,7 +517,9 @@ if openAnchor
         aC := c_
         aMove := veMoveHNow
         aT0 := time
-        aT1 := time + (veH + 1) * tfMs
+        aSS := sessStartMs
+        aSE := sessEndMs
+        aT1 := fwdT(time + (veH + 1) * tfMs, sessStartMs, sessEndMs)
         aFrom := bar_index + 1
         aState := tvState
         aSlot := slotNow
@@ -521,7 +534,7 @@ else if not na(aBar) and bar_index > aBar and (na(aT1) or time < aT1)
 bool fanLive = not na(aBar) and bar_index >= aBar and (na(aT1) or time < aT1)
 float aFrac = na(aTot) or aTot <= 0 ? 1.0 : math.min(1.0, aCum / aTot)
 float aBand = na(aMove) ? na : aMove * math.sqrt(aFrac)        // the fan's ±1σ at THIS bar (9)
-int barsAhead = na(aT1) ? 0 : math.max(0, math.ceil((aT1 - time) / float(tfMs)) - 1)
+int barsAhead = na(aBar) ? 0 : sessMode ? math.max(0, math.ceil((aT1 - time) / float(tfMs)) - 1) : math.max(0, aBar + aH - bar_index)
 bool oddsOk = not sessMode and tfMin == 5                       // (5, 32) odds measured on 5m, 24-bar horizon
 // (7) exits against the fan that is drawn, first exit of a run only (10), counted since the anchor (14)
 bool exitUp = warm and fanLive and c_ > aC + aBand
@@ -544,7 +557,7 @@ alertcondition(aRes == -1 and aResBefore != -1, "ضُرب وقف المرساة"
 alertcondition(exitUpF or exitDnF, "خروج من المروحة", "إغلاق خارج ±1σ للمروحة الحالية")
 
 // ═══════════════ النافذة: الشموع والأدوات ═══════════════
-int winAuto = math.max(60, math.min(400, int(math.ceil(1.5 * sessMin / tfMin))))    // (23) a session and a half
+int winAuto = math.max(60, math.min(5000, int(math.ceil(1.5 * sessMin / tfMin))))    // (23) a session and a half
 int winN = pWin > 0 ? pWin : (timeframe.isintraday ? winAuto : 150)
 bool inWin = bar_index > last_bar_index - winN
 int winStartT = time[math.min(bar_index, winN - 1)]
@@ -602,7 +615,7 @@ float sqzTop = pHeatS ? sFloor - 0.3 * sHv : sFloor + sHv
 heatOf(float p, bool sq) => sq ? cSqzOn : na(p) ? cHeatNA : p < 50 ? color.from_gradient(p, 0, 50, cHeat0, cHeat50) : color.from_gradient(p, 50, 100, cHeat50, cHeat100)
 var box[] stripHeat = array.new_box()
 var box[] stripSqz = array.new_box()
-int stride = winN > 200 ? 2 : 1
+int stride = math.max(1, int(math.ceil(winN / 200.0)))
 int stripN = math.ceil(winN / float(stride))
 var float sFloorSet = na
 if pStrips and barstate.isconfirmed and not na(sFloor) and bar_index % stride == 0
@@ -687,7 +700,7 @@ if barstate.islast
                         run := sessMode ? cumThrough(j) : run + (seasonal ? pf(sl) : 1.0)
                         if j % stepP == 0 or j == nP - 1
                             float fr = na(aTot) or aTot <= 0 ? 1.0 : math.min(1.0, run / aTot)
-                            int tj = sessMode ? aT0 + (j + 1) * tfMs : aT0 + (j + 1) * tfMs
+                            int tj = sessMode ? aT0 + (j + 1) * tfMs : fwdT(aT0 + (j + 1) * tfMs, aSS, aSE)
                             array.push(pts, chart.point.from_time(math.min(tj, aT1), aC + sgn * m * aMove * math.sqrt(fr)))
                     if m == 1 ? pCv1 : pCv2
                         array.push(fPolys, polyline.new(pts, curved=true, xloc=xloc.bar_time, line_color=m == 1 ? cCv1 : cCv2, line_style=stOf(m == 1 ? sCv1 : sCv2), line_width=m == 1 ? wCv1 : wCv2))
@@ -853,7 +866,7 @@ if pBox and barstate.islast
             table.cell(sb, 0, r, aDist + " · باقٍ " + str.tostring(barsAhead), text_color=nz(aSig) >= 0 ? cUp : cDn, text_size=tsz, text_halign=text.align_right)
             r += 1
         if rWarn and tfWarn                                                                    // (30–32)
-            table.cell(sb, 0, r, "⚠ الانضغاط والاتجاه مقيسان على 5د و15د", text_color=cDim, text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, "⚠ مقيس على 5د و15د فقط", text_color=cDim, text_size=tsz, text_halign=text.align_right)
             table.merge_cells(sb, 0, r, 1, r)
             r += 1
         if rVerd
