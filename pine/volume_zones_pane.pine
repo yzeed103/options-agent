@@ -17,6 +17,7 @@ pWin    = input.int(0, "عدد الشموع المعروضة (0 = تلقائي)"
 pScale  = input.string("الشموع و±1σ", "مقياس اللوحة يشمل", options=["الشموع فقط", "الشموع و±1σ", "الشموع و±2σ"], tooltip="ما يدخل في المقياس التلقائي للّوحة. ±2σ لليوم كاملًا يضغط الشموع", group=G_A)
 pShortH = input.int(0, "الأفق القصير: طول المروحة بالشموع (0 = حسب الفريم)", minval=0, maxval=500, tooltip="0 = حسب الفريم: 5د 24 شمعة، 15د 12، 30د 8، ساعة 6. أيّ رقم آخر يُستعمل كما هو", group=G_A)
 pShortCap = input.bool(false, "الأفق القصير: يتوقّف عند إغلاق الجلسة", tooltip="معطّل (الافتراضي): المروحة تكمل طولها وتعبر الإغلاق إلى الجلسة التالية، فلا تقصر قرب نهاية اليوم. مفعّل: تُقصّ عند الإغلاق", group=G_A)
+pFanExt = input.int(0, "تمديد عرض المربّع والخطوط يمينًا (شموع)", minval=0, maxval=300, tooltip="للعرض فقط: يمدّ مربّعي المروحة وخطوط الأهداف والوقف والافتتاح يمينًا بهذا العدد من الشموع. الأرقام والمنحنى لا تتغيّر؛ المنحنى ينتهي عند نهاية الأفق الحقيقي", group=G_A)
 pLead   = input.int(5, "الأفق القصير: شموع أمام السعر على الأقلّ", minval=3, maxval=20, tooltip="للأفق القصير فقط: عندما يبقى أمام السعر هذا العدد من الشموع حتى نهاية أفق المروحة تُفتح مرساة جديدة", group=G_A)
 pSessMin = input.int(0, "طول الجلسة بالدقائق (0 = تلقائي)", minval=0, maxval=1440, tooltip="تلقائي: من الجلسة العادية للرمز نفسه، وطولها من وقت إغلاق اليوم (أنصاف أيّام العطل محسوبة)", group=G_A)
 
@@ -678,15 +679,16 @@ if barstate.islast
             array.push(fLabels, label.new(array.get(dT0, kl), array.get(dHi, kl), "أعلى اليوم المتوقّع", xloc=xloc.bar_time, style=label.style_label_lower_right, color=color.new(cDayL, 100), textcolor=color.new(cDayL, 0), size=szDay))
             array.push(fLabels, label.new(array.get(dT0, kl), array.get(dLo, kl), "أدنى اليوم المتوقّع", xloc=xloc.bar_time, style=label.style_label_upper_right, color=color.new(cDayL, 100), textcolor=color.new(cDayL, 0), size=szDay))
     if not na(aBar) and not na(aT1)
+        int aT1x = pFanExt > 0 ? fwdT(aT1 + pFanExt * tfMs, aSS, aSE) : aT1        // width only
         int sideA = aState == 0 ? 1 : aState
         float y1 = aC + sideA * aMove
         float y2 = aC + sideA * 2 * aMove
         float yS = aC - sideA * 0.75 * aMove
         if pFan
             if pBox2
-                array.push(fBoxes, box.new(aT0, aC + 2 * aMove, aT1, aC - 2 * aMove, xloc=xloc.bar_time, border_color=cBox2B, bgcolor=cBox2))
+                array.push(fBoxes, box.new(aT0, aC + 2 * aMove, aT1x, aC - 2 * aMove, xloc=xloc.bar_time, border_color=cBox2B, bgcolor=cBox2))
             if pBox1
-                array.push(fBoxes, box.new(aT0, aC + aMove, aT1, aC - aMove, xloc=xloc.bar_time, border_color=cBox1B, bgcolor=cBox1))
+                array.push(fBoxes, box.new(aT0, aC + aMove, aT1x, aC - aMove, xloc=xloc.bar_time, border_color=cBox1B, bgcolor=cBox1))
             // (9) the fan as a curve: ±kσ × sqrt(the share of the horizon's seasonal variance that has passed)
             int nP = math.max(1, aH + 1)
             int stepP = math.max(1, int(math.ceil(nP / 80.0)))
@@ -705,7 +707,7 @@ if barstate.islast
                     if m == 1 ? pCv1 : pCv2
                         array.push(fPolys, polyline.new(pts, curved=true, xloc=xloc.bar_time, line_color=m == 1 ? cCv1 : cCv2, line_style=stOf(m == 1 ? sCv1 : sCv2), line_width=m == 1 ? wCv1 : wCv2))
             if pOpenLn
-                array.push(fLines, line.new(aT0, aC, aT1, aC, xloc=xloc.bar_time, color=cOpenLn, width=wOpenLn, style=stOf(sOpenLn)))
+                array.push(fLines, line.new(aT0, aC, aT1x, aC, xloc=xloc.bar_time, color=cOpenLn, width=wOpenLn, style=stOf(sOpenLn)))
             // (17) one plain anchor label on the anchor's own time
             if pOpenLbl
                 array.push(fLabels, label.new(aT0, aC, (sessMode ? "افتتاح " : "المرساة ") + str.tostring(aC, format.mintick) + " · " + str.format_time(aT0, "HH:mm", syminfo.timezone), xloc=xloc.bar_time, style=label.style_label_right, color=cOpenBg, textcolor=cOpenTx, size=szOpen))
@@ -716,24 +718,24 @@ if barstate.islast
                     for sgn = -1 to 1 by 2
                         float yy = aC + sgn * m * aMove
                         if m == 1 ? pT1 : pT2
-                            array.push(fLines, line.new(aT0, yy, aT1, yy, xloc=xloc.bar_time, color=m == 1 ? cT1 : cT2, width=m == 1 ? wT1 : wT2, style=stOf(m == 1 ? sT1 : sT2)))
+                            array.push(fLines, line.new(aT0, yy, aT1x, yy, xloc=xloc.bar_time, color=m == 1 ? cT1 : cT2, width=m == 1 ? wT1 : wT2, style=stOf(m == 1 ? sT1 : sT2)))
                         if m == 1 ? pT1Lbl : pT2Lbl
-                            array.push(fLabels, label.new(aT1, yy, (sgn > 0 ? "+" : "−") + str.tostring(m) + "σ  " + str.tostring(yy, format.mintick), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cT1, 100), textcolor=color.new(m == 1 ? cT1 : cT2, 0), size=m == 1 ? szT1 : szT2))
+                            array.push(fLabels, label.new(aT1x, yy, (sgn > 0 ? "+" : "−") + str.tostring(m) + "σ  " + str.tostring(yy, format.mintick), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cT1, 100), textcolor=color.new(m == 1 ? cT1 : cT2, 0), size=m == 1 ? szT1 : szT2))
             else
                 string o1 = oddsOk ? " · " + aP1 + (aP1 != "25%" ? " (قوة الاتجاه)" : "") : ""
                 string o2 = oddsOk ? " · " + aP2 : ""
                 if pT1
-                    array.push(fLines, line.new(aT0, y1, aT1, y1, xloc=xloc.bar_time, color=cT1, width=wT1, style=stOf(sT1)))
+                    array.push(fLines, line.new(aT0, y1, aT1x, y1, xloc=xloc.bar_time, color=cT1, width=wT1, style=stOf(sT1)))
                 if pT2
-                    array.push(fLines, line.new(aT0, y2, aT1, y2, xloc=xloc.bar_time, color=cT2, width=wT2, style=stOf(sT2)))
+                    array.push(fLines, line.new(aT0, y2, aT1x, y2, xloc=xloc.bar_time, color=cT2, width=wT2, style=stOf(sT2)))
                 if pStop
-                    array.push(fLines, line.new(aT0, yS, aT1, yS, xloc=xloc.bar_time, color=cStop, width=wStop, style=stOf(sStop)))
+                    array.push(fLines, line.new(aT0, yS, aT1x, yS, xloc=xloc.bar_time, color=cStop, width=wStop, style=stOf(sStop)))
                 if pT1Lbl
-                    array.push(fLabels, label.new(aT1, y1, "هدف 1×  " + str.tostring(y1, format.mintick) + o1, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cT1, 100), textcolor=color.new(cT1, 0), size=szT1))
+                    array.push(fLabels, label.new(aT1x, y1, "هدف 1×  " + str.tostring(y1, format.mintick) + o1, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cT1, 100), textcolor=color.new(cT1, 0), size=szT1))
                 if pT2Lbl
-                    array.push(fLabels, label.new(aT1, y2, "هدف 2×  " + str.tostring(y2, format.mintick) + o2, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cT2, 100), textcolor=color.new(cT2, 0), size=szT2))
+                    array.push(fLabels, label.new(aT1x, y2, "هدف 2×  " + str.tostring(y2, format.mintick) + o2, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cT2, 100), textcolor=color.new(cT2, 0), size=szT2))
                 if pStopLbl
-                    array.push(fLabels, label.new(aT1, yS, "وقف 0.75×  " + str.tostring(yS, format.mintick) + (oddsOk ? " · يُضرب 5%" : ""), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cStop, 100), textcolor=color.new(cStop, 0), size=szStop))
+                    array.push(fLabels, label.new(aT1x, yS, "وقف 0.75×  " + str.tostring(yS, format.mintick) + (oddsOk ? " · يُضرب 5%" : ""), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cStop, 100), textcolor=color.new(cStop, 0), size=szStop))
     // (3) the remaining move to the close, around the CURRENT price
     if pRem and not na(veRemMove) and veRemMove >= 2 * syminfo.mintick and not na(sessEndMs) and time < sessEndMs
         array.push(fLines, line.new(time, c_ + veRemMove, sessEndMs, c_ + veRemMove, xloc=xloc.bar_time, color=cRem, width=wRem, style=stOf(sRem)))
