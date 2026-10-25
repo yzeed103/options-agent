@@ -502,8 +502,8 @@ string heatTxt = na(vePct) ? "حرارة التذبذب: بيانات غير ك�
 if mFull and pStrips and barstate.islast and not na(sFloor)
     label.delete(sLb1), label.delete(sLb2)
     int xw0 = math.max(0, bar_index - pWin + 1) + math.max(6, pWin / 12)   // clear of the day-low label at the left edge
-    sLb1 := label.new(xw0, sFloor + sH / 2, heatTxt, style=label.style_label_left, color=color.new(#1e222d, 20), textcolor=cHot, size=pCompact ? size.tiny : size.small)
-    sLb2 := label.new(xw0, sqzTop - sH / 2, "الانضغاط" + (veSqzOn ? ": نعم منذ " + str.tostring(veSqzBars) + " شمعة · اصبر" : " (بنفسجي عند حدوثه)"), style=label.style_label_left, color=color.new(#1e222d, 20), textcolor=cSqz, size=pCompact ? size.tiny : size.small)
+    sLb1 := label.new(xw0, sFloor + sH, heatTxt, style=label.style_label_lower_left, color=color.new(#1e222d, 20), textcolor=cHot, size=pCompact ? size.tiny : size.small)
+    sLb2 := label.new(xw0, sqzTop - sH, "الانضغاط" + (veSqzOn ? ": نعم منذ " + str.tostring(veSqzBars) + " شمعة · اصبر" : " (بنفسجي عند حدوثه)"), style=label.style_label_upper_left, color=color.new(#1e222d, 20), textcolor=cSqz, size=pCompact ? size.tiny : size.small)
 // the state box
 int nDn = math.round(math.sum(exitDn ? 1.0 : 0.0, 12))
 int nUp = math.round(math.sum(exitUp ? 1.0 : 0.0, 12))
