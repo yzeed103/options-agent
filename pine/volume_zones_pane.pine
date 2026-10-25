@@ -1,6 +1,6 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 // © options-agent — Volume Zones · لوحة: نافذة مرافقة تحت الشموع (reports/vol_engine, reports/vol_engine_dev, 2026-10-25).
-// v27: the 40-item review. The seasonal profile is aligned to the New York clock, the session comes from the symbol's
+// v31: every element has its own settings group. v27: the 40-item review. The seasonal profile is aligned to the New York clock, the session comes from the symbol's
 // regular session (length from its daily close), the fan is a time-based curve, exits are measured against that fan,
 // the old modes are gone.
 //@version=6
@@ -10,64 +10,203 @@
 // stops drawing ghosts when the box count would pass 480.
 indicator("Volume Zones · لوحة", "VZ لوحة", overlay=false, format=format.price, precision=2, max_boxes_count=500, max_lines_count=500, max_labels_count=500, max_polylines_count=20)
 
-// ═══════════════ المدخلات (من الأهمّ إلى الأقلّ) ═══════════════
-G_1 = "1 · الأساس"
-pFanMode = input.string("الجلسة كاملة", "أفق المروحة", options=["الجلسة كاملة", "أفق قصير يتجدّد"], tooltip="الجلسة كاملة: المروحة والأهداف ونطاق اليوم تبدأ من افتتاح الجلسة العادية وتنتهي بإغلاقها، ولا تتحرّك، وتتجدّد مع اليوم الجديد. المروحة منحنى: الحركة المتوقّعة تكبر مع الوقت حسب نمط التذبذب خلال اليوم (أكبرها عند الافتتاح). أفق قصير: مروحة بأفق حسب الفريم تتجدّد كلّما بقي أمام السعر أقلّ من N شمعة", group=G_1)
-pWin    = input.int(0, "عدد الشموع المعروضة (0 = تلقائي)", minval=0, maxval=400, tooltip="تلقائي: جلسة ونصف (بين 60 و400 شمعة)، فتظهر الجلسة الحالية كاملة مع نصف السابقة على أيّ فريم. المروحة تمتدّ أمام السعر حتى الإغلاق، فاضبط «الهامش الأيمن» في إعدادات الشارت بما يكفي", group=G_1)
-pScale  = input.string("الشموع و±1σ", "مقياس اللوحة يشمل", options=["الشموع فقط", "الشموع و±1σ", "الشموع و±2σ"], tooltip="ما يدخل في المقياس التلقائي للّوحة. ±2σ لليوم كاملًا يضغط الشموع؛ «الشموع و±1σ» توازن بين الاثنين", group=G_1)
-pTxt    = input.string("عادي", "حجم نصوص الرسم", options=["صغير جدًا", "صغير", "عادي", "كبير"], tooltip="كلّ الملصقات على الرسم: الافتتاح والأهداف والوقف وعناوين الشريطين ونتائج المراوح القديمة", group=G_1)
-pLineW  = input.int(2, "سماكة خطوط الأهداف والوقف", minval=1, maxval=5, group=G_1)
-pFanAlpha = input.int(0, "شفافية إضافية للمروحة", minval=0, maxval=60, step=5, tooltip="0 = كما هي. أعلى = مربّع المروحة أخفّ", group=G_1)
+// ═══════════════ المدخلات: كلّ عنصر في مجموعته (إظهار، لون، سماكة، نمط، حجم نصّ) ═══════════════
+G_A = "1 · الأساس"
+pFanMode = input.string("الجلسة كاملة", "أفق المروحة", options=["الجلسة كاملة", "أفق قصير يتجدّد"], tooltip="الجلسة كاملة: المروحة والأهداف ونطاق اليوم تبدأ من افتتاح الجلسة العادية وتنتهي بإغلاقها، ولا تتحرّك، وتتجدّد مع اليوم الجديد. المروحة منحنى يكبر مع الوقت حسب نمط التذبذب خلال اليوم. أفق قصير: مروحة بأفق حسب الفريم تتجدّد كلّما بقي أمام السعر أقلّ من N شمعة", group=G_A)
+pWin    = input.int(0, "عدد الشموع المعروضة (0 = تلقائي)", minval=0, maxval=400, tooltip="تلقائي: جلسة ونصف (بين 60 و400 شمعة). المروحة تمتدّ أمام السعر حتى الإغلاق، فاضبط «الهامش الأيمن» في إعدادات الشارت بما يكفي", group=G_A)
+pScale  = input.string("الشموع و±1σ", "مقياس اللوحة يشمل", options=["الشموع فقط", "الشموع و±1σ", "الشموع و±2σ"], tooltip="ما يدخل في المقياس التلقائي للّوحة. ±2σ لليوم كاملًا يضغط الشموع", group=G_A)
+pLead   = input.int(5, "الأفق القصير: شموع أمام السعر على الأقلّ", minval=3, maxval=20, tooltip="للأفق القصير فقط: عندما يبقى أمام السعر هذا العدد من الشموع حتى نهاية أفق المروحة تُفتح مرساة جديدة", group=G_A)
+pSessMin = input.int(0, "طول الجلسة بالدقائق (0 = تلقائي)", minval=0, maxval=1440, tooltip="تلقائي: من الجلسة العادية للرمز نفسه، وطولها من وقت إغلاق اليوم (أنصاف أيّام العطل محسوبة)", group=G_A)
 
-G_2 = "2 · مربّع «الحالة الآن»"
-pBox    = input.bool(true, "إظهار المربّع", inline="sb", group=G_2)
-pBoxPos = input.string("وسط اليمين", "", options=["وسط اليمين", "أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "وسط اليسار", "أسفل اليسار"], inline="sb", group=G_2)
-pTblSz  = input.string("صغير", "حجم نصّ المربّع", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="sb2", group=G_2)
-pCompact = input.bool(false, "مختصر (6 أسطر)", tooltip="مختصر: ستّة أسطر فقط وشريطان أرفع، يناسب نافذة قصيرة", inline="sb2", group=G_2)
-pTblAlpha = input.int(8, "شفافية خلفيته", minval=0, maxval=90, step=5, group=G_2)
+G_K = "2 · الشموع"
+pCandles = input.bool(true, "إظهار الشموع", inline="k0", group=G_K)
+pCandleSrc = input.string("تلقائي", "النوع", options=["تلقائي", "عادية", "هايكن آشي"], inline="k0", tooltip="تلقائي: هايكن آشي إذا كان الشارت هايكن آشي. الحسابات كلّها على الشموع العادية دائمًا؛ هذا للعرض فقط", group=G_K)
+cUp   = input.color(#26a69a, "صعود", inline="k1", group=G_K)
+cDn   = input.color(#ef5350, "هبوط", inline="k1", group=G_K)
+pRvHi = input.bool(true, "إبراز الفوليوم العالي", inline="k2", tooltip="إطار وفتيل الشمعة بهذا اللون عندما يكون حجمها أعلى من المعتاد لنفس الوقت بهذه النسبة أو أكثر (RVOL). مقيس: يتنبّأ باتّساع المدى لا بالاتجاه", group=G_K)
+cRvHi = input.color(#ffd600, "", inline="k2", group=G_K)
+pRvThr = input.float(2.0, "عند RVOL ≥", minval=1.0, maxval=5.0, step=0.1, inline="k2", group=G_K)
 
-G_3 = "3 · أدوات النافذة"
-pFan    = input.bool(true, "المروحة ±1σ و±2σ", inline="t1", group=G_3)
-pLadder = input.bool(true, "خطوط الأهداف", inline="t1", group=G_3)
-pDay    = input.bool(true, "نطاق كلّ جلسة", inline="t2", group=G_3)
-pRem    = input.bool(true, "المتبقّي حتى الإغلاق", inline="t2", group=G_3)
-pTrail  = input.bool(true, "الوقف المتحرّك", inline="t3", group=G_3)
-pExits  = input.bool(true, "أسهم الخروج ▲▼", inline="t3", group=G_3)
-pStrips = input.bool(true, "شريطا الحرارة والانضغاط", inline="t4", group=G_3)
-pGhost  = input.int(10, "أقصى عدد للمراوح القديمة", minval=0, maxval=20, tooltip="تُرسم فقط المراوح التي تقع داخل النافذة. ✓ 1× أو ✓ 2× = وصل السعر الهدف قبل الوقف، ✗ = ضرب الوقف أوّلًا، — = لا هذا ولا ذاك حتى نهاية أفقها. في وضع الجلسة المروحة متماثلة بلا وقف، فالنتيجة أوّل هدف لُمس على أيّ جهة", group=G_3)
-pLead   = input.int(5, "الأفق القصير: شموع أمام السعر على الأقلّ", minval=3, maxval=20, tooltip="للأفق القصير فقط: عندما يبقى أمام السعر هذا العدد من الشموع حتى نهاية أفق المروحة تُفتح مرساة جديدة من الشمعة الحالية", group=G_3)
+G_B1 = "3 · مربّع المروحة ±1σ"
+pBox1  = input.bool(true, "إظهار", inline="b1", group=G_B1)
+cBox1  = input.color(color.new(#29b6f6, 86), "التعبئة", inline="b1", group=G_B1)
+cBox1B = input.color(color.new(#29b6f6, 70), "الإطار", inline="b1", group=G_B1)
 
-G_4 = "4 · الشموع والجلسة"
-pCandleSrc = input.string("تلقائي", "شموع اللوحة", options=["تلقائي", "عادية", "هايكن آشي"], tooltip="تلقائي: هايكن آشي إذا كان الشارت هايكن آشي، وإلّا الشموع العادية. الحسابات كلّها على الشموع العادية دائمًا؛ هذا للعرض فقط، والأسهم تُرسم على الشموع المعروضة", group=G_4)
-pSessMin = input.int(0, "طول الجلسة بالدقائق (0 = تلقائي)", minval=0, maxval=1440, tooltip="تلقائي: من الجلسة العادية للرمز نفسه، وطولها من وقت إغلاق اليوم (أنصاف أيّام العطل محسوبة). الجلسة تبدأ عند الافتتاح العادي حتى لو كان الشارت بالساعات الممتدّة", group=G_4)
+G_B2 = "4 · مربّع المروحة ±2σ"
+pBox2  = input.bool(true, "إظهار", inline="b2", group=G_B2)
+cBox2  = input.color(color.new(#29b6f6, 94), "التعبئة", inline="b2", group=G_B2)
+cBox2B = input.color(color.new(#29b6f6, 80), "الإطار", inline="b2", group=G_B2)
 
-G_C = "5 · الألوان"
-cUp   = input.color(#26a69a, "صعود", inline="pc", group=G_C)
-cDn   = input.color(#ef5350, "هبوط", inline="pc", group=G_C)
-cHot  = input.color(#ffd600, "عالٍ جدًا", inline="pc", group=G_C)
-cNorm = input.color(#5d606b, "عادي", inline="pc", group=G_C)
-cMove = input.color(#29b6f6, "المروحة", inline="pc2", group=G_C)
-cSqz  = input.color(#ab47bc, "الانضغاط", inline="pc2", group=G_C)
-cDay  = input.color(#b388ff, "نطاق اليوم", inline="pc2", group=G_C)
-cTgt  = input.color(#c6ff00, "الأهداف", inline="pc3", group=G_C)
-cTrail = input.color(#ff7043, "الوقف المتحرّك", inline="pc3", group=G_C)
+G_CV = "5 · منحنيات المروحة"
+pCv1 = input.bool(true, "منحنى ±1σ", inline="c1", group=G_CV)
+cCv1 = input.color(color.new(#29b6f6, 10), "", inline="c1", group=G_CV)
+wCv1 = input.int(2, "", minval=1, maxval=5, inline="c1", group=G_CV)
+sCv1 = input.string("متقطّع", "", options=["متّصل", "متقطّع", "منقّط"], inline="c1", group=G_CV)
+pCv2 = input.bool(true, "منحنى ±2σ", inline="c2", group=G_CV)
+cCv2 = input.color(color.new(#29b6f6, 45), "", inline="c2", group=G_CV)
+wCv2 = input.int(1, "", minval=1, maxval=5, inline="c2", group=G_CV)
+sCv2 = input.string("متقطّع", "", options=["متّصل", "متقطّع", "منقّط"], inline="c2", group=G_CV)
+
+G_OP = "6 · الافتتاح (المرساة)"
+pOpenLn = input.bool(true, "خطّ الافتتاح", inline="o1", group=G_OP)
+cOpenLn = input.color(color.new(#ef5350, 30), "", inline="o1", group=G_OP)
+wOpenLn = input.int(1, "", minval=1, maxval=5, inline="o1", group=G_OP)
+sOpenLn = input.string("منقّط", "", options=["متّصل", "متقطّع", "منقّط"], inline="o1", group=G_OP)
+pOpenLbl = input.bool(true, "ملصق الافتتاح", inline="o2", group=G_OP)
+cOpenBg = input.color(color.new(#ef5350, 20), "الخلفية", inline="o2", group=G_OP)
+cOpenTx = input.color(color.white, "النصّ", inline="o2", group=G_OP)
+szOpenK = input.string("عادي", "الحجم", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="o2", group=G_OP)
+
+G_T1 = "7 · أهداف ±1σ"
+pT1 = input.bool(true, "خطّا ±1σ", inline="t1", group=G_T1)
+cT1 = input.color(#c6ff00, "", inline="t1", group=G_T1)
+wT1 = input.int(2, "", minval=1, maxval=5, inline="t1", group=G_T1)
+sT1 = input.string("متقطّع", "", options=["متّصل", "متقطّع", "منقّط"], inline="t1", group=G_T1)
+pT1Lbl = input.bool(true, "الملصقات", inline="t1b", group=G_T1)
+szT1K = input.string("عادي", "الحجم", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="t1b", group=G_T1)
+
+G_T2 = "8 · أهداف ±2σ"
+pT2 = input.bool(true, "خطّا ±2σ", inline="t2", group=G_T2)
+cT2 = input.color(color.new(#c6ff00, 35), "", inline="t2", group=G_T2)
+wT2 = input.int(1, "", minval=1, maxval=5, inline="t2", group=G_T2)
+sT2 = input.string("متقطّع", "", options=["متّصل", "متقطّع", "منقّط"], inline="t2", group=G_T2)
+pT2Lbl = input.bool(true, "الملصقات", inline="t2b", group=G_T2)
+szT2K = input.string("عادي", "الحجم", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="t2b", group=G_T2)
+
+G_ST = "9 · الوقف الثابت (الأفق القصير فقط)"
+pStop = input.bool(true, "خطّ الوقف 0.75×", inline="s1", group=G_ST)
+cStop = input.color(#ef5350, "", inline="s1", group=G_ST)
+wStop = input.int(2, "", minval=1, maxval=5, inline="s1", group=G_ST)
+sStop = input.string("متّصل", "", options=["متّصل", "متقطّع", "منقّط"], inline="s1", group=G_ST)
+pStopLbl = input.bool(true, "الملصق", inline="s1b", group=G_ST)
+szStopK = input.string("عادي", "الحجم", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="s1b", group=G_ST)
+
+G_DY = "10 · نطاق اليوم المتوقّع"
+pDay = input.bool(true, "خطّا النطاق", inline="d1", group=G_DY)
+cDayL = input.color(color.new(#b388ff, 20), "", inline="d1", group=G_DY)
+wDay = input.int(2, "", minval=1, maxval=5, inline="d1", group=G_DY)
+sDay = input.string("متقطّع", "", options=["متّصل", "متقطّع", "منقّط"], inline="d1", group=G_DY)
+pDayPast = input.bool(true, "نطاق الجلسات السابقة", group=G_DY)
+pDayLbl = input.bool(true, "الملصقات", inline="d2", group=G_DY)
+szDayK = input.string("عادي", "الحجم", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="d2", group=G_DY)
+
+G_RM = "11 · المتبقّي حتى الإغلاق"
+pRem = input.bool(true, "الخطّان", inline="r1", group=G_RM)
+cRem = input.color(color.new(#29b6f6, 30), "", inline="r1", group=G_RM)
+wRem = input.int(1, "", minval=1, maxval=5, inline="r1", group=G_RM)
+sRem = input.string("منقّط", "", options=["متّصل", "متقطّع", "منقّط"], inline="r1", group=G_RM)
+pRemLbl = input.bool(true, "الملصق", inline="r2", group=G_RM)
+szRemK = input.string("عادي", "الحجم", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="r2", group=G_RM)
+
+G_TR = "12 · الوقف المتحرّك"
+pTrail = input.bool(true, "إظهار", inline="tr0", group=G_TR)
+wTrail = input.int(2, "السماكة", minval=1, maxval=5, inline="tr0", group=G_TR)
+cTrUp  = input.color(#26a69a, "صاعد", inline="tr1", group=G_TR)
+cTrDn  = input.color(#ef5350, "هابط", inline="tr1", group=G_TR)
+cTrHit = input.color(color.new(#78909c, 20), "مضروب", inline="tr1", group=G_TR)
+pTrLbl = input.bool(true, "الملصق", inline="tr2", group=G_TR)
+szTrK  = input.string("عادي", "الحجم", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="tr2", group=G_TR)
+
+G_EX = "13 · أسهم الخروج من المروحة"
+pExits = input.bool(true, "إظهار", inline="e1", group=G_EX)
+cExUp  = input.color(#26a69a, "فوق ▲", inline="e1", group=G_EX)
+cExDn  = input.color(#ef5350, "تحت ▼", inline="e1", group=G_EX)
+
+G_GH = "14 · المراوح القديمة"
+pGhost = input.int(10, "أقصى عدد", minval=0, maxval=20, tooltip="تُرسم فقط المراوح التي تقع داخل النافذة. ✓ 1× أو ✓ 2× = وصل السعر الهدف قبل الوقف، ✗ = ضرب الوقف أوّلًا، — = لا هذا ولا ذاك. في وضع الجلسة المروحة متماثلة بلا وقف", inline="g0", group=G_GH)
+cGh    = input.color(color.new(#29b6f6, 80), "الإطار", inline="g0", group=G_GH)
+pGhLbl = input.bool(true, "النتيجة", inline="g1", group=G_GH)
+cGhWin = input.color(#26a69a, "✓", inline="g1", group=G_GH)
+cGhLoss = input.color(#ef5350, "✗", inline="g1", group=G_GH)
+cGhNone = input.color(#5d606b, "—", inline="g1", group=G_GH)
+szGhK  = input.string("عادي", "الحجم", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="g2", group=G_GH)
+
+G_HT = "15 · شريط الحرارة"
+pHeatS  = input.bool(true, "إظهار", inline="h0", group=G_HT)
+pHeatH  = input.float(3.5, "الارتفاع % من اللوحة", minval=0.5, maxval=15, step=0.5, inline="h0", group=G_HT)
+cHeat0  = input.color(#1a1a2e, "بارد", inline="h1", group=G_HT)
+cHeat50 = input.color(#1e88e5, "متوسّط", inline="h1", group=G_HT)
+cHeat100 = input.color(#ffd600, "ساخن", inline="h1", group=G_HT)
+cHeatNA = input.color(#5d606b, "بلا بيانات", inline="h1", group=G_HT)
+pStripGap = input.float(4.0, "المسافة تحت الرسم % من اللوحة", minval=0, maxval=20, step=0.5, group=G_HT)
+pHeatLbl = input.bool(true, "العنوان", inline="h2", group=G_HT)
+cHeatTx = input.color(#ffd600, "", inline="h2", group=G_HT)
+szHeatK = input.string("عادي", "الحجم", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="h2", group=G_HT)
+
+G_SQ = "16 · شريط الانضغاط"
+pSqzS   = input.bool(true, "إظهار", inline="q0", group=G_SQ)
+pSqzH   = input.float(3.5, "الارتفاع % من اللوحة", minval=0.5, maxval=15, step=0.5, inline="q0", group=G_SQ)
+cSqzOn  = input.color(#ab47bc, "انضغاط", inline="q1", group=G_SQ)
+cSqzOff = input.color(#2a2e39, "بلا انضغاط", inline="q1", group=G_SQ)
+pSqzLbl = input.bool(true, "العنوان", inline="q2", group=G_SQ)
+cSqzTx  = input.color(#ab47bc, "", inline="q2", group=G_SQ)
+szSqzK  = input.string("عادي", "الحجم", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="q2", group=G_SQ)
+
+G_SB = "17 · مربّع «الحالة الآن»"
+pBox    = input.bool(true, "إظهار المربّع", inline="sb", group=G_SB)
+pBoxPos = input.string("وسط اليمين", "", options=["وسط اليمين", "أعلى اليمين", "أسفل اليمين", "أعلى اليسار", "وسط اليسار", "أسفل اليسار"], inline="sb", group=G_SB)
+pTblSz  = input.string("صغير", "حجم النصّ", options=["صغير جدًا", "صغير", "عادي", "كبير"], inline="sb2", group=G_SB)
+pCompact = input.bool(false, "مختصر (6 أسطر)", inline="sb2", group=G_SB)
+pTblAuto = input.bool(true, "ألوان المربّع تلقائية حسب الثيم", tooltip="مفعّل: الخلفية والإطار والنصوص تتبع ثيم الشارت الفاتح أو الداكن. معطّل: الألوان أدناه", group=G_SB)
+cTblBgIn = input.color(#1e222d, "الخلفية", inline="sb3", group=G_SB)
+pTblAlpha = input.int(8, "شفافيتها", minval=0, maxval=90, step=5, inline="sb3", group=G_SB)
+cTblFrIn = input.color(#3a3f4b, "الإطار", inline="sb4", group=G_SB)
+cTblLblIn = input.color(#9598a1, "العناوين", inline="sb4", group=G_SB)
+cTblTxIn = input.color(#d1d4dc, "النصّ", inline="sb4", group=G_SB)
+cVerdict = input.color(#ffd600, "الخلاصة", inline="sb5", group=G_SB)
+
+G_SR = "18 · صفوف المربّع"
+rDir  = input.bool(true, "الاتجاه", inline="r1", group=G_SR)
+rMove = input.bool(true, "الحركة", inline="r1", group=G_SR)
+rTgt  = input.bool(true, "الأهداف", inline="r1", group=G_SR)
+rTgt2 = input.bool(true, "±2σ / الوقف", inline="r2", group=G_SR)
+rTr   = input.bool(true, "الوقف المتحرّك", inline="r2", group=G_SR)
+rVol  = input.bool(true, "الفوليوم", inline="r2", group=G_SR)
+rRem  = input.bool(true, "حتى الإغلاق", inline="r3", group=G_SR)
+rHeat = input.bool(true, "الحرارة", inline="r3", group=G_SR)
+rSqz  = input.bool(true, "الانضغاط", inline="r3", group=G_SR)
+rExit = input.bool(true, "الخروج", inline="r4", group=G_SR)
+rDist = input.bool(true, "من المرساة", inline="r4", group=G_SR)
+rWarn = input.bool(true, "تنبيه الفريم", inline="r4", group=G_SR)
+rVerd = input.bool(true, "الخلاصة", inline="r5", group=G_SR)
 
 szOf(string k) => k == "صغير جدًا" ? size.tiny : k == "صغير" ? size.small : k == "كبير" ? size.large : size.normal
 szUp(string k) => k == "صغير جدًا" ? size.small : k == "صغير" ? size.normal : size.large
-lsz = szOf(pTxt)
+stOf(string k) => k == "متّصل" ? line.style_solid : k == "منقّط" ? line.style_dotted : line.style_dashed
 tsz = szOf(pTblSz)
 tszH = szUp(pTblSz)
+szOpen = szOf(szOpenK)
+szT1 = szOf(szT1K)
+szT2 = szOf(szT2K)
+szStop = szOf(szStopK)
+szDay = szOf(szDayK)
+szRem = szOf(szRemK)
+szTr = szOf(szTrK)
+szGh = szOf(szGhK)
+szHeat = szOf(szHeatK)
+szSqz = szOf(szSqzK)
+// element switches that several drawings share
+bool pFan = pBox1 or pBox2 or pCv1 or pCv2 or pOpenLn or pOpenLbl
+bool pLadder = pT1 or pT2 or pStop
+bool pStrips = pHeatS or pSqzS
+// value colours in the status box follow their element
+color cMove  = color.new(cCv1, 0)
+color cTgt   = color.new(cT1, 0)
+color cHot   = cVerdict
+color cNorm  = cHeatNA
+color cSqz   = cSqzOn
+color cTrail = cTrUp
+color cHitC  = cTrHit
+color cOff   = cSqzOff
+color cCold  = cHeat0
 
-// theme (25): light or dark from the chart's own background
+// theme (25): the box follows the chart's light or dark background unless its colours are set by hand
 float bgLum = 0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)
 bool dark = bgLum < 128
-color cTxt   = dark ? #d1d4dc : #131722
-color cDim   = dark ? #9598a1 : #50535e
-color cPanel = dark ? #1e222d : #f0f3fa
-color cFrame = dark ? #3a3f4b : #b2b5be
-color cOff   = dark ? #2a2e39 : #d1d4dc
-color cCold  = dark ? #1a1a2e : #dfe4ee
-color cHitC  = #78909c
+color cTxt   = pTblAuto ? (dark ? #d1d4dc : #131722) : cTblTxIn
+color cDim   = pTblAuto ? (dark ? #9598a1 : #50535e) : cTblLblIn
+color cPanel = pTblAuto ? (dark ? #1e222d : #f0f3fa) : cTblBgIn
+color cFrame = pTblAuto ? (dark ? #3a3f4b : #b2b5be) : cTblFrIn
 
 // ═══════════════ الشموع الحقيقية (نفس قاعدة المؤشّر الرئيسي) ═══════════════
 stdT0 = ticker.standard(syminfo.tickerid)
@@ -416,12 +555,12 @@ float dH = useHA ? haH : h_
 float dL = useHA ? haL : l_
 float dC = useHA ? haC : c_
 color candC = dC >= dO ? cUp : cDn
-bool rvHot = not na(rvolShow) and rvolShow >= 2
-plotcandle(inWin ? dO : na, inWin ? dH : na, inWin ? dL : na, inWin ? dC : na, title="الشموع", color=candC, wickcolor=rvHot ? cHot : candC, bordercolor=rvHot ? cHot : candC, display=display.pane)
-plot(pTrail and inWin and warm ? veTrailStop : na, "وقف متحرّك", color=veHit ? color.new(cHitC, 20) : tvState > 0 ? cUp : cDn, style=plot.style_linebr, linewidth=pLineW, display=display.pane)
+bool rvHot = pRvHi and not na(rvolShow) and rvolShow >= pRvThr
+plotcandle(pCandles and inWin ? dO : na, pCandles and inWin ? dH : na, pCandles and inWin ? dL : na, pCandles and inWin ? dC : na, title="الشموع", color=candC, wickcolor=rvHot ? cRvHi : candC, bordercolor=rvHot ? cRvHi : candC, display=display.pane)
+plot(pTrail and inWin and warm ? veTrailStop : na, "وقف متحرّك", color=veHit ? cTrHit : tvState > 0 ? cTrUp : cTrDn, style=plot.style_linebr, linewidth=wTrail, display=display.pane)
 // (18) arrows sit on the DISPLAYED candles
-plotshape(pExits and inWin and exitUpF ? dH + 0.2 * atrV : na, "خروج فوق المروحة", style=shape.triangleup, location=location.absolute, color=cUp, size=size.tiny, display=display.pane)
-plotshape(pExits and inWin and exitDnF ? dL - 0.2 * atrV : na, "خروج تحت المروحة", style=shape.triangledown, location=location.absolute, color=cDn, size=size.tiny, display=display.pane)
+plotshape(pExits and inWin and exitUpF ? dH + 0.2 * atrV : na, "خروج فوق المروحة", style=shape.triangleup, location=location.absolute, color=cExUp, size=size.tiny, display=display.pane)
+plotshape(pExits and inWin and exitDnF ? dL - 0.2 * atrV : na, "خروج تحت المروحة", style=shape.triangledown, location=location.absolute, color=cExDn, size=size.tiny, display=display.pane)
 // (22) what the pane's auto-scale includes
 float kScale = pScale == "الشموع و±2σ" ? 2.0 : pScale == "الشموع و±1σ" ? 1.0 : 0.0
 bool fanOnScale = pFan and inWin and fanLive and kScale > 0
@@ -449,24 +588,26 @@ float paneSpan = math.max(winHiS - winLoS, 4 * atrV)
 float sBase = math.min(winLoS, pDay and not na(veDayLo) ? veDayLo : winLoS)
 var float sFloor = na
 var float sHv = na
+var float sHq = na
 var float sGapV = na
 var float sRange = na
 if pStrips and not na(sBase)
     if na(sFloor) or sessFirst or sBase < sFloor + 0.5 * nz(sGapV) or math.abs(paneSpan - nz(sRange, paneSpan)) > 0.10 * nz(sRange, paneSpan)
-        sGapV := (pCompact ? 0.03 : 0.04) * paneSpan
-        sHv := (pCompact ? 0.025 : 0.035) * paneSpan
+        sGapV := pStripGap / 100 * paneSpan
+        sHv := pHeatS ? pHeatH / 100 * paneSpan : 0.0
+        sHq := pSqzS ? pSqzH / 100 * paneSpan : 0.0
         sFloor := sBase - sGapV
         sRange := paneSpan
-float sqzTop = sFloor - 0.3 * sHv
-heatOf(float p, bool sq) => sq ? cSqz : na(p) ? cNorm : p < 50 ? color.from_gradient(p, 0, 50, cCold, #1e88e5) : color.from_gradient(p, 50, 100, #1e88e5, #ffd600)
+float sqzTop = pHeatS ? sFloor - 0.3 * sHv : sFloor + sHv
+heatOf(float p, bool sq) => sq ? cSqzOn : na(p) ? cHeatNA : p < 50 ? color.from_gradient(p, 0, 50, cHeat0, cHeat50) : color.from_gradient(p, 50, 100, cHeat50, cHeat100)
 var box[] stripHeat = array.new_box()
 var box[] stripSqz = array.new_box()
 int stride = winN > 200 ? 2 : 1
 int stripN = math.ceil(winN / float(stride))
 var float sFloorSet = na
 if pStrips and barstate.isconfirmed and not na(sFloor) and bar_index % stride == 0
-    array.push(stripHeat, box.new(bar_index, sFloor + sHv, bar_index + stride, sFloor, border_color=color.new(cNorm, 100), bgcolor=heatOf(vePct, veSqzOn)))
-    array.push(stripSqz, box.new(bar_index, sqzTop, bar_index + stride, sqzTop - sHv, border_color=color.new(cSqz, 100), bgcolor=veSqzOn ? cSqz : cOff))
+    array.push(stripHeat, box.new(bar_index, sFloor + sHv, bar_index + stride, sFloor, border_color=color.new(cNorm, 100), bgcolor=pHeatS ? heatOf(vePct, veSqzOn) : color.new(cHeatNA, 100)))
+    array.push(stripSqz, box.new(bar_index, sqzTop, bar_index + stride, sqzTop - sHq, border_color=color.new(cSqzOn, 100), bgcolor=not pSqzS ? color.new(cSqzOff, 100) : veSqzOn ? cSqzOn : cSqzOff))
     while array.size(stripHeat) > stripN
         box.delete(array.shift(stripHeat))
         box.delete(array.shift(stripSqz))
@@ -476,7 +617,7 @@ if pStrips and not na(sFloor) and (na(sFloorSet) or sFloor != sFloorSet)
         box.set_bottom(bx, sFloor)
     for bx in stripSqz
         box.set_top(bx, sqzTop)
-        box.set_bottom(bx, sqzTop - sHv)
+        box.set_bottom(bx, sqzTop - sHq)
     sFloorSet := sFloor
 // (20) the live bar shows the last CONFIRMED heat / squeeze, so it does not flicker inside the bar
 float heatLive = barstate.isrealtime ? vePct[1] : vePct
@@ -486,9 +627,9 @@ var box liveSqz = na
 if pStrips and barstate.islast and not na(sFloor)
     box.delete(liveHeat)
     box.delete(liveSqz)
-    liveHeat := box.new(bar_index, sFloor + sHv, bar_index + stride, sFloor, border_color=color.new(cNorm, 100), bgcolor=heatOf(heatLive, sqzLive))
-    liveSqz := box.new(bar_index, sqzTop, bar_index + stride, sqzTop - sHv, border_color=color.new(cSqz, 100), bgcolor=sqzLive ? cSqz : cOff)
-plot(pStrips and inWin ? sqzTop - 1.3 * sHv : na, "قاع الشريطين", color=color.new(cOff, 85), linewidth=1, display=display.pane)
+    liveHeat := box.new(bar_index, sFloor + sHv, bar_index + stride, sFloor, border_color=color.new(cNorm, 100), bgcolor=pHeatS ? heatOf(heatLive, sqzLive) : color.new(cHeatNA, 100))
+    liveSqz := box.new(bar_index, sqzTop, bar_index + stride, sqzTop - sHq, border_color=color.new(cSqzOn, 100), bgcolor=not pSqzS ? color.new(cSqzOff, 100) : sqzLive ? cSqzOn : cSqzOff)
+plot(pStrips and inWin ? sqzTop - sHq - 0.3 * math.max(sHv, sHq) : na, "قاع الشريطين", color=color.new(cSqzOff, 85), linewidth=1, display=display.pane)
 
 // ═══════════════ الرسم على آخر شمعة ═══════════════
 var line[] fLines = array.new_line()
@@ -516,20 +657,23 @@ if barstate.islast
         for k = 0 to array.size(dT0) - 1
             int t0 = array.get(dT0, k)
             int t1 = array.get(dT1, k)
-            if not na(t1) and t1 > winStartT
-                array.push(fLines, line.new(t0, array.get(dHi, k), t1, array.get(dHi, k), xloc=xloc.bar_time, color=color.new(cDay, 20), style=line.style_dashed, width=2))
-                array.push(fLines, line.new(t0, array.get(dLo, k), t1, array.get(dLo, k), xloc=xloc.bar_time, color=color.new(cDay, 20), style=line.style_dashed, width=2))
+            if not na(t1) and t1 > winStartT and (pDayPast or k == array.size(dT0) - 1)
+                array.push(fLines, line.new(t0, array.get(dHi, k), t1, array.get(dHi, k), xloc=xloc.bar_time, color=cDayL, style=stOf(sDay), width=wDay))
+                array.push(fLines, line.new(t0, array.get(dLo, k), t1, array.get(dLo, k), xloc=xloc.bar_time, color=cDayL, style=stOf(sDay), width=wDay))
         int kl = array.size(dT0) - 1
-        array.push(fLabels, label.new(array.get(dT0, kl), array.get(dHi, kl), "أعلى اليوم المتوقّع", xloc=xloc.bar_time, style=label.style_label_lower_right, color=color.new(cDay, 100), textcolor=cDay, size=lsz))
-        array.push(fLabels, label.new(array.get(dT0, kl), array.get(dLo, kl), "أدنى اليوم المتوقّع", xloc=xloc.bar_time, style=label.style_label_upper_right, color=color.new(cDay, 100), textcolor=cDay, size=lsz))
+        if pDayLbl
+            array.push(fLabels, label.new(array.get(dT0, kl), array.get(dHi, kl), "أعلى اليوم المتوقّع", xloc=xloc.bar_time, style=label.style_label_lower_right, color=color.new(cDayL, 100), textcolor=color.new(cDayL, 0), size=szDay))
+            array.push(fLabels, label.new(array.get(dT0, kl), array.get(dLo, kl), "أدنى اليوم المتوقّع", xloc=xloc.bar_time, style=label.style_label_upper_right, color=color.new(cDayL, 100), textcolor=color.new(cDayL, 0), size=szDay))
     if not na(aBar) and not na(aT1)
         int sideA = aState == 0 ? 1 : aState
         float y1 = aC + sideA * aMove
         float y2 = aC + sideA * 2 * aMove
         float yS = aC - sideA * 0.75 * aMove
         if pFan
-            array.push(fBoxes, box.new(aT0, aC + 2 * aMove, aT1, aC - 2 * aMove, xloc=xloc.bar_time, border_color=color.new(cMove, 80), bgcolor=color.new(cMove, math.min(100, (sessMode ? 94 : 88) + pFanAlpha))))
-            array.push(fBoxes, box.new(aT0, aC + aMove, aT1, aC - aMove, xloc=xloc.bar_time, border_color=color.new(cMove, 70), bgcolor=color.new(cMove, math.min(100, (sessMode ? 86 : 78) + pFanAlpha))))
+            if pBox2
+                array.push(fBoxes, box.new(aT0, aC + 2 * aMove, aT1, aC - 2 * aMove, xloc=xloc.bar_time, border_color=cBox2B, bgcolor=cBox2))
+            if pBox1
+                array.push(fBoxes, box.new(aT0, aC + aMove, aT1, aC - aMove, xloc=xloc.bar_time, border_color=cBox1B, bgcolor=cBox1))
             // (9) the fan as a curve: ±kσ × sqrt(the share of the horizon's seasonal variance that has passed)
             int nP = math.max(1, aH + 1)
             int stepP = math.max(1, int(math.ceil(nP / 80.0)))
@@ -545,34 +689,46 @@ if barstate.islast
                             float fr = na(aTot) or aTot <= 0 ? 1.0 : math.min(1.0, run / aTot)
                             int tj = sessMode ? aT0 + (j + 1) * tfMs : aT0 + (j + 1) * tfMs
                             array.push(pts, chart.point.from_time(math.min(tj, aT1), aC + sgn * m * aMove * math.sqrt(fr)))
-                    array.push(fPolys, polyline.new(pts, curved=true, xloc=xloc.bar_time, line_color=color.new(cMove, m == 1 ? 10 : 45), line_style=line.style_dashed, line_width=m == 1 ? 2 : 1))
-            array.push(fLines, line.new(aT0, aC, aT1, aC, xloc=xloc.bar_time, color=color.new(cDn, 30), width=1, style=line.style_dotted))
+                    if m == 1 ? pCv1 : pCv2
+                        array.push(fPolys, polyline.new(pts, curved=true, xloc=xloc.bar_time, line_color=m == 1 ? cCv1 : cCv2, line_style=stOf(m == 1 ? sCv1 : sCv2), line_width=m == 1 ? wCv1 : wCv2))
+            if pOpenLn
+                array.push(fLines, line.new(aT0, aC, aT1, aC, xloc=xloc.bar_time, color=cOpenLn, width=wOpenLn, style=stOf(sOpenLn)))
             // (17) one plain anchor label on the anchor's own time
-            array.push(fLabels, label.new(aT0, aC, (sessMode ? "افتتاح " : "المرساة ") + str.tostring(aC, format.mintick) + " · " + str.format_time(aT0, "HH:mm", syminfo.timezone), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cDn, 20), textcolor=color.white, size=lsz))
+            if pOpenLbl
+                array.push(fLabels, label.new(aT0, aC, (sessMode ? "افتتاح " : "المرساة ") + str.tostring(aC, format.mintick) + " · " + str.format_time(aT0, "HH:mm", syminfo.timezone), xloc=xloc.bar_time, style=label.style_label_right, color=cOpenBg, textcolor=cOpenTx, size=szOpen))
         if pLadder
             if sessMode or aState == 0
                 // symmetric: both ±1σ and ±2σ are reference targets, no fixed stop (13, 15)
                 for m = 1 to 2
                     for sgn = -1 to 1 by 2
                         float yy = aC + sgn * m * aMove
-                        array.push(fLines, line.new(aT0, yy, aT1, yy, xloc=xloc.bar_time, color=color.new(cTgt, m == 1 ? 0 : 35), width=m == 1 ? pLineW : math.max(1, pLineW - 1), style=line.style_dashed))
-                        array.push(fLabels, label.new(aT1, yy, (sgn > 0 ? "+" : "−") + str.tostring(m) + "σ  " + str.tostring(yy, format.mintick), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cTgt, 100), textcolor=m == 1 ? cTgt : color.new(cTgt, 30), size=lsz))
+                        if m == 1 ? pT1 : pT2
+                            array.push(fLines, line.new(aT0, yy, aT1, yy, xloc=xloc.bar_time, color=m == 1 ? cT1 : cT2, width=m == 1 ? wT1 : wT2, style=stOf(m == 1 ? sT1 : sT2)))
+                        if m == 1 ? pT1Lbl : pT2Lbl
+                            array.push(fLabels, label.new(aT1, yy, (sgn > 0 ? "+" : "−") + str.tostring(m) + "σ  " + str.tostring(yy, format.mintick), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cT1, 100), textcolor=color.new(m == 1 ? cT1 : cT2, 0), size=m == 1 ? szT1 : szT2))
             else
                 string o1 = oddsOk ? " · " + aP1 + (aP1 != "25%" ? " (قوة الاتجاه)" : "") : ""
                 string o2 = oddsOk ? " · " + aP2 : ""
-                array.push(fLines, line.new(aT0, y1, aT1, y1, xloc=xloc.bar_time, color=cTgt, width=pLineW, style=line.style_dashed))
-                array.push(fLines, line.new(aT0, y2, aT1, y2, xloc=xloc.bar_time, color=cTgt, width=pLineW, style=line.style_dashed))
-                array.push(fLines, line.new(aT0, yS, aT1, yS, xloc=xloc.bar_time, color=cDn, width=pLineW))
-                array.push(fLabels, label.new(aT1, y1, "هدف 1×  " + str.tostring(y1, format.mintick) + o1, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cTgt, 100), textcolor=cTgt, size=lsz))
-                array.push(fLabels, label.new(aT1, y2, "هدف 2×  " + str.tostring(y2, format.mintick) + o2, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cTgt, 100), textcolor=cTgt, size=lsz))
-                array.push(fLabels, label.new(aT1, yS, "وقف 0.75×  " + str.tostring(yS, format.mintick) + (oddsOk ? " · يُضرب 5%" : ""), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cDn, 100), textcolor=cDn, size=lsz))
+                if pT1
+                    array.push(fLines, line.new(aT0, y1, aT1, y1, xloc=xloc.bar_time, color=cT1, width=wT1, style=stOf(sT1)))
+                if pT2
+                    array.push(fLines, line.new(aT0, y2, aT1, y2, xloc=xloc.bar_time, color=cT2, width=wT2, style=stOf(sT2)))
+                if pStop
+                    array.push(fLines, line.new(aT0, yS, aT1, yS, xloc=xloc.bar_time, color=cStop, width=wStop, style=stOf(sStop)))
+                if pT1Lbl
+                    array.push(fLabels, label.new(aT1, y1, "هدف 1×  " + str.tostring(y1, format.mintick) + o1, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cT1, 100), textcolor=color.new(cT1, 0), size=szT1))
+                if pT2Lbl
+                    array.push(fLabels, label.new(aT1, y2, "هدف 2×  " + str.tostring(y2, format.mintick) + o2, xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cT2, 100), textcolor=color.new(cT2, 0), size=szT2))
+                if pStopLbl
+                    array.push(fLabels, label.new(aT1, yS, "وقف 0.75×  " + str.tostring(yS, format.mintick) + (oddsOk ? " · يُضرب 5%" : ""), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cStop, 100), textcolor=color.new(cStop, 0), size=szStop))
     // (3) the remaining move to the close, around the CURRENT price
     if pRem and not na(veRemMove) and veRemMove >= 2 * syminfo.mintick and not na(sessEndMs) and time < sessEndMs
-        array.push(fLines, line.new(time, c_ + veRemMove, sessEndMs, c_ + veRemMove, xloc=xloc.bar_time, color=color.new(cMove, 30), width=1, style=line.style_dotted))
-        array.push(fLines, line.new(time, c_ - veRemMove, sessEndMs, c_ - veRemMove, xloc=xloc.bar_time, color=color.new(cMove, 30), width=1, style=line.style_dotted))
-        array.push(fLabels, label.new(sessEndMs, c_ - veRemMove, "حتى الإغلاق ±" + str.tostring(veRemMove, format.mintick), xloc=xloc.bar_time, style=label.style_label_up, color=color.new(cMove, 100), textcolor=color.new(cMove, 10), size=lsz))
-    if pTrail and warm and not na(veTrailStop)
-        array.push(fLabels, label.new(bar_index + 1, veTrailStop, "وقف متحرّك" + (veHit ? " · ضُرب" : ""), style=label.style_label_left, color=color.new(cTrail, 100), textcolor=veHit ? cHitC : tvState > 0 ? cUp : cDn, size=lsz))
+        array.push(fLines, line.new(time, c_ + veRemMove, sessEndMs, c_ + veRemMove, xloc=xloc.bar_time, color=cRem, width=wRem, style=stOf(sRem)))
+        array.push(fLines, line.new(time, c_ - veRemMove, sessEndMs, c_ - veRemMove, xloc=xloc.bar_time, color=cRem, width=wRem, style=stOf(sRem)))
+        if pRemLbl
+            array.push(fLabels, label.new(sessEndMs, c_ - veRemMove, "حتى الإغلاق ±" + str.tostring(veRemMove, format.mintick), xloc=xloc.bar_time, style=label.style_label_up, color=color.new(cRem, 100), textcolor=color.new(cRem, 0), size=szRem))
+    if pTrail and pTrLbl and warm and not na(veTrailStop)
+        array.push(fLabels, label.new(bar_index + 1, veTrailStop, "وقف متحرّك" + (veHit ? " · ضُرب" : ""), style=label.style_label_left, color=color.new(cTrUp, 100), textcolor=color.new(veHit ? cTrHit : tvState > 0 ? cTrUp : cTrDn, 0), size=szTr))
     // ghosts inside the window, with the box-budget guard (32)
     int nG = array.size(gT0)
     int boxesUsed = array.size(stripHeat) + array.size(stripSqz) + array.size(fBoxes) + 2
@@ -586,13 +742,14 @@ if barstate.islast
                 float gm = array.get(gMove, g)
                 int gr = array.get(gRes, g)
                 int gs = array.get(gState, g)
-                array.push(fBoxes, box.new(g0t, gc + 2 * gm, g1t, gc - 2 * gm, xloc=xloc.bar_time, border_color=color.new(cMove, 85), bgcolor=color.new(cMove, 100)))
-                array.push(fBoxes, box.new(g0t, gc + gm, g1t, gc - gm, xloc=xloc.bar_time, border_color=color.new(cMove, 80), bgcolor=color.new(cMove, 100)))
-                array.push(fLines, line.new(g0t, gc, g1t, gc, xloc=xloc.bar_time, color=color.new(cNorm, 40), width=1, style=line.style_dotted))
+                array.push(fBoxes, box.new(g0t, gc + 2 * gm, g1t, gc - 2 * gm, xloc=xloc.bar_time, border_color=color.new(cGh, math.min(100, color.t(cGh) + 5)), bgcolor=color.new(cGh, 100)))
+                array.push(fBoxes, box.new(g0t, gc + gm, g1t, gc - gm, xloc=xloc.bar_time, border_color=cGh, bgcolor=color.new(cGh, 100)))
+                array.push(fLines, line.new(g0t, gc, g1t, gc, xloc=xloc.bar_time, color=color.new(cOpenLn, 60), width=1, style=line.style_dotted))
                 if gs != 0
-                    array.push(fLines, line.new(g0t, gc + gs * gm, g1t, gc + gs * gm, xloc=xloc.bar_time, color=color.new(cTgt, 75), width=1, style=line.style_dashed))
-                    array.push(fLines, line.new(g0t, gc - gs * 0.75 * gm, g1t, gc - gs * 0.75 * gm, xloc=xloc.bar_time, color=color.new(cDn, 75), width=1))
-                array.push(fLabels, label.new(g1t, gc, resTxt(gr) + (time < g1t ? " …" : ""), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cNorm, 100), textcolor=gr > 0 ? cUp : gr < 0 ? cDn : cNorm, size=lsz))
+                    array.push(fLines, line.new(g0t, gc + gs * gm, g1t, gc + gs * gm, xloc=xloc.bar_time, color=color.new(cT1, 75), width=1, style=stOf(sT1)))
+                    array.push(fLines, line.new(g0t, gc - gs * 0.75 * gm, g1t, gc - gs * 0.75 * gm, xloc=xloc.bar_time, color=color.new(cStop, 75), width=1, style=stOf(sStop)))
+                if pGhLbl
+                    array.push(fLabels, label.new(g1t, gc, resTxt(gr) + (time < g1t ? " …" : ""), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(cGhNone, 100), textcolor=gr > 0 ? cGhWin : gr < 0 ? cGhLoss : cGhNone, size=szGh))
     // strip titles at the left of the window, above and below the strips
     if pStrips and not na(sFloor)
         label.delete(sLb1)
@@ -600,8 +757,10 @@ if barstate.islast
         // titles at the current session's start (plus a tenth of it), which is always in view
         int xw0 = na(sessStartMs) ? time : sessStartMs + int(0.1 * sessMin * 60000)
         string heatTxt = na(vePct) ? "حرارة التذبذب: بيانات غير كافية (" + str.tostring(veHeatN) + "/10 جلسات)" : "حرارة التذبذب حسب وقت اليوم: الآن " + str.tostring(vePct, "#") + "%" + (veAccel ? " ↑ تتسارع" : "")
-        sLb1 := label.new(xw0, sFloor + sHv, heatTxt, xloc=xloc.bar_time, style=label.style_label_lower_left, color=color.new(cPanel, 20), textcolor=cHot, size=lsz)
-        sLb2 := label.new(xw0, sqzTop - sHv, "الانضغاط" + (veSqzOn ? ": نعم منذ " + str.tostring(veSqzBars) + " شمعة · اصبر" : " (بنفسجي عند حدوثه)"), xloc=xloc.bar_time, style=label.style_label_upper_left, color=color.new(cPanel, 20), textcolor=cSqz, size=lsz)
+        if pHeatS and pHeatLbl
+            sLb1 := label.new(xw0, sFloor + sHv, heatTxt, xloc=xloc.bar_time, style=label.style_label_lower_left, color=color.new(cPanel, 20), textcolor=cHeatTx, size=szHeat)
+        if pSqzS and pSqzLbl
+            sLb2 := label.new(xw0, sqzTop - sHq, "الانضغاط" + (veSqzOn ? ": نعم منذ " + str.tostring(veSqzBars) + " شمعة · اصبر" : " (بنفسجي عند حدوثه)"), xloc=xloc.bar_time, style=label.style_label_upper_left, color=color.new(cPanel, 20), textcolor=cSqzTx, size=szSqz)
 
 // ═══════════════ مربّع «الحالة الآن» ═══════════════
 bPos = pBoxPos == "وسط اليمين" ? position.middle_right : pBoxPos == "أعلى اليمين" ? position.top_right : pBoxPos == "أسفل اليمين" ? position.bottom_right : pBoxPos == "وسط اليسار" ? position.middle_left : pBoxPos == "أسفل اليسار" ? position.bottom_left : position.top_left
@@ -635,62 +794,71 @@ if pBox and barstate.islast
         table.cell(sb, 1, 2, "الأهداف", text_color=cDim, text_size=tsz, text_halign=text.align_right)
         table.cell(sb, 0, 2, tgTxt, text_color=cTgt, text_size=tsz, text_halign=text.align_right)
         table.cell(sb, 1, 3, "متحرّك", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-        table.cell(sb, 0, 3, trTxt + (noVol ? "" : " · فوليوم " + rvTxt), text_color=veHit ? cHitC : cTrail, text_size=tsz, text_halign=text.align_right)
+        table.cell(sb, 0, 3, trTxt + (noVol ? "" : " · فوليوم " + rvTxt), text_color=color.new(veHit ? cTrHit : tvState < 0 ? cTrDn : cTrUp, 0), text_size=tsz, text_halign=text.align_right)
         table.cell(sb, 1, 4, "حرارة · خروج", text_color=cDim, text_size=tsz, text_halign=text.align_right)
         table.cell(sb, 0, 4, heatCell + " · " + (veSqzOn ? "انضغاط " + str.tostring(veSqzBars) : "لا انضغاط") + " · " + exTxt, text_color=cHot, text_size=tsz, text_halign=text.align_right)
-        table.cell(sb, 0, 5, verdict, text_color=cHot, text_size=tsz, text_halign=text.align_right)
+        table.cell(sb, 0, 5, verdict, text_color=cVerdict, text_size=tsz, text_halign=text.align_right)
         table.merge_cells(sb, 0, 5, 1, 5)
     else
         table.cell(sb, 1, 0, "الحالة الآن " + str.format_time(time, "HH:mm", syminfo.timezone), text_color=cTxt, text_size=tszH, text_halign=text.align_right)
         table.cell(sb, 0, 0, "", text_size=tsz)
         table.merge_cells(sb, 0, 0, 1, 0)
         int r = 1
-        table.cell(sb, 1, r, "الاتجاه", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-        table.cell(sb, 0, r, dirW, text_color=dirC, text_size=tsz, text_halign=text.align_right)
-        r += 1
-        table.cell(sb, 1, r, "الحركة", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-        table.cell(sb, 0, r, mvTxt, text_color=cMove, text_size=tsz, text_halign=text.align_right)
-        r += 1
-        table.cell(sb, 1, r, "الأهداف", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-        table.cell(sb, 0, r, tgTxt, text_color=cTgt, text_size=tsz, text_halign=text.align_right)
-        r += 1
-        if (sessMode or aState == 0) and not na(aMove)
+        if rDir
+            table.cell(sb, 1, r, "الاتجاه", text_color=cDim, text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, dirW, text_color=dirC, text_size=tsz, text_halign=text.align_right)
+            r += 1
+        if rMove
+            table.cell(sb, 1, r, "الحركة", text_color=cDim, text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, mvTxt, text_color=cMove, text_size=tsz, text_halign=text.align_right)
+            r += 1
+        if rTgt
+            table.cell(sb, 1, r, "الأهداف", text_color=cDim, text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, tgTxt, text_color=cTgt, text_size=tsz, text_halign=text.align_right)
+            r += 1
+        if rTgt2 and (sessMode or aState == 0) and not na(aMove)
             table.cell(sb, 1, r, "±2σ", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-            table.cell(sb, 0, r, str.tostring(aC + 2 * aMove, format.mintick) + " / " + str.tostring(aC - 2 * aMove, format.mintick), text_color=color.new(cTgt, 30), text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, str.tostring(aC + 2 * aMove, format.mintick) + " / " + str.tostring(aC - 2 * aMove, format.mintick), text_color=color.new(cT2, 0), text_size=tsz, text_halign=text.align_right)
             r += 1
-        else if not na(aMove)
+        else if rTgt2 and not na(aMove)
             table.cell(sb, 1, r, "الوقف الثابت", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-            table.cell(sb, 0, r, str.tostring(aC - aState * 0.75 * aMove, format.mintick) + " (0.75×)", text_color=cDn, text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, str.tostring(aC - aState * 0.75 * aMove, format.mintick) + " (0.75×)", text_color=color.new(cStop, 0), text_size=tsz, text_halign=text.align_right)
             r += 1
-        table.cell(sb, 1, r, "الوقف المتحرّك", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-        table.cell(sb, 0, r, trTxt, text_color=veHit ? cHitC : cTrail, text_size=tsz, text_halign=text.align_right)
-        r += 1
-        if not noVol                                                                           // (28)
+        if rTr
+            table.cell(sb, 1, r, "الوقف المتحرّك", text_color=cDim, text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, trTxt, text_color=color.new(veHit ? cTrHit : tvState > 0 ? cTrUp : tvState < 0 ? cTrDn : cDim, 0), text_size=tsz, text_halign=text.align_right)
+            r += 1
+        if rVol and not noVol                                                                  // (28)
             table.cell(sb, 1, r, "الفوليوم الآن", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-            table.cell(sb, 0, r, rvTxt, text_color=na(rvolShow) ? cDim : rvolShow >= 2 ? cHot : rvolShow >= 1.2 ? cUp : cTxt, text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, rvTxt, text_color=na(rvolShow) ? cDim : rvolShow >= pRvThr ? cRvHi : rvolShow >= 1.2 ? cUp : cTxt, text_size=tsz, text_halign=text.align_right)
             r += 1
-        if not na(veRemMove)
+        if rRem and not na(veRemMove)
             table.cell(sb, 1, r, "حتى الإغلاق", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-            table.cell(sb, 0, r, "±" + str.tostring(veRemMove, format.mintick), text_color=cMove, text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, "±" + str.tostring(veRemMove, format.mintick), text_color=color.new(cRem, 0), text_size=tsz, text_halign=text.align_right)
             r += 1
-        table.cell(sb, 1, r, "الحرارة", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-        table.cell(sb, 0, r, heatCell, text_color=na(vePct) ? cDim : cHot, text_size=tsz, text_halign=text.align_right)
-        r += 1
-        table.cell(sb, 1, r, "الانضغاط", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-        table.cell(sb, 0, r, veSqzOn ? "نعم منذ " + str.tostring(veSqzBars) + " شمعة" + (veLunch ? " (غداء)" : "") : (veComp[1] < veThr ? "خرج: ليس بداية حركة" : "لا"), text_color=cSqz, text_size=tsz, text_halign=text.align_right)
-        r += 1
-        table.cell(sb, 1, r, "الخروج", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-        table.cell(sb, 0, r, exTxt, text_color=exDnN > exUpN ? cDn : exUpN > exDnN ? cUp : cDim, text_size=tsz, text_halign=text.align_right)
-        r += 1
-        table.cell(sb, 1, r, "من المرساة", text_color=cDim, text_size=tsz, text_halign=text.align_right)
-        table.cell(sb, 0, r, aDist + " · باقٍ " + str.tostring(barsAhead), text_color=nz(aSig) >= 0 ? cUp : cDn, text_size=tsz, text_halign=text.align_right)
-        r += 1
-        if tfWarn                                                                              // (30–32)
+        if rHeat
+            table.cell(sb, 1, r, "الحرارة", text_color=cDim, text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, heatCell, text_color=na(vePct) ? cDim : cHeatTx, text_size=tsz, text_halign=text.align_right)
+            r += 1
+        if rSqz
+            table.cell(sb, 1, r, "الانضغاط", text_color=cDim, text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, veSqzOn ? "نعم منذ " + str.tostring(veSqzBars) + " شمعة" + (veLunch ? " (غداء)" : "") : (veComp[1] < veThr ? "خرج: ليس بداية حركة" : "لا"), text_color=cSqzTx, text_size=tsz, text_halign=text.align_right)
+            r += 1
+        if rExit
+            table.cell(sb, 1, r, "الخروج", text_color=cDim, text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, exTxt, text_color=exDnN > exUpN ? cExDn : exUpN > exDnN ? cExUp : cDim, text_size=tsz, text_halign=text.align_right)
+            r += 1
+        if rDist
+            table.cell(sb, 1, r, "من المرساة", text_color=cDim, text_size=tsz, text_halign=text.align_right)
+            table.cell(sb, 0, r, aDist + " · باقٍ " + str.tostring(barsAhead), text_color=nz(aSig) >= 0 ? cUp : cDn, text_size=tsz, text_halign=text.align_right)
+            r += 1
+        if rWarn and tfWarn                                                                    // (30–32)
             table.cell(sb, 0, r, "⚠ الانضغاط والاتجاه مقيسان على 5د و15د", text_color=cDim, text_size=tsz, text_halign=text.align_right)
             table.merge_cells(sb, 0, r, 1, r)
             r += 1
-        table.cell(sb, 0, r, verdict, text_color=cHot, text_size=tsz, text_halign=text.align_right)
-        table.merge_cells(sb, 0, r, 1, r)
+        if rVerd
+            table.cell(sb, 0, r, verdict, text_color=cVerdict, text_size=tsz, text_halign=text.align_right)
+            table.merge_cells(sb, 0, r, 1, r)
 alertcondition(veSqzOn and not veSqzOn[1], "انضغاط", "دخل السعر في انضغاط (ATR14/ATR100 تحت عُشره المعتاد)")
 alertcondition(not na(rvol) and rvol >= 2, "فوليوم عالٍ جدًا", "RVOL ≥ 2× لنفس الدقيقة")
 alertcondition(veHit and not veHit[1], "ضُرب الوقف المتحرّك", "الإغلاق عبر الوقف المتحرّك للاتجاه الحالي")
