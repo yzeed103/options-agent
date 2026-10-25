@@ -12,6 +12,8 @@ pBoxOn  = input.bool(true, "إظهار المربّع الأزرق", tooltip="م
 pWin    = input.int(50, "عدد الشموع داخل المربّع", minval=20, maxval=200, group=G_F)
 pBoxH   = input.float(1.5, "ارتفاع المربّع (% من السعر)", minval=0.3, maxval=10, step=0.1, tooltip="نسبة من السعر: 1.5% على سهم بـ524 = نحو 8 نقاط. ثابتة مهما كان الفريم، فتناسب المساحة الفارغة أسفل الشارت. المربّع يجلس تحت الشموع وتحت أيّ مستوى قريب منها؛ المستويات البعيدة تُتجاهل", group=G_F)
 pBoxGap = input.float(0.25, "المسافة تحت الشموع (% من السعر)", minval=0, maxval=5, step=0.05, group=G_F)
+pBoxNear = input.float(3.0, "المستويات المرسومة تحت الشموع حتى (% من السعر)", minval=0, maxval=10, step=0.5, tooltip="كلّ مستوى مرسوم (حوت، قيمة الأمس، خيارات) أقرب من هذه النسبة تحت أدنى شمعة يدفع المربّع تحته؛ الأبعد يُتجاهل حتى لا يخرج المربّع عن الشاشة", group=G_F)
+pBoxFill = input.int(70, "شفافية تعبئة المربّع الأزرق", minval=0, maxval=100, step=5, tooltip="0 = أزرق صلب، 100 = بلا تعبئة. المربّع يمتدّ بعرض الشارت كلّه من الحافة اليسرى إلى اليمنى", group=G_F)
 pBoxAhead = input.int(30, "مساحة المروحة يمين المربّع (شموع)", minval=24, maxval=120, group=G_F)
 pFan    = input.bool(true, "المروحة الموسمية ±1σ و±2σ", group=G_F)
 pLadder = input.bool(true, "سلّم الوقف والهدف", group=G_F)
@@ -25,7 +27,6 @@ pCompact = input.bool(true, "وضع مضغوط", group=G_F)
 pBoxPos = input.string("أسفل اليمين", "موقع مربّع الحالة", options=["أسفل اليمين", "أسفل اليسار", "وسط اليمين", "أعلى اليمين"], group=G_F)
 G_C = "ألوان المربّع الأزرق"
 cWinB = input.color(#1e88e5, "إطار المربّع", inline="pc0", group=G_C)
-cWinF = input.color(#0d1b2a, "خلفيته", inline="pc0", group=G_C)
 cUp   = input.color(#26a69a, "صعود", inline="pc", group=G_C)
 cNorm = color.new(#5d606b, 0)
 cDn   = input.color(#ef5350, "هبوط", inline="pc", group=G_C)
@@ -1869,27 +1870,27 @@ float veVixPct = request.security("CBOE:VIX", "D", ta.percentrank(close, 500), l
 float veV3 = request.security("CBOE:VIX3M", "D", close, lookahead=barmerge.lookahead_off)
 
 // ═══════════════ المربّع الأزرق: النافذة مرسومة داخل نافذة الشارت نفسها ═══════════════
-// price-space picture-in-picture: the last pWin candles and the tools are rescaled into a box that sits pBoxGap ATR
-// under the lowest low of the window and is pBoxH ATR tall. A faint plot at the box floor makes the chart's auto-scale
+// price-space picture-in-picture: the last pWin candles and the tools are rescaled into a FULL-WIDTH band (extend.both)
+// that sits pBoxGap % of price under the lowest low of the window (or a level within 1% below it) and is pBoxH % tall. A faint plot at the box floor makes the chart's auto-scale
 // include it (boxes alone do not stretch the scale).
 float wLo = ta.lowest(l_, pWin)
 float wHi = ta.highest(h_, pWin)
 float wSpan = math.max(wHi - wLo, 4 * atrV)
-// only levels NEAR the candles (within 1.5 spans below the lowest low) push the box down; far ones are ignored
+// only levels NEAR the candles (within pBoxNear % below the lowest low) push the box down; far ones are ignored
 float nearMin = wLo
 for x in lvNow
-    if not na(x) and x < wLo and x > wLo - 0.01 * c_
+    if not na(x) and x < wLo and x > wLo - pBoxNear / 100 * c_
         nearMin := math.min(nearMin, x)
 for x in gpK
-    if x < wLo and x > wLo - 0.01 * c_
+    if x < wLo and x > wLo - pBoxNear / 100 * c_
         nearMin := math.min(nearMin, x)
 for i = 0 to 7
     float gxx = array.get(gxV, i)
-    if not na(gxx) and gxx < wLo and gxx > wLo - 0.01 * c_
+    if not na(gxx) and gxx < wLo and gxx > wLo - pBoxNear / 100 * c_
         nearMin := math.min(nearMin, gxx)
-if not na(pdVAL) and pdVAL < wLo and pdVAL > wLo - 0.01 * c_
+if not na(pdVAL) and pdVAL < wLo and pdVAL > wLo - pBoxNear / 100 * c_
     nearMin := math.min(nearMin, pdVAL)
-if not na(val) and val < wLo and val > wLo - 0.01 * c_
+if not na(val) and val < wLo and val > wLo - pBoxNear / 100 * c_
     nearMin := math.min(nearMin, val)
 float boxH = pBoxH / 100 * c_
 float boxTop = nearMin - pBoxGap / 100 * c_
@@ -1932,7 +1933,9 @@ if pBoxOn and barstate.islast and not na(veMove) and not na(atrV) and atrV > 0
     float kk = (yt - yb) / span
     int x0 = bar_index - pWin + 1
     int x1 = bar_index + pBoxAhead
-    winBox := box.new(x0 - 2, boxTop, x1 + 2, boxBot, border_color=cWinB, border_width=2, bgcolor=color.new(cWinF, 20), text="النافذة: آخر " + str.tostring(pWin) + " شمعة", text_color=color.new(cWinB, 30), text_size=size.tiny, text_halign=text.align_left, text_valign=text.align_top)
+    // ONE full-width band: extend.both stretches it from the left edge of the chart to the right edge (including the
+    // right margin) whatever the scroll; solid blue fill, blue border. The content below is drawn inside it.
+    winBox := box.new(bar_index, boxTop, bar_index + 1, boxBot, extend=extend.both, border_color=cWinB, border_width=2, bgcolor=color.new(cWinB, pBoxFill), text="النافذة: آخر " + str.tostring(pWin) + " شمعة", text_color=color.new(cWinB, 0), text_size=size.tiny, text_halign=text.align_left, text_valign=text.align_top)
     // mini candles
     for j = pWin - 1 to 0
         float yo = yb + (o_[j] - pMin) * kk
