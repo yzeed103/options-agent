@@ -1596,6 +1596,46 @@ if barstate.islast
     if showTL and not dailyTL and not smallTL and not na(upA)
         tlUpLine := line.new(upAB, upA, upAB + 1, upA + upS, extend=extend.right, width=wTl, color=cTlUp)
 
+// ═══════════════ Day / week candle in four equal parts ═══════════════
+// Current day and current week only: open, 1/4, 1/2 = (open + close) / 2, 3/4 and the close (= last price while the
+// period is still open, so the lines move until it closes). Real candles, like everything else.
+G_Q = "تقسيم شمعة اليوم والأسبوع"
+showQD  = input.bool(true, "تقسيم شمعة اليوم إلى 4 أجزاء", group=G_Q)
+showQW  = input.bool(true, "تقسيم شمعة الأسبوع إلى 4 أجزاء", group=G_Q)
+cQDEnd  = input.color(#ffffff, "اليوم: الافتتاح والإغلاق", inline="qd1", group=G_Q)
+cQDMid  = input.color(#e040fb, "النصف", inline="qd1", group=G_Q)
+cQDQ    = input.color(#ffb020, "الربع وثلاثة الأرباع", inline="qd1", group=G_Q)
+cQWEnd  = input.color(#90caf9, "الأسبوع: الافتتاح والإغلاق", inline="qw1", group=G_Q)
+cQWMid  = input.color(#00e5ff, "النصف", inline="qw1", group=G_Q)
+cQWQ    = input.color(#4dd0e1, "الربع وثلاثة الأرباع", inline="qw1", group=G_Q)
+wQ      = input.int(1, "سماكة الخطوط", minval=1, maxval=5, inline="qw2", group=G_Q)
+wQMid   = input.int(2, "سماكة النصف", minval=1, maxval=5, inline="qw2", group=G_Q)
+showQLb = input.bool(true, "إظهار الأسماء والأسعار", group=G_Q)
+
+[qDO, qDT] = request.security(stdT, "D", [open, time], lookahead=barmerge.lookahead_on)
+[qWO, qWT] = request.security(stdT, "W", [open, time], lookahead=barmerge.lookahead_on)
+var line[]  qLines = array.new_line()
+var label[] qLbls  = array.new_label()
+drawQuarters(float o, int t0, color cEnd, color cMid, color cQ, string tag, int lblShift) =>
+    names = array.from("الافتتاح", "ربع", "النصف", "ثلاثة أرباع", "الإغلاق")
+    for k = 0 to 4
+        y = o + (c_ - o) * k / 4
+        col = k == 2 ? cMid : (k == 0 or k == 4) ? cEnd : cQ
+        array.push(qLines, line.new(t0, y, time, y, xloc=xloc.bar_time, extend=extend.right, color=col, width=k == 2 ? wQMid : wQ, style=(k == 1 or k == 3) ? line.style_dashed : line.style_solid))
+        if showQLb
+            array.push(qLbls, label.new(time + lblShift * timeframe.in_seconds() * 1000, y, tag + " " + array.get(names, k) + " " + str.tostring(y, format.mintick), xloc=xloc.bar_time, style=label.style_label_left, color=color.new(col, 100), textcolor=col, size=size.small))
+if barstate.islast
+    for ln in qLines
+        line.delete(ln)
+    array.clear(qLines)
+    for lb in qLbls
+        label.delete(lb)
+    array.clear(qLbls)
+    if showQW and not na(qWO)
+        drawQuarters(qWO, qWT, cQWEnd, cQWMid, cQWQ, "أسبوع", 2)
+    if showQD and not na(qDO) and timeframe.in_seconds() < 86400
+        drawQuarters(qDO, qDT, cQDEnd, cQDMid, cQDQ, "يوم", 22)   // labels shifted right so they never sit on the week labels
+
 // ═══════════════ Status panel (Arabic) ═══════════════
 // Only the readings that survived testing: trend, volume, the sideways range and its whale levels, and the two
 // signals kept on the chart (whale bounce, trend alert).
