@@ -741,6 +741,21 @@ wbMinR    = input.float(3.0, "أقل مسافة للهدف (مضاعف المخ�
 cWbUp     = input.color(#00e5ff, "لون الإشارة صعود", inline="wb", group=G_WH)
 cWbDn     = input.color(#ff9100, "هبوط", inline="wb", group=G_WH)
 
+G_WK = "مناطق الحيتان الأسبوعية"
+showWk    = input.bool(true, "إظهار مناطق الحيتان الأسبوعية", tooltip="نفس فكرة اليومي لكن على الشموع الأسبوعية: أول أسابيع تحدد القمة والقاع، وأول إغلاق أسبوعي خارجها يقفل المنطقة ويبدأ منطقة جديدة", group=G_WK)
+wkLen     = input.int(4, "أقل عدد أسابيع لتكوين المنطقة", minval=2, maxval=26, group=G_WK)
+wkMult    = input.float(5.0, "أقصى مدى للمنطقة (ATR أسبوعي)", minval=1.0, maxval=20, step=0.5, group=G_WK)
+wkKeep    = input.int(2, "عدد المناطق الأسبوعية المكتملة المعروضة", minval=1, maxval=5, group=G_WK)
+wkLiveOn  = input.bool(true, "حساب المنطقة الأسبوعية الحالية (قيد التكوين)", group=G_WK)
+cWkLv     = input.color(#1e88e5, "الأعمدة الطويلة", inline="wk1", group=G_WK)
+cWkPoc    = input.color(#ff3b3b, "POC", inline="wk1", group=G_WK)
+cWkVA     = input.color(#00bcd4, "VAH و VAL", inline="wk1", group=G_WK)
+cWkBoxB   = input.color(#00bcd4, "حدود المستطيل", inline="wk2", group=G_WK)
+cWkBoxF   = input.color(color.new(#00bcd4, 94), "تعبئته", inline="wk2", group=G_WK)
+wWkLv     = input.int(1, "سماكة الأعمدة", minval=1, maxval=5, inline="wk3", group=G_WK)
+wWkVA     = input.int(2, "VAH و VAL", minval=1, maxval=5, inline="wk3", group=G_WK)
+wWkPoc    = input.int(3, "POC", minval=1, maxval=5, inline="wk3", group=G_WK)
+
 // ---- fixed data source: profile always built from `whSrcTF` bars, ranges always from DAILY bars, so the
 // levels are identical on every chart timeframe. Lines are drawn with xloc.bar_time (time, not bar number).
 chartSec = timeframe.in_seconds()
@@ -805,9 +820,12 @@ var box[] whBoxA = array.new_box()
 var label[] whLbls = array.new_label()
 var float[] curVA = array.new_float(3, na)   // POC, VAH, VAL of the last drawn range (live one if shown)
 var string[] curVAName = array.new_string(1, "")
+var line[]  wkLines = array.new_line()
+var box[]   wkBoxA = array.new_box()
+var label[] wkLbls = array.new_label()
 
 // profile of [t0, t1) from the source bars (never drawn), tall columns -> lines. Appends to whLv / whLines / whBoxA.
-drawRange(int t0, int t1, int boxEnd, bool live) =>
+drawRange(int t0, int t1, int boxEnd, bool live, bool wk) =>
     int nUsed = 0
     float pHiW = na
     float pLoW = na
@@ -873,26 +891,38 @@ drawRange(int t0, int t1, int boxEnd, bool live) =>
                 accW += vD
         vahW = pLoW + (a1 + 1) * stW
         valW = pLoW + a0 * stW
-        array.set(curVA, 0, pocV)
-        array.set(curVA, 1, vahW)
-        array.set(curVA, 2, valW)
-        array.set(curVAName, 0, live ? "المنطقة الحالية" : "آخر منطقة مكتملة")
-        if showWhVA
-            array.push(whLines, line.new(t0, pocV, boxEnd, pocV, xloc=xloc.bar_time, extend=extend.right, color=cWhPoc, width=wWhPocL))
-            array.push(whLines, line.new(t0, vahW, boxEnd, vahW, xloc=xloc.bar_time, extend=extend.right, color=cWhVA, width=wWhVA))
-            array.push(whLines, line.new(t0, valW, boxEnd, valW, xloc=xloc.bar_time, extend=extend.right, color=cWhVA, width=wWhVA))
-            array.push(whLbls, label.new(t0, pocV, "POC " + str.tostring(pocV, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cWhPoc, 100), textcolor=cWhPoc, size=size.small))
-            array.push(whLbls, label.new(t0, vahW, "VAH " + str.tostring(vahW, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cWhVA, 100), textcolor=cWhVA, size=size.small))
-            array.push(whLbls, label.new(t0, valW, "VAL " + str.tostring(valW, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cWhVA, 100), textcolor=cWhVA, size=size.small))
+        if not wk
+            array.set(curVA, 0, pocV)
+            array.set(curVA, 1, vahW)
+            array.set(curVA, 2, valW)
+            array.set(curVAName, 0, live ? "المنطقة الحالية" : "آخر منطقة مكتملة")
+        lnArr = wk ? wkLines : whLines
+        lbArr = wk ? wkLbls : whLbls
+        cP = wk ? cWkPoc : cWhPoc
+        cV = wk ? cWkVA : cWhVA
+        if wk or showWhVA
+            array.push(lnArr, line.new(t0, pocV, boxEnd, pocV, xloc=xloc.bar_time, extend=extend.right, color=cP, width=wk ? wWkPoc : wWhPocL))
+            array.push(lnArr, line.new(t0, vahW, boxEnd, vahW, xloc=xloc.bar_time, extend=extend.right, color=cV, width=wk ? wWkVA : wWhVA))
+            array.push(lnArr, line.new(t0, valW, boxEnd, valW, xloc=xloc.bar_time, extend=extend.right, color=cV, width=wk ? wWkVA : wWhVA))
+            array.push(lbArr, label.new(t0, pocV, "POC " + str.tostring(pocV, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cP, 100), textcolor=cP, size=size.small))
+            array.push(lbArr, label.new(t0, vahW, "VAH " + str.tostring(vahW, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cV, 100), textcolor=cV, size=size.small))
+            array.push(lbArr, label.new(t0, valW, "VAL " + str.tostring(valW, format.mintick), xloc=xloc.bar_time, style=label.style_label_right, color=color.new(cV, 100), textcolor=cV, size=size.small))
         if array.size(cand) > 0
             ordW = array.sort_indices(candV, order.descending)
             for j = 0 to math.min(whPeaks, array.size(cand)) - 1
                 L = array.get(cand, array.get(ordW, j))
-                array.push(whLv, L)
-                if showWhale
-                    isPoc = math.abs(L - pocV) <= 3 * stW
-                    array.push(whLines, line.new(t0, L, boxEnd, L, xloc=xloc.bar_time, extend=extend.right, color=isPoc ? cWhPoc : cWhLv, width=isPoc ? wWhPk : wWhLv))
-        if showWBox
+                isPoc = math.abs(L - pocV) <= 3 * stW
+                if wk
+                    if not isPoc
+                        array.push(lnArr, line.new(t0, L, boxEnd, L, xloc=xloc.bar_time, extend=extend.right, color=cWkLv, width=wWkLv))
+                else
+                    array.push(whLv, L)
+                    if showWhale
+                        array.push(whLines, line.new(t0, L, boxEnd, L, xloc=xloc.bar_time, extend=extend.right, color=isPoc ? cWhPoc : cWhLv, width=isPoc ? wWhPk : wWhLv))
+        if wk
+            array.push(wkBoxA, box.new(t0, pHiW, boxEnd, pLoW, xloc=xloc.bar_time, border_color=cWkBoxB, border_width=1, border_style=line.style_dashed, bgcolor=cWkBoxF))
+            array.push(wkLbls, label.new(t0, pHiW, live ? "منطقة أسبوعية قيد التكوين" : "منطقة أسبوعية مكتملة", xloc=xloc.bar_time, style=label.style_label_lower_left, color=color.new(cWkBoxB, 100), textcolor=cWkBoxB, size=size.small))
+        else if showWBox
             array.push(whBoxA, box.new(t0, pHiW, boxEnd, pLoW, xloc=xloc.bar_time, border_color=cWhBoxB, border_width=wWhBox, border_style=line.style_dashed, bgcolor=cWhBoxF, text=live ? "منطقة قيد التكوين" : "", text_color=cWhBoxB, text_size=size.small, text_valign=text.align_top, text_halign=text.align_left))
     nUsed
 
@@ -910,10 +940,10 @@ redrawAll(int liveT0, int liveT1) =>
     array.clear(whLv)
     int k = 0
     while k < array.size(rgT0)
-        drawRange(array.get(rgT0, k), array.get(rgT1, k), array.get(rgT1, k), false)
+        drawRange(array.get(rgT0, k), array.get(rgT1, k), array.get(rgT1, k), false, false)
         k += 1
     if not na(liveT0)
-        drawRange(liveT0, liveT1, time, true)
+        drawRange(liveT0, liveT1, time, true, false)
     k
 
 // Everything below runs once per new trading day, on history and live alike, so the levels a past bar saw are the
@@ -966,6 +996,72 @@ if not na(pdT) and (na(lastDayT) or pdT != lastDayT)
             rLo := math.min(rLo, pdLo)
         liveOk = showLive and array.size(wdT) - rIdx >= whLen
         redrawAll(liveOk ? array.get(wdT, rIdx) : na, todayT)
+
+// ---- weekly sideways ranges: same state machine on completed weekly candles, redrawn once per new week
+[pwHi, pwLo, pwCl, pwT] = request.security(stdT, "W", [high[1], low[1], close[1], time[1]], lookahead=barmerge.lookahead_on)
+var float[] wwH = array.new_float()
+var float[] wwL = array.new_float()
+var float[] wwC = array.new_float()
+var int[]   wwT = array.new_int()
+var float wATR = na
+var int   wkIdx = na
+var float wkHi = na
+var float wkLo = na
+var int[] wkT0 = array.new_int()
+var int[] wkT1 = array.new_int()
+redrawWeekly(int liveT0, int liveT1) =>
+    for ln in wkLines
+        line.delete(ln)
+    array.clear(wkLines)
+    for bx in wkBoxA
+        box.delete(bx)
+    array.clear(wkBoxA)
+    for lb in wkLbls
+        label.delete(lb)
+    array.clear(wkLbls)
+    int k = 0
+    while k < array.size(wkT0)
+        drawRange(array.get(wkT0, k), array.get(wkT1, k), array.get(wkT1, k), false, true)
+        k += 1
+    if not na(liveT0)
+        drawRange(liveT0, liveT1, time, true, true)
+    k
+int lastWkT = array.size(wwT) > 0 ? array.get(wwT, array.size(wwT) - 1) : na
+if showWk and not na(pwT) and (na(lastWkT) or pwT != lastWkT)
+    array.push(wwH, pwHi)
+    array.push(wwL, pwLo)
+    array.push(wwC, pwCl)
+    array.push(wwT, pwT)
+    m = array.size(wwC) - 1
+    pcW = m > 0 ? array.get(wwC, m - 1) : pwCl
+    trW = math.max(pwHi - pwLo, math.max(math.abs(pwHi - pcW), math.abs(pwLo - pcW)))
+    wATR := na(wATR) ? trW : wATR + (trW - wATR) / 14
+    thisWkT = time("W")
+    if na(wkIdx)
+        wkIdx := m
+        wkHi := pwHi
+        wkLo := pwLo
+    else if m - wkIdx < wkLen
+        wkHi := math.max(wkHi, pwHi)
+        wkLo := math.min(wkLo, pwLo)
+        if wkHi - wkLo > wkMult * wATR
+            wkIdx := m
+            wkHi := pwHi
+            wkLo := pwLo
+    else if pwCl > wkHi or pwCl < wkLo
+        array.push(wkT0, array.get(wwT, wkIdx))
+        array.push(wkT1, whInclBrk ? thisWkT : pwT)
+        while array.size(wkT0) > wkKeep
+            array.shift(wkT0)
+            array.shift(wkT1)
+        wkIdx := m
+        wkHi := pwHi
+        wkLo := pwLo
+    else
+        wkHi := math.max(wkHi, pwHi)
+        wkLo := math.min(wkLo, pwLo)
+    wkLiveOk = wkLiveOn and array.size(wwT) - wkIdx >= wkLen
+    redrawWeekly(wkLiveOk ? array.get(wwT, wkIdx) : na, thisWkT)
 
 // whale bounce signal
 int wbSig = 0
