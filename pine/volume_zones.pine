@@ -1597,8 +1597,9 @@ if barstate.islast
         tlUpLine := line.new(upAB, upA, upAB + 1, upA + upS, extend=extend.right, width=wTl, color=cTlUp)
 
 // ═══════════════ Day / week candle in four equal parts ═══════════════
-// Current day and current week only: open, 1/4, 1/2 = (open + close) / 2, 3/4 and the close (= last price while the
-// period is still open, so the lines move until it closes). Real candles, like everything else.
+// Every day and week: open, 1/4, 1/2 = (open + close) / 2, 3/4 and close. Past periods are drawn over their own
+// span with their final close; the current one uses the last price (moves until it closes) and extends right.
+// Real candles, like everything else.
 G_Q = "تقسيم شمعة اليوم والأسبوع"
 showQD  = input.bool(true, "تقسيم شمعة اليوم إلى 4 أجزاء", group=G_Q)
 showQW  = input.bool(true, "تقسيم شمعة الأسبوع إلى 4 أجزاء", group=G_Q)
@@ -1610,10 +1611,28 @@ cQWMid  = input.color(#00e5ff, "النصف", inline="qw1", group=G_Q)
 cQWQ    = input.color(#4dd0e1, "الربع وثلاثة الأرباع", inline="qw1", group=G_Q)
 wQ      = input.int(1, "سماكة الخطوط", minval=1, maxval=5, inline="qw2", group=G_Q)
 wQMid   = input.int(2, "سماكة النصف", minval=1, maxval=5, inline="qw2", group=G_Q)
-showQLb = input.bool(true, "إظهار الأسماء والأسعار", group=G_Q)
+showQLb = input.bool(true, "إظهار الأسماء والأسعار (الشمعة الحالية)", group=G_Q)
+qDays   = input.int(20, "عدد الأيام السابقة المرسومة", minval=0, maxval=60, tooltip="كل يوم سابق يُرسم بخطوطه الخمسة على مدى يومه فقط. 0 = الحالي فقط", group=G_Q)
+qWeeks  = input.int(8, "عدد الأسابيع السابقة المرسومة", minval=0, maxval=26, group=G_Q)
 
 [qDO, qDT] = request.security(stdT, "D", [open, time], lookahead=barmerge.lookahead_on)
 [qWO, qWT] = request.security(stdT, "W", [open, time], lookahead=barmerge.lookahead_on)
+// the period that just finished: open, close, start time (confirmed values, no look-ahead)
+[qPDO, qPDC, qPDT] = request.security(stdT, "D", [open[1], close[1], time[1]], lookahead=barmerge.lookahead_on)
+[qPWO, qPWC, qPWT] = request.security(stdT, "W", [open[1], close[1], time[1]], lookahead=barmerge.lookahead_on)
+var line[] qHistD = array.new_line()
+var line[] qHistW = array.new_line()
+drawPast(line[] store, float o, float cl, int t0, int t1, color cEnd, color cMid, color cQ, int keep) =>
+    for k = 0 to 4
+        y = o + (cl - o) * k / 4
+        col = k == 2 ? cMid : (k == 0 or k == 4) ? cEnd : cQ
+        array.push(store, line.new(t0, y, t1, y, xloc=xloc.bar_time, color=col, width=k == 2 ? wQMid : wQ, style=(k == 1 or k == 3) ? line.style_dashed : line.style_solid))
+    while array.size(store) > keep * 5
+        line.delete(array.shift(store))
+if showQD and qDays > 0 and timeframe.in_seconds() < 86400 and ta.change(qDT) != 0 and not na(qPDO)
+    drawPast(qHistD, qPDO, qPDC, qPDT, qDT, cQDEnd, cQDMid, cQDQ, qDays)
+if showQW and qWeeks > 0 and ta.change(qWT) != 0 and not na(qPWO)
+    drawPast(qHistW, qPWO, qPWC, qPWT, qWT, cQWEnd, cQWMid, cQWQ, qWeeks)
 var line[]  qLines = array.new_line()
 var label[] qLbls  = array.new_label()
 drawQuarters(float o, int t0, color cEnd, color cMid, color cQ, string tag, int lblShift) =>

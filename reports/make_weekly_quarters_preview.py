@@ -17,23 +17,27 @@ def candles(ax, df, x0=0):
         ax.vlines(x0 + i, r.low, r.high, color=col, lw=.8); ax.add_patch(Rectangle((x0 + i - .32, min(r.open, r.close)), .64, max(abs(r.close - r.open), 1e-3), color=col, zorder=3))
 def style(ax, t):
     ax.set_facecolor(BG); ax.tick_params(colors=MUT); [s.set_color(GR) for s in ax.spines.values()]; ax.set_title(t, color=TX, fontsize=13, loc="right")
-# ---------- current day and current week, each in 4 equal parts (open -> close), on a 5m chart ----------
-w = raw[raw.index >= raw.index[-1].normalize() - np.timedelta64(raw.index[-1].weekday(), "D")]
-today = w[w.index.normalize() == w.index[-1].normalize()]; N = len(w); c = w.close.iat[-1]
-fig, ax = plt.subplots(figsize=(19, 10), facecolor=BG)
-style(ax, "شمعة الأسبوع وشمعة اليوم، كل وحدة 4 أجزاء متساوية من الافتتاح للإغلاق · SPY · 5 دقائق · محاكاة (ليست لقطة TradingView)")
+# ---------- every day and every week, each in 4 equal parts (open -> close), on a 15m chart ----------
+m15 = raw.resample("15min").agg(AGG).dropna()
+wk0 = m15.index[-1].normalize() - np.timedelta64(m15.index[-1].weekday() + 14, "D")   # three weeks
+w = m15[m15.index >= wk0]; N = len(w)
+fig, ax = plt.subplots(figsize=(20, 10), facecolor=BG)
+style(ax, "كل يوم وكل أسبوع مقسوم 4 أجزاء متساوية (تاريخي) · SPY · 15 دقيقة · محاكاة (ليست لقطة TradingView)")
 candles(ax, w)
-names = ("الافتتاح", "ربع", "النصف", "ثلاثة أرباع", "الإغلاق الحالي")
-def quarters(o, x0, tag, cEnd, cMid, cQ, dy):
-    for k in range(5):
-        y = o + (c - o) * k / 4; col = cMid if k == 2 else cEnd if k in (0, 4) else cQ
-        ax.hlines(y, x0, N + 2, color=col, lw=2.2 if k == 2 else 1.3, ls="--" if k in (1, 3) else "-", zorder=4)
-        ax.text(N + 3 + dy, y, f"{tag} {names[k]} {y:.2f}", color=col, fontsize=9, va="center", zorder=5)
-quarters(w.open.iat[0], 0, "أسبوع", "#90caf9", "#00e5ff", "#4dd0e1", 0)
-quarters(today.open.iat[0], N - len(today), "يوم", "#ffffff", "#e040fb", "#ffb020", 42)
-days = w.index.normalize(); st = np.r_[0, np.flatnonzero(days[1:] != days[:-1]) + 1]
-for s_ in st: ax.axvline(s_ - .5, color=GR, lw=1); ax.text(s_ + 2, w.high.max() + .3, w.index[s_].strftime("%a %m-%d"), color=MUT, fontsize=10)
-ax.set_xlim(-2, N + 80); ax.set_xticks([])
-ax.text(.01, .02, "أزرق / سماوي = شمعة الأسبوع (من افتتاح الاثنين) · أبيض / بنفسجي / برتقالي = شمعة اليوم\nالنصف = (الافتتاح + الإغلاق) ÷ 2، ثم كل نصف ÷ 2 · الإغلاق = آخر سعر، فالخطوط تتحرك لين تقفل الشمعة",
+def segs(key, cEnd, cMid, cQ, lwm, z):
+    grp = np.array([key(t) for t in w.index]); starts = np.r_[0, np.flatnonzero(grp[1:] != grp[:-1]) + 1]; ends = np.r_[starts[1:], N]
+    for k_, (a_, b_) in enumerate(zip(starts, ends)):
+        g = w.iloc[a_:b_]; o, c = g.open.iat[0], g.close.iat[-1]; live = k_ == len(starts) - 1
+        for q in range(5):
+            y = o + (c - o) * q / 4; col = cMid if q == 2 else cEnd if q in (0, 4) else cQ
+            ax.hlines(y, a_ - .5, (N + 3) if live else b_ - .5, color=col, lw=lwm if q == 2 else 1.1, ls="--" if q in (1, 3) else "-", zorder=z)
+    return starts
+ws = segs(lambda t: (t - np.timedelta64(t.weekday(), "D")).date(), "#90caf9", "#00e5ff", "#4dd0e1", 2.6, 2)
+ds = segs(lambda t: t.date(), "#ffffff", "#e040fb", "#ffb020", 1.8, 4)
+for s_ in ds: ax.axvline(s_ - .5, color=GR, lw=.6)
+for s_ in ws: ax.axvline(s_ - .5, color="#4dd0e1", lw=1.2, ls=":"); ax.text(s_ + 1, w.high.max() + .5, "أسبوع " + w.index[s_].strftime("%m-%d"), color="#4dd0e1", fontsize=10)
+ax.set_xlim(-2, N + 6); ticks = list(ds); ax.set_xticks(ticks); ax.set_xticklabels([w.index[t].strftime("%a\n%m-%d") for t in ticks], color=MUT, fontsize=8)
+ax.set_ylim(w.low.min() - 1, w.high.max() + 2)
+ax.text(.01, .02, "كل يوم له خطوطه الخمسة على مداه فقط (أبيض / بنفسجي / برتقالي) · كل أسبوع له خطوطه على مداه (أزرق / سماوي)\nالأيام والأسابيع السابقة بإغلاقها النهائي · الحالي بآخر سعر ويمتد لليمين",
         color=TX, fontsize=10, transform=ax.transAxes, bbox=dict(fc="#1e222d", ec=GR))
-fig.tight_layout(); fig.savefig(ROOT / "reports/styles/Z2_daily_quarters.png", dpi=90, facecolor=BG)
+fig.tight_layout(); fig.savefig(ROOT / "reports/styles/Z3_quarters_history.png", dpi=90, facecolor=BG)
